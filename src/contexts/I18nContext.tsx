@@ -1,15 +1,17 @@
+import { DirectionProvider } from "@radix-ui/react-direction";
 import {
 	createContext,
 	type ReactNode,
 	useCallback,
 	useContext,
 	useEffect,
+	useLayoutEffect,
 	useMemo,
 	useRef,
 	useState,
 } from "react";
 import { DEFAULT_LOCALE, type I18nNamespace, LOCALE_STORAGE_KEY, type Locale } from "@/i18n/config";
-import { getAvailableLocales, translate } from "@/i18n/loader";
+import { getAvailableLocales, getLocaleDirection, translate } from "@/i18n/loader";
 
 type TranslateVars = Record<string, string | number>;
 
@@ -87,6 +89,7 @@ function getInitialLocale(): Locale {
 
 export function I18nProvider({ children }: { children: ReactNode }) {
 	const [locale, setLocaleState] = useState<Locale>(getInitialLocale);
+	const direction = getLocaleDirection(locale);
 	const [systemLocaleSuggestion, setSystemLocaleSuggestion] = useState<Locale | null>(null);
 	const hasRunSystemLocaleCheckRef = useRef(false);
 
@@ -105,12 +108,14 @@ export function I18nProvider({ children }: { children: ReactNode }) {
 		} catch {
 			// localStorage may be unavailable
 		}
-		document.documentElement.lang = newLocale;
-		window.electronAPI?.setLocale?.(newLocale);
 	}, []);
 
-	useEffect(() => {
+	useLayoutEffect(() => {
 		document.documentElement.lang = locale;
+		document.documentElement.dir = direction;
+	}, [locale, direction]);
+
+	useEffect(() => {
 		window.electronAPI?.setLocale?.(locale);
 	}, [locale]);
 
@@ -188,5 +193,9 @@ export function I18nProvider({ children }: { children: ReactNode }) {
 		],
 	);
 
-	return <I18nContext.Provider value={value}>{children}</I18nContext.Provider>;
+	return (
+		<I18nContext.Provider value={value}>
+			<DirectionProvider dir={direction}>{children}</DirectionProvider>
+		</I18nContext.Provider>
+	);
 }

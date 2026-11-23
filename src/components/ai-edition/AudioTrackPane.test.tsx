@@ -48,7 +48,7 @@ describe("AudioTrackPane", () => {
 		const closeBtn = screen.getByRole("button", { name: "common.actions.close" });
 		expect(closeBtn).toBeInTheDocument();
 		const header = closeBtn.closest("header");
-		expect(header).toHaveStyle({ paddingRight: "var(--sp-4)" });
+		expect(header).toHaveStyle({ paddingInlineEnd: "var(--sp-4)" });
 		const svg = closeBtn.querySelector("svg");
 		expect(svg?.classList.contains("lucide-x")).toBe(true);
 

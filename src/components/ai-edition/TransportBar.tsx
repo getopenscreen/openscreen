@@ -59,7 +59,7 @@ export const TransportBar = memo(function TransportBar({
 					)}
 				</button>
 			</Tooltip>
-			<span className={styles.time}>
+			<span className={styles.time} dir="ltr">
 				<span>{formatSec(currentTimeSec)}</span>
 				<span className={styles.sep}>/</span>
 				<span className={styles.total}>{formatSec(virtualDurationSec)}</span>

@@ -822,12 +822,8 @@
 	align-items: center;
 	gap: var(--sp-2);
 	padding: 12px var(--sp-4);
-	/* Every pane wearing this header is rendered inside FloatingInspector, which
-	   floats its "Collapse inspector" button (right: 12, 26px wide) over the
-	   header's right edge — landing squarely on whatever sits there and
-	   swallowing its clicks. The Help button was the casualty: visible on every
-	   facet, and unclickable. Reserve the floated button its own lane instead. */
-	padding-right: 46px;
+	/* Reserve room at the end for the inspector's collapse button. */
+	padding-inline-end: 46px;
 	border-bottom: 1px solid var(--border-soft);
 	min-height: 44px;
 }
@@ -908,7 +904,7 @@
 }
 /* The current value, after the label, when the control below only shows it as a picture. */
 .sectionLabelValue {
-	margin-left: 6px;
+	margin-inline-start: 6px;
 	font-weight: 400;
 	color: var(--muted);
 }
@@ -971,7 +967,7 @@
 	background: transparent;
 	color: var(--fg);
 	cursor: pointer;
-	text-align: left;
+	text-align: start;
 }
 .actionMenuRow:hover:not(:disabled) { background: color-mix(in oklab, var(--fg) 6%, transparent); }
 .actionMenuRow.isActive { background: var(--accent-soft); }
@@ -987,7 +983,7 @@
 }
 .actionMenuMain { font: 600 13px var(--font-display); font-variant-numeric: tabular-nums; }
 .actionMenuCount {
-	margin-left: auto;
+	margin-inline-start: auto;
 	font: 500 12px var(--font-body);
 	font-variant-numeric: tabular-nums;
 	color: var(--meta);
@@ -1007,9 +1003,10 @@
 }
 .presetActionLabel { font: 500 13px var(--font-body); color: var(--fg-2); }
 .presetActions {
-	margin: 2px 0 4px 20px;
-	padding-left: 4px;
-	border-left: 1px solid var(--border);
+	margin-block: 2px 4px;
+	margin-inline-start: 20px;
+	padding-inline-start: 4px;
+	border-inline-start: 1px solid var(--border);
 }
 .presetStatus {
 	display: flex;
@@ -1308,7 +1305,7 @@ textarea.control {
 	content: "";
 	position: absolute;
 	top: 2px;
-	left: 2px;
+	inset-inline-start: 2px;
 	width: 20px;
 	height: 20px;
 	background: #fff;
@@ -1318,6 +1315,7 @@ textarea.control {
 }
 .toggle.isOn { background: var(--brand); }
 .toggle.isOn::after { transform: translateX(16px); }
+.toggle.isOn:dir(rtl)::after { transform: translateX(-16px); }
 .toggle:disabled { opacity: 0.5; cursor: not-allowed; }
 
 /* ─── slider cell (effect) ─────────────────────────────────────── */
@@ -1336,9 +1334,8 @@ textarea.control {
 }
 /* min-height = the reset button's 20px, so the row keeps its height whether it shows or not. */
 .sliderCell .head { display: flex; align-items: center; gap: 6px; min-height: 20px; }
-/* The label takes the free room, so the value and the reset button sit right, with or without
-   each other. */
-.sliderCell .label { font: 500 13px/1.3 var(--font-body); color: var(--fg-2); margin-right: auto; }
+/* The label takes the free room, leaving the value and reset button at the end. */
+.sliderCell .label { font: 500 13px/1.3 var(--font-body); color: var(--fg-2); margin-inline-end: auto; }
 /* --muted, not mint: mint text is 2.3:1 on the light theme's row. */
 .sliderCell .val {
 	font: 500 12px/1.3 var(--font-body);
@@ -1364,7 +1361,7 @@ textarea.control {
 	width: 100%;
 	height: 6px;
 	background: linear-gradient(
-		to right,
+		to var(--slider-fill-side, right),
 		var(--brand) 0%,
 		var(--brand) var(--slider-pct, 0%),
 		var(--border-hi) var(--slider-pct, 0%),
@@ -1374,6 +1371,9 @@ textarea.control {
 	outline: none;
 	-webkit-appearance: none;
 	cursor: pointer;
+}
+.sliderCell input[type=range]:dir(rtl) {
+	--slider-fill-side: left;
 }
 .sliderCell input[type=range]::-moz-range-progress {
 	background-color: var(--brand);
@@ -1492,7 +1492,7 @@ textarea.control {
 	background: var(--success);
 }
 .stripActions {
-	margin-left: auto;
+	margin-inline-start: auto;
 	display: inline-flex;
 	gap: 2px;
 }
@@ -1539,7 +1539,7 @@ textarea.control {
 	color: var(--fg-2);
 }
 .msgHead .right {
-	margin-left: auto;
+	margin-inline-start: auto;
 	display: inline-flex;
 	gap: 2px;
 }
@@ -1655,7 +1655,7 @@ textarea.control {
 }
 /* The composer's one action, so it carries the accent — a bare glyph read as decoration. */
 .sendBtn {
-	margin-left: auto;
+	margin-inline-start: auto;
 	width: 32px;
 	height: 32px;
 	display: grid;
@@ -2301,7 +2301,7 @@ textarea.control {
   color: var(--fg-2);
   cursor: pointer;
   font: 500 13px/1.2 var(--font-body);
-  text-align: left;
+  text-align: start;
   transition: border-color var(--motion-fast) var(--ease), background var(--motion-fast) var(--ease);
 }
 .providerCard:hover { border-color: var(--border-hi); }
@@ -2576,7 +2576,7 @@ textarea.control {
   align-items: stretch;
   gap: var(--sp-3);
   padding: var(--sp-2) 0 0;
-  text-align: left;
+  text-align: start;
 }
 
 .chatWelcomeHero {

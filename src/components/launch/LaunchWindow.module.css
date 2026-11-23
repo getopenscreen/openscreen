@@ -158,7 +158,8 @@
 	display: flex;
 	align-items: center;
 	justify-content: space-between;
-	padding: 2px 2px 4px 10px;
+	padding-block: 2px 4px;
+	padding-inline: 10px 2px;
 }
 
 .hudModalTitle {

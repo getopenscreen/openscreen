@@ -1,3 +1,4 @@
+import { useDirection } from "@radix-ui/react-direction";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { toFileUrl } from "@/components/video-editor/projectPersistence";
@@ -205,6 +206,7 @@ export async function runLoadedMetadataWrite(
 
 export function NewEditorShell() {
 	const te = useScopedT("editor");
+	const direction = useDirection();
 	useMcpDocumentHost();
 	const document = useProjectStore((s) => s.document);
 	const projectId = useProjectStore((s) => s.projectId);
@@ -1622,9 +1624,10 @@ export function NewEditorShell() {
 			e.preventDefault();
 			const startX = e.clientX;
 			const startWidth = chatWidthPx;
+			const widthSign = direction === "rtl" ? -1 : 1;
 			let latest = startWidth;
 			const move = (ev: PointerEvent) => {
-				latest = Math.min(560, Math.max(280, startWidth + (ev.clientX - startX)));
+				latest = Math.min(560, Math.max(280, startWidth + (ev.clientX - startX) * widthSign));
 				setChatWidthPx(latest);
 			};
 			const up = () => {
@@ -1635,7 +1638,7 @@ export function NewEditorShell() {
 			window.addEventListener("pointermove", move);
 			window.addEventListener("pointerup", up);
 		},
-		[chatWidthPx],
+		[chatWidthPx, direction],
 	);
 
 	const startTimelineResize = useCallback(
@@ -1739,7 +1742,7 @@ export function NewEditorShell() {
 						</aside>
 						<div
 							className={v4.chatResizeHandle}
-							style={{ left: chatWidthPx }}
+							style={{ insetInlineStart: chatWidthPx }}
 							role="separator"
 							aria-orientation="vertical"
 							aria-label={te("shell.resizeChatPanel")}
@@ -1755,24 +1758,10 @@ export function NewEditorShell() {
 								style={{
 									position: "absolute",
 									inset: 0,
-									// Right padding reserves just enough room for the floating
-									// inspector (facet rail ~74px, or the full panel ~320px when
-									// open) so the video resizes into the remaining space instead
-									// of sitting underneath it. Nothing floats over the other
-									// edges — playback transport lives in the timeline header
-									// (TransportBar, rendered from V4Timeline) instead of
-									// overlaying the preview — so top/bottom/left only need a
-									// thin margin off the stage's rounded corners, not a large
-									// fixed chunk that dwarfs the card on smaller windows.
-									//
-									// Native compositor: the D3D overlay is an opaque, always-on-top
-									// design lets the translucent panel float over the video, but the
-									// preview is now a plain in-DOM <canvas> (no OS window/airspace
-									// issue) — still reserve the inspector's real footprint (right:20 +
-									// rail:50 + gap:10 + panel ≈ 80 + panel, +a small gap) so it doesn't
-									// draw its own translucent panel flush against the canvas edge. The
-									// panel's width is `--inspector-w` (see .stage), so the room follows it.
-									padding: `16px ${inspectorOpen ? "calc(var(--inspector-w, 300px) + 100px)" : "74px"} 16px 16px`,
+									paddingBlock: 16,
+									paddingInlineStart: 16,
+									// Reserve the facet rail and the open inspector at the stage's end.
+									paddingInlineEnd: inspectorOpen ? "calc(var(--inspector-w, 300px) + 100px)" : 74,
 									boxSizing: "border-box",
 								}}
 							>

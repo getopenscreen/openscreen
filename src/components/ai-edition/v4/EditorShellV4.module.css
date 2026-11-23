@@ -150,7 +150,7 @@
 .appMenu {
 	position: absolute;
 	top: calc(100% + 6px);
-	left: 0;
+	inset-inline-start: 0;
 	/* Sized to its widest row. Left to the default shrink-to-fit, an absolute box measures its
 	   available width against the anchor, which is only as wide as the wordmark, so it settled
 	   on min-width and long locales wrapped: "Changer de langue" on two lines, the version split
@@ -182,7 +182,7 @@
 	color: var(--fg-2);
 	border-radius: var(--r-sm);
 	cursor: pointer;
-	text-align: left;
+	text-align: start;
 	font: 500 12.5px var(--font-body);
 	/* One line per row, in every locale: the menu grows to fit instead (see .appMenu). */
 	white-space: nowrap;
@@ -201,9 +201,9 @@
 .appMenuRow:focus-visible svg {
 	color: var(--fg);
 }
-/* Pushes the version to the right edge of the row it shares with "About". */
+/* Pushes the version to the end of the row it shares with "About". */
 .appMenuVersion {
-	margin-left: auto;
+	margin-inline-start: auto;
 	/* Never squeezed or broken at the hyphen of a pre-release tag like "2.0.0-rc.8". */
 	flex-shrink: 0;
 	white-space: nowrap;
@@ -225,7 +225,7 @@
 .appMenuSub {
 	max-height: 220px;
 	overflow-y: auto;
-	padding-left: 25px;
+	padding-inline-start: 25px;
 	scrollbar-width: thin;
 }
 .appMenuSub .appMenuRow[aria-checked="true"] {
@@ -553,7 +553,7 @@
 	top: 0;
 	bottom: 0;
 	width: 8px;
-	margin-left: -4px;
+	margin-inline-start: -4px;
 	cursor: col-resize;
 	z-index: 30;
 	background: transparent;
@@ -583,7 +583,7 @@
 	min-height: 0;
 	min-width: 0;
 	background: var(--surface);
-	border-right: 1px solid var(--border);
+	border-inline-end: 1px solid var(--border);
 	overflow: hidden;
 }
 .stage {
@@ -605,7 +605,7 @@
 .inspectorWrap {
 	position: absolute;
 	top: 20px;
-	right: 20px;
+	inset-inline-end: 20px;
 	bottom: 20px;
 	display: flex;
 	align-items: flex-start;
@@ -746,7 +746,7 @@
 	background: var(--surface);
 	overflow: hidden;
 	cursor: grab;
-	text-align: left;
+	text-align: start;
 	transition: border-color var(--motion-fast) var(--ease), transform var(--motion-base) var(--ease),
 		box-shadow var(--motion-base) var(--ease);
 }
@@ -910,11 +910,12 @@
 .recBadge {
 	position: absolute;
 	top: 16px;
-	left: 16px;
+	inset-inline-start: 16px;
 	display: inline-flex;
 	align-items: center;
 	gap: 8px;
-	padding: 6px 12px 6px 8px;
+	padding-block: 6px;
+	padding-inline: 8px 12px;
 	border-radius: 9999px;
 	background: rgba(8, 10, 13, 0.5);
 	backdrop-filter: blur(12px);
@@ -930,12 +931,12 @@
 	border-radius: 50%;
 	background: var(--danger);
 }
-/* Mic level lives on the preview (bottom-left), not in the settings row — that
+/* Mic level lives at the bottom of the preview. That
    keeps the microphone row as compact as the others so its On/Off toggle is
    always in view (issue #624). */
 .recMicMeter {
 	position: absolute;
-	left: 16px;
+	inset-inline-start: 16px;
 	bottom: 16px;
 	display: inline-flex;
 	align-items: center;
@@ -1133,12 +1134,12 @@
 	font-size: 12.5px;
 	font-weight: 500;
 	cursor: pointer;
-	text-align: left;
+	text-align: start;
 }
 /* The key that does the same thing, parked at the end of a menu row. Teaches
    the shortcut at the moment the user is reaching for the slow way to do it. */
 .recMenuKey {
-	margin-left: auto;
+	margin-inline-start: auto;
 	flex-shrink: 0;
 	padding: 2px 6px;
 	border-radius: 5px;
@@ -1236,7 +1237,7 @@
 	position: relative;
 	display: flex;
 	flex-direction: column;
-	text-align: left;
+	text-align: start;
 	background: var(--surface);
 	border: 1.5px solid var(--border);
 	border-radius: 14px;
@@ -2197,7 +2198,7 @@
 	display: flex;
 	flex-direction: column;
 	gap: 2px;
-	margin-right: 4px;
+	margin-inline-end: 4px;
 }
 .voiceoverBarTitle strong {
 	font: 600 13px var(--font-display);

@@ -61,6 +61,10 @@ export function getAvailableLocales(): Locale[] {
 	return availableLocales.length > 0 ? availableLocales : [DEFAULT_LOCALE];
 }
 
+export function getLocaleDirection(locale: Locale) {
+	return i18next.dir(locale);
+}
+
 export function getLocaleName(locale: Locale): string {
 	return tAt(locale, "common", "locale.name") ?? locale;
 }

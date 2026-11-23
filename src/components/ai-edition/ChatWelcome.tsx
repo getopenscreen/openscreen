@@ -35,7 +35,7 @@ export function ChatWelcome({ onOpenProviderSettings }: ChatWelcomeProps) {
 
 			<button type="button" className={styles.chatWelcomeCta} onClick={onOpenProviderSettings}>
 				{t("chat.welcome.cta")}
-				<ArrowRight size={16} />
+				<ArrowRight size={16} className="rtl:-scale-x-100" />
 			</button>
 
 			<p className={styles.chatWelcomeDisclaimer}>

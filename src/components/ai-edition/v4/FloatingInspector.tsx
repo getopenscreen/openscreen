@@ -1,3 +1,4 @@
+import { useDirection } from "@radix-ui/react-direction";
 import {
 	ArrowDown,
 	ArrowDownLeft,
@@ -115,10 +116,8 @@ const FACETS: Array<{ id: Facet; labelKey: string; icon: typeof SlidersHorizonta
 	{ id: "transcript", labelKey: "facets.transcript", icon: FileText },
 ];
 
-// The rail is a column against the right edge, so its tooltips open to the left: above or below
-// they would cover the next button. The rail's own padding and border (6px + 1px) come on top of
-// the usual gap, so the gap is measured from the rail's edge, not from the button's.
-const RAIL_TOOLTIP = { side: "left", sideOffset: TOOLTIP_GAP_PX + 7 } as const;
+// Clear the rail's padding and border when placing tips and menus toward the preview.
+const RAIL_TOOLTIP_OFFSET = TOOLTIP_GAP_PX + 7;
 
 type TranscriptProps = ComponentProps<typeof TranscriptPane>;
 
@@ -158,6 +157,7 @@ export function FloatingInspector({
 	// unknown, and a choice of it that lost its footing falls back to the first facet.
 	const hasCursor = useHasRecordedCursor() === true;
 	const facets = hasCursor ? FACETS : FACETS.filter(({ id }) => id !== "cursor");
+	const railMenuSide = useDirection() === "rtl" ? "right" : "left";
 	// Literal keys, one call each, so `npm run i18n:check` resolves them (a key held in FACETS
 	// would not be checked).
 	const railTips: Record<Facet, string> = {
@@ -191,7 +191,12 @@ export function FloatingInspector({
 				{facets.map(({ id, labelKey, icon: Icon }) => (
 					// The name is the pane's title; the tip says what the pane holds. They are two keys
 					// because the title is also the pane's heading and cannot carry the list.
-					<Tooltip key={id} content={railTips[id]} {...RAIL_TOOLTIP}>
+					<Tooltip
+						key={id}
+						content={railTips[id]}
+						side={railMenuSide}
+						sideOffset={RAIL_TOOLTIP_OFFSET}
+					>
 						<button
 							type="button"
 							aria-label={ts(labelKey)}
@@ -214,7 +219,11 @@ export function FloatingInspector({
 				{/* A portal, like the timeline's menus: drawn inside the stage, the list was clipped by
 				    the stage's edge, and the rows past it sat under the timeline, out of reach. */}
 				<Popover open={clipPickerOpen && clips.length > 1} onOpenChange={setClipPickerOpen}>
-					<Tooltip content={te("inspector.editClipTip")} {...RAIL_TOOLTIP}>
+					<Tooltip
+						content={te("inspector.editClipTip")}
+						side={railMenuSide}
+						sideOffset={RAIL_TOOLTIP_OFFSET}
+					>
 						<PopoverTrigger asChild>
 							<button
 								type="button"
@@ -234,9 +243,9 @@ export function FloatingInspector({
 						</PopoverTrigger>
 					</Tooltip>
 					<PopoverContent
-						side="left"
+						side={railMenuSide}
 						align="start"
-						sideOffset={RAIL_TOOLTIP.sideOffset}
+						sideOffset={RAIL_TOOLTIP_OFFSET}
 						collisionPadding={12}
 						animated={false}
 						className="w-auto border-0 bg-transparent p-0 shadow-none"
@@ -290,13 +299,14 @@ export function FloatingInspector({
 										background: "transparent",
 										color: "var(--fg)",
 										cursor: "pointer",
-										textAlign: "left",
+										textAlign: "start",
 									}}
 								>
 									<span style={{ font: "600 13px var(--font-display)" }}>
 										{te("editClipDialog.clipLabel", { index: index + 1 })}
 									</span>
 									<span
+										dir="ltr"
 										style={{
 											font: "500 12px var(--font-body)",
 											fontVariantNumeric: "tabular-nums",
@@ -1091,6 +1101,7 @@ function SelectionPane({ tl, onClose }: { tl: TimelineApi; onClose: () => void }
 								ts("annotation.arrowDirection"),
 								<ChoiceRow<ArrowDirectionKind>
 									label={ts("annotation.arrowDirection")}
+									dir="ltr"
 									options={ARROW_DIRECTIONS.map(({ value, glyph, Icon }) => ({
 										value,
 										label: glyph,
@@ -1614,7 +1625,7 @@ function FacetBody({
 				style={{
 					position: "absolute",
 					top: 12,
-					right: 12,
+					insetInlineEnd: 12,
 					width: 30,
 					height: 30,
 					display: "grid",
@@ -1627,7 +1638,7 @@ function FacetBody({
 					zIndex: 5,
 				}}
 			>
-				<ChevronRight size={16} />
+				<ChevronRight size={16} className="rtl:-scale-x-100" />
 			</button>
 		</Tooltip>
 	);

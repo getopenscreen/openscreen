@@ -5,7 +5,7 @@ import styles from "./ChatMarkdown.module.css";
 /** Render Markdown as React elements; HTML is skipped and unsafe URL schemes are rejected. */
 export function ChatMarkdown({ text }: { text: string }) {
 	return (
-		<div className={styles.markdown}>
+		<div className={styles.markdown} dir="auto">
 			<Markdown
 				skipHtml
 				remarkPlugins={[remarkGfm]}

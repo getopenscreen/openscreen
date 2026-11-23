@@ -210,7 +210,7 @@ function PermissionAction({
 	}
 	if (status === "restricted") {
 		return (
-			<span className="max-w-[120px] shrink-0 text-right text-[12.5px] leading-[18px] text-[#8b93a1]">
+			<span className="max-w-[120px] shrink-0 text-end text-[12.5px] leading-[18px] text-[#8b93a1]">
 				{t("permissions.status.restricted")}
 			</span>
 		);
@@ -270,7 +270,7 @@ function ScreenHelp({
 		return null;
 	}
 	return (
-		<div className="mt-2.5 space-y-1 border-t border-[#20232a] pt-2.5 pl-8">
+		<div className="mt-2.5 space-y-1 border-t border-[#20232a] pt-2.5 ps-8">
 			{lines.map((line) => (
 				<p key={line} className="text-[12.5px] leading-[18px] text-[#a9b0bc]">
 					{line}
@@ -291,7 +291,7 @@ function SystemAudioHelp({ status, t }: { status: Status; t: T }) {
 		return null;
 	}
 	return (
-		<div className="mt-2.5 border-t border-[#20232a] pt-2.5 pl-8">
+		<div className="mt-2.5 border-t border-[#20232a] pt-2.5 ps-8">
 			<p className="text-[12.5px] leading-[18px] text-[#a9b0bc]">{line}</p>
 		</div>
 	);

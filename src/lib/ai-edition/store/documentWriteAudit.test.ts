@@ -203,6 +203,8 @@ const DECLARED: WritePath[] = [
 	// Linking the camera track found next to a newly added asset. Part of the
 	// import, not an edit of its own.
 	w("src/lib/ai-edition/store/projectStore.ts", "addAsset", "save", "automatic"),
+	// Folding a newly added video's probed duration onto its asset (#1663). Same reason.
+	w("src/lib/ai-edition/store/projectStore.ts", "addAsset", "save", "automatic"),
 	// Folding an imported audio file's probed duration onto its asset (issue #350).
 	// Part of the import, like the camera link above — not an edit of its own.
 	w("src/lib/ai-edition/store/projectStore.ts", "addAudioAsset", "save", "automatic"),
@@ -295,8 +297,8 @@ const DECLARED: WritePath[] = [
 	w("src/lib/ai-edition/store/useTimeline.ts", "setAudioTrackLoop", "save", "gesture"),
 	w("src/lib/ai-edition/store/useTimeline.ts", "updateAudioTrack", "save", "gesture"),
 	w("src/lib/ai-edition/store/useTimeline.ts", "moveLayoutBoundary", "save", "gesture"),
-	// The round-2 defect: a background duration probe every freshly imported asset
-	// fires, because `addAsset` never populates `durationSec`.
+	// The round-2 defect: a background duration probe placing a clip fires when its asset
+	// has no `durationSec` (the import's own probe failed, or an older project).
 	w("src/lib/ai-edition/store/useTimeline.ts", "probeAndCorrectClip", "save", "automatic"),
 	w("src/lib/ai-edition/store/useTimeline.ts", "removeClip", "save", "gesture"),
 	w("src/lib/ai-edition/store/useTimeline.ts", "removeRegion", "save", "gesture"),

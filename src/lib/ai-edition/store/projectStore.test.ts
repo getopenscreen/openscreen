@@ -20,11 +20,15 @@ const toastMocks = vi.hoisted(() => ({
 // jsdom never fires loadedmetadata, so an unmocked probe would block on its
 // timeout. Everything else in the module (probeVideoDimensions) stays real so
 // the video-import tests above are untouched.
-const durationMocks = vi.hoisted(() => ({ probeAudioDuration: vi.fn() }));
+const durationMocks = vi.hoisted(() => ({
+	probeAudioDuration: vi.fn(),
+	probeVideoDuration: vi.fn(),
+}));
 
 vi.mock("../timeline/duration", async (importOriginal) => ({
 	...(await importOriginal<typeof import("../timeline/duration")>()),
 	probeAudioDuration: durationMocks.probeAudioDuration,
+	probeVideoDuration: durationMocks.probeVideoDuration,
 }));
 
 vi.mock("@/native/client", () => ({
@@ -85,6 +89,8 @@ describe("useProjectStore", () => {
 		}
 		toastMocks.error.mockReset();
 		durationMocks.probeAudioDuration.mockReset();
+		durationMocks.probeVideoDuration.mockReset();
+		durationMocks.probeVideoDuration.mockResolvedValue(null);
 		// biome-ignore lint/suspicious/noExplicitAny: test-only stub of the legacy contextBridge surface
 		(window as any).electronAPI = { findRecordingCamera: vi.fn() };
 	});
@@ -145,6 +151,35 @@ describe("useProjectStore", () => {
 		expect(asset?.id).toBe("asset_1");
 		expect(useProjectStore.getState().revision).toBe(2);
 		expect(useProjectStore.getState().document?.assets).toHaveLength(1);
+	});
+
+	it("addAsset stamps the probed duration at import, without a history entry (#1663)", async () => {
+		useProjectStore.setState({
+			projectId: "proj_test",
+			document: sampleDoc,
+			revision: 1,
+			status: "ready",
+			error: null,
+		});
+		durationMocks.probeVideoDuration.mockResolvedValue(15);
+		const videoDoc = {
+			...sampleDoc,
+			assets: [{ id: "clip_b", kind: "video", label: "clipB.mp4", originalPath: "/tmp/clipB.mp4" }],
+		};
+		bridgeMocks.addAsset.mockResolvedValue({ assetId: "clip_b", document: videoDoc });
+		bridgeMocks.save.mockImplementation((document: unknown) =>
+			Promise.resolve({ success: true, document }),
+		);
+		// biome-ignore lint/suspicious/noExplicitAny: test-only stub of the legacy contextBridge surface
+		(window as any).electronAPI.findRecordingCamera.mockResolvedValue({ success: false });
+		clearHistory();
+
+		const asset = await useProjectStore.getState().addAsset("/tmp/clipB.mp4");
+
+		expect(asset?.durationSec).toBe(15);
+		expect(useProjectStore.getState().document?.assets[0]?.durationSec).toBe(15);
+		expect(bridgeMocks.save).toHaveBeenCalledTimes(1);
+		expect(past).toHaveLength(0);
 	});
 
 	it("addAsset resolves an independent camera for every asset added, not just the first", async () => {

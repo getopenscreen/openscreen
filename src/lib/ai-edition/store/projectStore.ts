@@ -7,7 +7,7 @@ import { placeAudioTrackInDocument } from "../document/audioTracks";
 import { createId } from "../document/ids";
 import { type Interval, replaceTimeline as replaceTimelineOp } from "../document/timeline";
 import { type AxcutAsset, type AxcutDocument, createAudioTrack, documentSchema } from "../schema";
-import { probeAudioDuration, probeVideoDimensions } from "../timeline/duration";
+import { probeAudioDuration, probeVideoDimensions, probeVideoDuration } from "../timeline/duration";
 import { clearHistory, currentWriteEpoch, pushHistory } from "./undoStack";
 
 let documentSavesInFlight = 0;
@@ -438,6 +438,25 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
 			}
 		}
 
+		// Probe the length once at import, so the Media card shows it before the asset is ever
+		// placed (issue #1663) and the first placement skips the 60 s placeholder. An image
+		// arrives here as its generated still clip, a real video, so the same probe covers it.
+		// Non-fatal, like the audio probe: a failure leaves `durationSec` unset and placing the
+		// clip probes again. `history: false`: part of the import, not an edit of its own.
+		if (addedAsset && addedAsset.durationSec == null) {
+			const durationSec = await probeVideoDuration(toFileUrl(addedAsset.originalPath)).catch(
+				() => null,
+			);
+			if (superseded()) return null;
+			if (durationSec != null && durationSec > 0) {
+				const next: AxcutDocument = {
+					...document,
+					assets: document.assets.map((a) => (a.id === addedAsset.id ? { ...a, durationSec } : a)),
+				};
+				if (await get().saveDocument(next, { history: false })) document = parseDocument(next);
+			}
+		}
+
 		if (superseded()) return null;
 		set({
 			document,
@@ -445,7 +464,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
 			dirty: false,
 			lastSavedAt: new Date(),
 		});
-		return addedAsset;
+		return addedAsset ? (document.assets.find((a) => a.id === addedAsset.id) ?? addedAsset) : null;
 	},
 
 	async addAudioAsset(path, label) {

@@ -111,14 +111,22 @@ import {
 	type LinuxCaptureSourceKind,
 	LinuxNativeCaptureSession,
 } from "../native-bridge/capture/linuxNativeCaptureSession";
-import { compactCursorTelemetryPauseRanges } from "../native-bridge/cursor/recording/cursorPauseRanges";
-import { createCursorRecordingSession } from "../native-bridge/cursor/recording/factory";
+import {
+	compactCursorTelemetryPauseRanges,
+	finalizeSampledCursorTelemetry,
+} from "../native-bridge/cursor/recording/cursorPauseRanges";
+import {
+	createCursorRecordingSession,
+	createX11PointerRecordingSession,
+	isX11PointerFallbackEnabled,
+} from "../native-bridge/cursor/recording/factory";
 import {
 	isMacCursorHelperUnavailable,
 	requestMacCursorAccessibilityAccess,
 } from "../native-bridge/cursor/recording/macNativeCursorRecordingSession";
 import { findLinuxCaptureHelperPath } from "../native-bridge/cursor/recording/pipeWireCursorRecordingSession";
 import type { CursorRecordingSession } from "../native-bridge/cursor/recording/session";
+import { resolveX11CaptureBounds } from "../native-bridge/cursor/recording/x11CaptureBounds";
 import { toHelperRect } from "../native-bridge/helperCoordinates";
 import {
 	isMacPickerSourceId,
@@ -1179,6 +1187,19 @@ function isMacWindowCaptureSourceId(sourceId: string | null | undefined) {
 	);
 }
 
+// Electron pointer positions and display bounds are DIP; helper origins may
+// instead be X11 pixels. Resolve conservatively, never mix those coordinate spaces.
+// Only native Linux capture runs this sampler, so the portal grant is the source of truth.
+function getX11CaptureBounds() {
+	if (!linuxNativeCaptureSession) return null;
+	return resolveX11CaptureBounds({
+		displays: screen.getAllDisplays(),
+		sourceKind: linuxNativeCaptureSession.grantedSourceKind,
+		origin: linuxNativeCaptureSession.grantedCaptureOrigin,
+		size: linuxNativeCaptureSession.grantedCaptureSize,
+	});
+}
+
 function getSelectedSourceBounds() {
 	// A window take is normalised against the rect the helper is recording. That
 	// rect is seeded from the source frame before the first cursor sample and
@@ -1376,11 +1397,40 @@ async function resolveDirectShowWebcamClsid(deviceName?: string) {
 async function startCursorRecording(recordingId?: number) {
 	// On Linux the native capture helper already produces cursor samples, from
 	// the SAME portal session that produces the pixels. Spawning the cursor-only
-	// helper alongside it would open a SECOND portal session — and since
+	// PipeWire helper alongside it would open a SECOND portal session — and since
 	// SelectSources may be called once per session, that means a second picker
 	// in front of the user, for a stream nothing consumes. The double prompt is
 	// precisely what the native path exists to remove.
+	//
+	// X11 is the exception: the portal often has no METADATA cursor mode at all,
+	// so the helper records pixels with an empty cursor track. Sampling the
+	// pointer through X11 (Electron / xinput) does not talk to the portal,
+	// so it can run in parallel and fill `<video>.cursor.json` when native samples
+	// come back empty.
 	if (linuxNativeCaptureSession) {
+		if (!isX11PointerFallbackEnabled()) {
+			return;
+		}
+		if (cursorRecordingSession) {
+			pendingCursorRecordingData = await cursorRecordingSession.stop();
+			cursorRecordingSession = null;
+		}
+		pendingCursorRecordingData = null;
+		// Use the helper's capture-started epoch, not prepare/picker time or the
+		// slightly later sampler start: pause ranges use that same epoch.
+		cursorRecordingSession = createX11PointerRecordingSession({
+			getDisplayBounds: getX11CaptureBounds,
+			maxSamples: MAX_CURSOR_SAMPLES,
+			sampleIntervalMs: CURSOR_SAMPLE_INTERVAL_MS,
+			startTimeMs: linuxNativeCaptureSession.cursorStartTimeMs,
+		});
+		try {
+			await cursorRecordingSession.start();
+			console.info("[cursor-x11] sampling the pointer alongside native Linux capture");
+		} catch (error) {
+			console.error("Failed to start the X11 pointer sampler:", error);
+			cursorRecordingSession = null;
+		}
 		return;
 	}
 
@@ -2957,6 +3007,10 @@ export function registerIpcHandlers(
 				linuxNativeCaptureSourceLabel = linuxSourceLabel(session.grantedSourceKind);
 				setAppRecording(true, linuxNativeCaptureSourceLabel, recordingId);
 
+				if (cursorCaptureMode === "editable-overlay") {
+					await startCursorRecording(recordingId);
+				}
+
 				return { success: true, recordingId, path: outputPath };
 			} catch (error) {
 				console.error("Failed to start native Linux recording:", error);
@@ -3003,6 +3057,8 @@ export function registerIpcHandlers(
 
 		try {
 			if (discard) {
+				await stopCursorRecording();
+				pendingCursorRecordingData = null;
 				session.discard();
 				const discarded = path.join(RECORDINGS_DIR, `${RECORDING_FILE_PREFIX}${recordingId}.mp4`);
 				await Promise.all([
@@ -3014,7 +3070,11 @@ export function registerIpcHandlers(
 
 			let result: Awaited<ReturnType<LinuxNativeCaptureSession["stop"]>>;
 			try {
-				result = await session.stop();
+				// Stop sampling at the stop request, not after helper teardown.
+				[result] = await Promise.all([
+					session.stop(),
+					cursorCaptureMode === "editable-overlay" ? stopCursorRecording() : Promise.resolve(),
+				]);
 			} catch (error) {
 				// A Stop the user asked for fails as before, with the helper's reason.
 				if (!session.interrupted) {
@@ -3040,15 +3100,28 @@ export function registerIpcHandlers(
 				? { screenVideoPath: result.path, message: result.warning }
 				: null;
 
-			// The helper collects cursor samples itself, from the same portal
-			// session that produced the pixels, so there is no separate sampler
-			// to stop and no clock offset to correct — the two are one recording.
-			if (cursorCaptureMode === "editable-overlay" && result.cursor.samples.length > 0) {
-				await fs.writeFile(
-					`${result.path}.cursor.json`,
-					JSON.stringify(result.cursor, null, 2),
-					"utf-8",
-				);
+			if (cursorCaptureMode !== "editable-overlay") pendingCursorRecordingData = null;
+
+			// Prefer the helper's own samples — they share the portal session that
+			// produced the pixels, so there is no clock offset to correct. When
+			// the portal had no METADATA cursor mode the track is empty; the X11
+			// sampler started alongside the take then fills the sidecar so
+			// `--auto-zoom` still has clicks to work from. Those fallback samples
+			// still include paused time, which the video does not. Apply the same
+			// compaction and duration bound as browser video (also after interruption).
+			const cursor =
+				result.cursor.samples.length > 0
+					? result.cursor
+					: pendingCursorRecordingData
+						? finalizeSampledCursorTelemetry(
+								pendingCursorRecordingData,
+								result.cursorPauseRanges,
+								result.durationMs,
+							)
+						: null;
+			pendingCursorRecordingData = null;
+			if (cursorCaptureMode === "editable-overlay" && cursor && cursor.samples.length > 0) {
+				await fs.writeFile(`${result.path}.cursor.json`, JSON.stringify(cursor, null, 2), "utf-8");
 			}
 
 			const session_: RecordingSession = {
@@ -3086,6 +3159,8 @@ export function registerIpcHandlers(
 			console.error("Failed to stop native Linux recording:", error);
 			return { success: false, error: String(error) };
 		} finally {
+			await stopCursorRecording();
+			pendingCursorRecordingData = null;
 			linuxNativeCaptureSession = null;
 			linuxNativeCaptureRecordingId = null;
 			linuxNativeCaptureCursorMode = "editable-overlay";

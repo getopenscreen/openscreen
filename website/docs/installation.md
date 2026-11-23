@@ -182,13 +182,15 @@ The editing tools are the same everywhere — zooms, backgrounds, crop/trim/spee
 
 | | macOS | Windows | Linux |
 |---|---|---|---|
-| Capture pipeline | Native (ScreenCaptureKit) | Native (Windows Graphics Capture) on build 19041 and later; browser fallback on older builds or without the helper | Native (PipeWire via the ScreenCast portal); browser fallback without the helper, losing hardware encode and cursor telemetry |
-| Custom cursor / click effects | ✅ — clicks and cursor shape need the Accessibility permission | ✅ | ✅ on Wayland — click capture needs mouse evdev permissions ([details](#mouse-clicks-on-wayland)) |
+| Capture pipeline | Native (ScreenCaptureKit) | Native (Windows Graphics Capture) on build 19041 and later; browser fallback on older builds or without the helper | Native (PipeWire via the ScreenCast portal); browser fallback without the helper, losing hardware encode and cursor telemetry. On native X11, supplementary pointer telemetry is sampled when needed |
+| Custom cursor / click effects | ✅ — clicks and cursor shape need the Accessibility permission | ✅ | ✅ on Wayland — click capture needs mouse evdev permissions ([details](#mouse-clicks-on-wayland)). On X11, position and clicks are sampled even when the portal has no METADATA mode |
 | Webcam | Browser capture, saved as a separate file (still works as PiP) | Native capture, saved as a separate file | Browser capture, saved as a separate file (still works as PiP) |
 | System audio | Works out of the box; its own permission prompt on macOS 15.2+, covered by Screen Recording on older versions | Works out of the box | Needs PipeWire as the sound server (default on Ubuntu 22.10+, Fedora 34+) |
 | MP4 export | ✅ | ✅ | ✅ — H.264 on the GPU through VAAPI when the GPU stack allows it (see the note below), software otherwise |
 | GIF export | ✅ | ✅ | ✅ |
 | On-device transcription | Metal (Apple Silicon) / CPU | Vulkan / CPU | Vulkan / CPU |
+
+On X11, install `xdotool` for fresh read-only pointer positions and `xinput` for global mouse-button events (for example, `sudo apt install xdotool xinput`). Positions are converted to Electron DIP before normalization. If a fresh position cannot be read, the sampler omits data rather than recording a potentially stale pointer.
 
 :::note MP4 export on Linux
 The GPU compositor behind the live preview and MP4 export has three backends — Direct3D 11 on Windows, Metal on macOS, wgpu/WGSL on Linux — and ships in all three builds. On Linux, an H.264 export hands each composited frame to `h264_vaapi` without a CPU copy when the GPU driver exposes VAAPI *and* the Vulkan device can hand the frame over as a dmabuf (`VK_KHR_external_memory_fd` and `VK_EXT_external_memory_dma_buf`). When any of that is missing — no render node, a driver without VAAPI, a Vulkan device without those extensions — the export falls back to a software encoder and simply takes longer; nothing else changes.

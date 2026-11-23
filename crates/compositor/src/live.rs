@@ -135,7 +135,7 @@ unsafe fn open_webcam_or_stand_in(
         Ok(d) => Ok((d, true)),
         Err(e) => {
             eprintln!(
-                "WARNING: caméra déclarée mais illisible ({webcam_path}) : {e}. La vignette caméra ne sera pas dessinée ; le média est à relier."
+                "WARNING: camera declared but unreadable ({webcam_path}): {e}. The camera overlay will not be drawn; the media needs relinking."
             );
             Ok((Decoder::open(screen_path, gpu)?, false))
         }
@@ -1546,7 +1546,7 @@ unsafe fn advance_to_next_scene_clip(
             Ok(())
         }
         Some(Err(e)) => {
-            eprintln!("[live] préchargement du clip suivant: {e:#} — repli sur ouverture synchrone");
+            eprintln!("[live] preloading the next clip: {e:#} — falling back to a synchronous open");
             player.set_active_clip(
                 &next_clip.screen_path,
                 &next_clip.webcam_path,
@@ -1797,7 +1797,7 @@ unsafe fn render_thread(
                             active_clip_index = index;
                         } else {
                             eprintln!(
-                                "[live] set_active_clip: sources absentes de la scène (screen=\"{}\", webcam=\"{}\")",
+                                "[live] set_active_clip: sources missing from the scene (screen=\"{}\", webcam=\"{}\")",
                                 active_screen_path, active_webcam_path
                             );
                         }
@@ -2218,7 +2218,7 @@ unsafe fn publish_shared(
         return SharedPublish::Off;
     }
     let turn_off = |why: String| {
-        eprintln!("[live] textures partagées coupées ({why}) — retour au readback");
+        eprintln!("[live] shared textures turned off ({why}) — back to readback");
         shared.shared_frames.store(false, Ordering::Relaxed);
         SharedPublish::Off
     };
@@ -2356,8 +2356,8 @@ pub fn run_standalone(screen: &str, webcam: &str, cursor_json: &str) -> Result<(
         last = (w, h);
         let view = LiveView::create(w, h, screen, webcam, cursor_json)?;
         let _ = ShowWindow(host, SW_SHOW);
-        println!("live embed: vue offscreen créée, thread de rendu démarré");
-        println!("  touches : [B] flou de fond (param → D3D)   [Espace] pause/lecture");
+        println!("live embed: offscreen view created, render thread started");
+        println!("  keys: [B] background blur (param → D3D)   [Space] pause/play");
 
         // état des paramètres pilotés au clavier (le MÊME set_param que l'addon napi appelle)
         let mut blur = false;

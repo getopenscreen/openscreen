@@ -162,7 +162,7 @@ impl Gpu {
             Ok(gpu) => return Ok(gpu),
             Err(err) => err,
         };
-        eprintln!("[d3d] backend matériel indisponible ({hw_err:#}) — repli sur le backend CPU");
+        eprintln!("[d3d] hardware backend unavailable ({hw_err:#}) — falling back to the CPU backend");
         Gpu::create_backend(Backend::Cpu, debug).map_err(|cpu_err| {
             anyhow::anyhow!("{hw_err:#} (le repli logiciel a échoué aussi : {cpu_err:#})")
         })

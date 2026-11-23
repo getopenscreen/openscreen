@@ -1525,7 +1525,7 @@ impl VideoEncoder {
             // les écarter ici plutôt que de leur passer un `hw_frames_ctx` nul, dont l'échec
             // remonterait comme un refus de driver et masquerait la vraie raison.
             if hw_frames.is_null() && pix_fmt == AVPixelFormat::AV_PIX_FMT_D3D11 {
-                refused.push(format!("{name}: pas de pool D3D11 (backend CPU)"));
+                refused.push(format!("{name}: no D3D11 pool (CPU backend)"));
                 continue;
             }
             let encoder = match Self::try_open(candidate, w, h, fps, bit_rate, hw_frames) {
@@ -1537,12 +1537,12 @@ impl VideoEncoder {
             };
             // Journalisé sans condition : un rapport de support doit dire qui a encodé.
             eprintln!(
-                "[pipeline] encodeur vidéo : {name} ({}){}",
-                if encoder.sw.is_null() { "textures D3D11, zéro-copie" } else { "frames système" },
+                "[pipeline] video encoder: {name} ({}){}",
+                if encoder.sw.is_null() { "D3D11 textures, zero-copy" } else { "system frames" },
                 if refused.is_empty() {
                     String::new()
                 } else {
-                    format!(" — écartés : {}", refused.join(" ; "))
+                    format!(" — skipped: {}", refused.join(" ; "))
                 },
             );
             return Ok(encoder);

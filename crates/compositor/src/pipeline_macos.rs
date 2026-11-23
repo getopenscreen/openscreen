@@ -319,9 +319,9 @@ impl Decoder {
             // pris VideoToolbox » ne se distinguent pas dans un rapport de bug, et un
             // changement d'arbitrage ne se vérifie qu'au chronomètre.
             eprintln!(
-                "[pipeline] décodage {} : {} (codec={} profil={} format={} intention={:?})",
+                "[pipeline] decoding {}: {} (codec={} profile={} format={} intent={:?})",
                 path.rsplit('/').next().unwrap_or(path),
-                if r == 0 { "videotoolbox" } else { "logiciel" },
+                if r == 0 { "videotoolbox" } else { "software" },
                 (*codecpar).codec_id,
                 profile,
                 (*codecpar).format,
@@ -897,17 +897,17 @@ impl VideoEncoder {
             match unsafe { Self::try_open(candidate, w, h, fps, bit_rate) } {
                 Ok(encoder) => {
                     eprintln!(
-                        "[pipeline] encodeur vidéo : {} ({}{})",
+                        "[pipeline] video encoder: {} ({}{})",
                         candidate.name,
                         if encoder.sw.is_null() {
                             "zero-copy VT"
                         } else {
-                            "frames système"
+                            "system frames"
                         },
                         if refused.is_empty() {
                             String::new()
                         } else {
-                            format!(" — écartés : {}", refused.join(" ; "))
+                            format!(" — skipped: {}", refused.join(" ; "))
                         },
                     );
                     return Ok(encoder);

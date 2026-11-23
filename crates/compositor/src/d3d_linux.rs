@@ -250,7 +250,7 @@ impl Gpu {
             Ok(gpu) => return Ok(gpu),
             Err(err) => err,
         };
-        eprintln!("[d3d] backend materiel indisponible ({hw_err:#}) -- repli sur le backend CPU");
+        eprintln!("[d3d] hardware backend unavailable ({hw_err:#}) -- falling back to the CPU backend");
         create_backend(Backend::Cpu).map_err(|cpu_err| {
             // Le diagnostic MATERIEL en tete : c'est lui qui est actionnable
             // ("installez Mesa"), pas "lavapipe indisponible" qui ne dit rien.

@@ -145,17 +145,14 @@ describe("isImagePath and isStillAsset", () => {
 });
 
 describe("parseImageSize", () => {
-	it("reads the picture size from ffmpeg's listing", () => {
-		expect(
-			parseImageSize(
-				"  Stream #0:0: Video: png, rgba(pc, gbr/unknown/unknown), 801x601, 25 fps, 25 tbr",
-			),
-		).toEqual({ width: 801, height: 601 });
-		expect(
-			parseImageSize(
-				"  Stream #0:0: Video: mjpeg (Baseline), yuvj420p(pc, bt470bg/unknown/unknown), 1920x1080 [SAR 1:1 DAR 16:9]",
-			),
-		).toEqual({ width: 1920, height: 1080 });
+	it("reads the size of the frame ffmpeg decoded, never the header's alone", () => {
+		const header =
+			"  Stream #0:0: Video: png, rgba(pc, gbr/unknown/unknown), 801x601, 25 fps, 25 tbr";
+		const frame =
+			"[Parsed_showinfo_0 @ 000001] n:   0 pts:      0 pts_time:0       duration:1 fmt:rgba cl:unspecified sar:1/1 s:801x601 i:P iskey:1 type:I";
+		expect(parseImageSize(`${header}\n${frame}`)).toEqual({ width: 801, height: 601 });
+		// The header read, the pixels did not: no frame reached the filter.
+		expect(parseImageSize(`${header}\n[png @ 000001] inflate returned error -3`)).toBeNull();
 		expect(parseImageSize("notes.txt: Invalid data found when processing input")).toBeNull();
 	});
 
@@ -311,5 +308,20 @@ describe.skipIf(!ffmpeg)("ensureStillClip with the bundled ffmpeg", () => {
 			"could not be read as an image",
 		);
 		expect(await probeImageSize(ffmpeg as string, fake)).toBeNull();
+	});
+
+	it("refuses a PNG whose header reads but whose pixels do not decode", async () => {
+		const good = make("broken.png", "testsrc2=s=320x240") as string;
+		const bytes = Buffer.from(readFileSync(good));
+		// The middle of the first IDAT chunk's compressed data zeroed, its length and CRC kept.
+		const idat = bytes.indexOf("IDAT");
+		const length = bytes.readUInt32BE(idat - 4);
+		bytes.fill(0, idat + 4 + Math.floor(length / 4), idat + 4 + Math.floor((3 * length) / 4));
+		writeFileSync(good, bytes);
+		expect(listing(good)).toMatch(/, 320x240[ ,]/);
+		expect(await probeImageSize(ffmpeg as string, good)).toBeNull();
+		await expect(ensureStillClip(good, 1, recordings)).rejects.toThrow(
+			"could not be read as an image",
+		);
 	});
 });

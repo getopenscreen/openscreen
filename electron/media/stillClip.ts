@@ -179,12 +179,11 @@ export const IMAGE_PROBE_ARGS = (imagePath: string): string[] => [
 /**
  * The picture's size as the still's filters will get it, from the stderr of `IMAGE_PROBE_ARGS`:
  * `showinfo`'s `s:`, which is after ffmpeg turned the image by its EXIF orientation (a phone's
- * portrait photo is stored landscape). Failing that, the first size of the input's listing.
+ * portrait photo is stored landscape). Only a decoded frame counts: a header can read while the
+ * pixels behind it do not, and the input's listing would still give it a size.
  */
 export function parseImageSize(listing: string): { width: number; height: number } | null {
-	const match =
-		listing.match(/Parsed_showinfo[^\n]*\bs:(\d+)x(\d+)/) ??
-		listing.match(/^\s*Stream #0:\d+\S*: Video: .*?, (\d+)x(\d+)/m);
+	const match = listing.match(/Parsed_showinfo[^\n]*\bs:(\d+)x(\d+)/);
 	if (!match) return null;
 	const width = Number(match[1]);
 	const height = Number(match[2]);

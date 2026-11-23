@@ -70,7 +70,7 @@ Hitting record triggers a 3‑2‑1 countdown, rendered as a full-desktop overla
 
 - **Layout toggle** — switches the HUD between horizontal and vertical, persisted across sessions.
 - **Device settings** (the gear) — the selected mic and camera, without leaving the HUD.
-- **Notes** (not on Linux) — opens a small rich-text scratchpad window, handy for a script or cue sheet while you record. It's saved locally between sessions.
+- **Notes** — opens a small rich-text scratchpad window, handy for a script or cue sheet while you record. It's saved locally between sessions. It stays above other windows, except on Linux under Wayland, which gives apps no way to keep a window on top.
 - **Language** — a locale picker (15 languages) that only affects the OpenScreen UI, not your recording.
 - Window controls to hide the HUD or quit the app.
 

@@ -103,6 +103,7 @@ import {
 	voiceoverPlacements,
 } from "@/lib/ai-edition/timeline/aggregated-transcript";
 import { assetCameraSource, hasAnyClipWithCamera } from "@/lib/ai-edition/timeline/camera";
+import { isStillAsset } from "@/lib/ai-edition/timeline/clip-parts";
 import { breatheCut } from "@/lib/ai-edition/timeline/cut-breath";
 import { formatMs, formatSec } from "@/lib/ai-edition/timeline/format";
 import { removedRawSpans } from "@/lib/ai-edition/timeline/programme-time";
@@ -1482,17 +1483,22 @@ const TranscriptClipBlock = memo(function TranscriptClipBlock({
 				) : null}
 			</span>
 			{words.length === 0 ? (
-				<p
-					style={{
-						margin: 0,
-						padding: "4px 4px",
-						font: "400 12px/1.5 var(--font-body)",
-						color: "var(--muted)",
-						fontStyle: "italic",
-					}}
-				>
-					{busy ? (busyLabel ?? ts("transcript.transcribing")) : ts("transcript.noClipTranscript")}
-				</p>
+				// A still is never transcribed, so the regenerate advice does not apply to it.
+				asset && isStillAsset(asset) && !busy ? null : (
+					<p
+						style={{
+							margin: 0,
+							padding: "4px 4px",
+							font: "400 12px/1.5 var(--font-body)",
+							color: "var(--muted)",
+							fontStyle: "italic",
+						}}
+					>
+						{busy
+							? (busyLabel ?? ts("transcript.transcribing"))
+							: ts("transcript.noClipTranscript")}
+					</p>
+				)
 			) : (
 				<div
 					ref={editorRef}

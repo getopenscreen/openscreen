@@ -1,12 +1,17 @@
 // @vitest-environment jsdom
 import { render, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import type { RecordingStartOutcome } from "@/hooks/useScreenRecorder";
 import { CliRecordRunner } from "./CliRecordRunner";
 
 const recorder = vi.hoisted(() => ({
 	recording: false,
 	saving: false,
-	startRecordingImmediately: vi.fn(async () => undefined),
+	startRecordingImmediately: vi.fn(
+		async (): Promise<RecordingStartOutcome> => ({
+			kind: "started",
+		}),
+	),
 	toggleRecording: vi.fn(),
 	setMicrophoneEnabled: vi.fn(),
 	setMicrophoneDeviceId: vi.fn(),
@@ -216,5 +221,112 @@ describe("CliRecordRunner", () => {
 			"info",
 			expect.stringContaining("--window do not apply"),
 		);
+	});
+
+	describe("the start outcome", () => {
+		const METADATA_FAILURE =
+			"The ScreenCast portal does not advertise METADATA cursor mode, so real cursor positions cannot be obtained on this session.";
+
+		it("fails a cursor-metadata start immediately, with the retry advice", async () => {
+			recorder.startRecordingImmediately.mockResolvedValueOnce({
+				kind: "failed",
+				message: METADATA_FAILURE,
+			});
+			render(<CliRecordRunner />);
+			await waitFor(() =>
+				expect(window.electronAPI.cliDone).toHaveBeenCalledWith(
+					expect.objectContaining({
+						success: false,
+						error: expect.stringContaining(`${METADATA_FAILURE} Retry with "cursor": "system"`),
+					}),
+				),
+			);
+		});
+
+		it("reports another failure without the cursor advice", async () => {
+			recorder.startRecordingImmediately.mockResolvedValueOnce({
+				kind: "failed",
+				message: "Native Linux capture failed.",
+			});
+			render(<CliRecordRunner />);
+			await waitFor(() =>
+				expect(window.electronAPI.cliDone).toHaveBeenCalledWith(
+					expect.objectContaining({
+						success: false,
+						error: expect.not.stringContaining("Retry with"),
+					}),
+				),
+			);
+		});
+
+		it("fails immediately when the picker was dismissed", async () => {
+			recorder.startRecordingImmediately.mockResolvedValueOnce({ kind: "cancelled" });
+			render(<CliRecordRunner />);
+			await waitFor(() =>
+				expect(window.electronAPI.cliDone).toHaveBeenCalledWith(
+					expect.objectContaining({
+						success: false,
+						error: expect.stringContaining("picker was dismissed"),
+					}),
+				),
+			);
+		});
+
+		it("lets the camera failure win when both it and the start fail", async () => {
+			vi.mocked(window.electronAPI.cliGetRequest).mockResolvedValueOnce({
+				...request,
+				camera: true,
+			});
+			recorder.setWebcamEnabled.mockImplementationOnce(async () => {
+				recorder.webcamEnabled = true;
+				return true;
+			});
+			let answerStart: (outcome: RecordingStartOutcome) => void = () => undefined;
+			recorder.startRecordingImmediately.mockImplementationOnce(
+				() =>
+					new Promise<RecordingStartOutcome>((resolve) => {
+						answerStart = resolve;
+					}),
+			);
+			try {
+				const { rerender } = render(<CliRecordRunner />);
+				await waitFor(() => expect(recorder.startRecordingImmediately).toHaveBeenCalledTimes(1));
+				// The camera turns back off before the start answers: its error wins, one cliDone.
+				recorder.webcamEnabled = false;
+				rerender(<CliRecordRunner />);
+				await waitFor(() =>
+					expect(window.electronAPI.cliDone).toHaveBeenCalledWith(
+						expect.objectContaining({
+							success: false,
+							error: expect.stringContaining("camera could not be opened"),
+						}),
+					),
+				);
+				answerStart({ kind: "failed", message: "Native Linux capture failed." });
+				await new Promise((resolve) => setTimeout(resolve, 25));
+				expect(window.electronAPI.cliDone).toHaveBeenCalledTimes(1);
+			} finally {
+				recorder.webcamEnabled = false;
+				recorder.recording = false;
+			}
+		});
+
+		it("keeps a backstop for a start that reports success but never confirms", async () => {
+			vi.useFakeTimers();
+			try {
+				render(<CliRecordRunner />);
+				await vi.waitFor(() => expect(recorder.startRecordingImmediately).toHaveBeenCalledTimes(1));
+				// `recording` never flips: only the backstop can say so.
+				await vi.advanceTimersByTimeAsync(30_000);
+				expect(window.electronAPI.cliDone).toHaveBeenCalledWith(
+					expect.objectContaining({
+						success: false,
+						error: expect.stringContaining("never confirmed"),
+					}),
+				);
+			} finally {
+				vi.useRealTimers();
+			}
+		});
 	});
 });

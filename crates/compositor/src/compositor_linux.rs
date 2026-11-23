@@ -4570,6 +4570,71 @@ mod tests {
         gpu
     }
 
+    /// Vrai si le device a active les deux extensions dont depend l'export dmabuf —
+    /// la meme condition que la garde de `create_exportable_staging`.
+    fn has_external_memory(device: &wgpu::Device) -> bool {
+        unsafe {
+            device.as_hal::<wgpu_hal::api::Vulkan, _, _>(|hal| {
+                hal.is_some_and(|hal| {
+                    let enabled = hal.enabled_device_extensions();
+                    enabled.contains(&ash::khr::external_memory_fd::NAME)
+                        && enabled.contains(&ash::ext::external_memory_dma_buf::NAME)
+                })
+            })
+        }
+    }
+
+    /// Vrai si le device sait exporter en dmabuf un buffer `TRANSFER_DST` de `size`
+    /// octets dans une memoire HOST_VISIBLE | HOST_COHERENT, ce qu'exige
+    /// `create_exportable_staging` apres sa garde d'extensions. Les extensions seules
+    /// ne le promettent pas : Vulkan rend ces capacites par parametres de buffer.
+    fn supports_exportable_staging(device: &wgpu::Device, size: u64) -> bool {
+        use ash::vk;
+        if !has_external_memory(device) {
+            return false;
+        }
+        unsafe {
+            device.as_hal::<wgpu_hal::api::Vulkan, _, _>(|hal| {
+                let Some(hal) = hal else { return false };
+                let dev = hal.raw_device();
+                let phys = hal.raw_physical_device();
+                let instance = hal.shared_instance().raw_instance();
+                let usage = vk::BufferUsageFlags::TRANSFER_DST;
+                let handle = vk::ExternalMemoryHandleTypeFlags::DMA_BUF_EXT;
+
+                let info = vk::PhysicalDeviceExternalBufferInfo::default()
+                    .usage(usage)
+                    .handle_type(handle);
+                let mut props = vk::ExternalBufferProperties::default();
+                instance.get_physical_device_external_buffer_properties(phys, &info, &mut props);
+                if !props
+                    .external_memory_properties
+                    .external_memory_features
+                    .contains(vk::ExternalMemoryFeatureFlags::EXPORTABLE)
+                {
+                    return false;
+                }
+
+                let mut ext_info = vk::ExternalMemoryBufferCreateInfo::default().handle_types(handle);
+                let bci = vk::BufferCreateInfo::default()
+                    .push_next(&mut ext_info)
+                    .size(size)
+                    .usage(usage)
+                    .sharing_mode(vk::SharingMode::EXCLUSIVE);
+                let Ok(raw) = dev.create_buffer(&bci, None) else { return false };
+                let req = dev.get_buffer_memory_requirements(raw);
+                dev.destroy_buffer(raw, None);
+                let mem = instance.get_physical_device_memory_properties(phys);
+                let want =
+                    vk::MemoryPropertyFlags::HOST_VISIBLE | vk::MemoryPropertyFlags::HOST_COHERENT;
+                (0..mem.memory_type_count).any(|i| {
+                    req.memory_type_bits & (1 << i) != 0
+                        && mem.memory_types[i as usize].property_flags.contains(want)
+                })
+            })
+        }
+    }
+
     /// Deux `TextureView` NV12-split, comme `linux_frames::nv12_planes` en rend.
     ///
     /// Les textures ne sont pas retournees : en wgpu une `TextureView` garde la
@@ -4664,10 +4729,16 @@ mod tests {
         let Some(gpu) = gpu() else { return };
         let comp = Compositor::new_sized(&gpu, 320, 180).expect("Compositor::new_sized");
         const N: u64 = 4096;
-        let Some(st) = comp.create_exportable_staging(N) else {
-            eprintln!("pas d'extensions de memoire externe — test saute");
+        // On ne saute QUE si le device ne sait pas faire ce buffer. Sauter sur tout
+        // `None` laisserait passer en silence une garde de `create_exportable_staging`
+        // qui refuserait a tort un device capable.
+        if !supports_exportable_staging(&gpu.device, N) {
+            eprintln!("pas de buffer dmabuf exportable et coherent sur ce device — test saute");
             return;
-        };
+        }
+        let st = comp
+            .create_exportable_staging(N)
+            .expect("staging exportable attendu sur un device qui le supporte");
         assert!(st.fd >= 0, "descripteur dmabuf invalide");
         assert_eq!(st.size, N);
 
@@ -4681,6 +4752,47 @@ mod tests {
         let got = st.read_back().expect("read_back");
         assert_eq!(got.len(), N as usize);
         assert_eq!(got, pattern, "la memoire exportee ne porte pas ce que wgpu y a ecrit");
+    }
+
+    /// Un device ouvert SANS les extensions de memoire externe doit rendre `None`, pas
+    /// avorter le processus. C'est le cas d'un portable hybride AMD + NVIDIA : wgpu y
+    /// prend la NVIDIA sans export dmabuf, `VaapiEncoder::open` reussit sur l'AMD, et
+    /// l'appel suivant paniquait dans ash (« Unable to load get_memory_fd_khr ») au
+    /// clic sur Exporter (#1622).
+    ///
+    /// Le device est ouvert par `request_device`, le chemin standard de wgpu, qui
+    /// n'active pas ces extensions — exactement ce que `create_async` garde quand
+    /// `open_device_with_dmabuf_export` echoue.
+    #[test]
+    fn exportable_staging_without_external_memory_is_none_not_an_abort() {
+        let instance = wgpu::Instance::new(&wgpu::InstanceDescriptor {
+            backends: wgpu::Backends::VULKAN,
+            ..Default::default()
+        });
+        let Some(adapter) = pollster::block_on(
+            instance.request_adapter(&wgpu::RequestAdapterOptions::default()),
+        ) else {
+            eprintln!("pas d'adaptateur Vulkan — test saute");
+            return;
+        };
+        let (device, queue) =
+            pollster::block_on(adapter.request_device(&wgpu::DeviceDescriptor::default(), None))
+                .expect("request_device");
+        if has_external_memory(&device) {
+            eprintln!("wgpu active deja la memoire externe sur ce pilote — test saute");
+            return;
+        }
+        let gpu = Gpu {
+            device,
+            context: queue,
+            backend: crate::d3d::Backend::Hardware,
+            feature_level: 0,
+        };
+        let comp = Compositor::new_sized(&gpu, 320, 180).expect("Compositor::new_sized");
+        assert!(
+            comp.create_exportable_staging(4096).is_none(),
+            "sans extensions de memoire externe, le staging exportable doit etre refuse",
+        );
     }
 
     /// Un cran de padding en format Auto change la taille de rendu de la preview. `resized`
@@ -7394,6 +7506,20 @@ impl Compositor {
         unsafe {
             self.gpu.device.as_hal::<wgpu_hal::api::Vulkan, _, _>(|hal| {
                 let hal = hal?;
+                // LE `None` PROMIS PLUS HAUT DOIT ETRE TENU ICI, AVANT TOUT APPEL. Sans
+                // les deux extensions, `vkGetMemoryFdKHR` n'est pas charge : ash panique
+                // (« Unable to load get_memory_fd_khr ») dans un contexte qui ne deroule
+                // pas, et c'est tout le processus qui avorte au clic sur Exporter.
+                // Arrive sur un portable hybride AMD + NVIDIA : wgpu prend la NVIDIA,
+                // ouverte sans export dmabuf, tandis que `VaapiEncoder::open` reussit
+                // sur `renderD128`, l'AMD. Rendre `None` fait retomber l'export sur
+                // l'encodeur software, comme le prevoit `run_multi_inner`.
+                let enabled = hal.enabled_device_extensions();
+                if !enabled.contains(&ash::khr::external_memory_fd::NAME)
+                    || !enabled.contains(&ash::ext::external_memory_dma_buf::NAME)
+                {
+                    return None;
+                }
                 let dev = hal.raw_device().clone();
                 let phys = hal.raw_physical_device();
                 let instance = hal.shared_instance().raw_instance();

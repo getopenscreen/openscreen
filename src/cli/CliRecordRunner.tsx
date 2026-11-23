@@ -111,6 +111,14 @@ function buildDefaultProject(session: {
 	};
 }
 
+/** Advice the caller can act on, for the one failure that names a cursor limitation. The
+ * matched wording is the PipeWire helper's, typed and stable, so it cannot misfire. */
+function withCursorRetryHint(message: string): string {
+	return /advertise METADATA cursor mode/.test(message)
+		? `${message} Retry with "cursor": "system" to record with the system cursor baked in.`
+		: message;
+}
+
 export function CliRecordRunner() {
 	const recorder = useScreenRecorder();
 	const startedRef = useRef(false);
@@ -255,15 +263,25 @@ export function CliRecordRunner() {
 		phaseRef.current = "recording";
 		void (async () => {
 			try {
-				await startRecordingImmediately();
-				// The hook reports start failures via toast/console, not by
-				// rejecting — without a deadline a failed start would hang the
-				// CLI forever.
+				const outcome = await startRecordingImmediately();
+				// The recorder already knows why: report its reason now, not a guessing deadline.
+				if (outcome.kind !== "started") {
+					// The camera effect may have failed the run already (#1303); its error won.
+					if (phaseRef.current !== "recording") return;
+					await fail(
+						outcome.kind === "cancelled"
+							? new Error("The screen-share picker was dismissed")
+							: new Error(withCursorRetryHint(outcome.message)),
+					);
+					return;
+				}
+				// Started, but `recording` may not have reached this render yet; if it never
+				// does, that is a wiring defect, not a slow capture.
 				setTimeout(() => {
 					if (recordingStartedAtRef.current === null && phaseRef.current === "recording") {
 						void fail(
 							new Error(
-								"Recording did not start within 30s — see stderr for the underlying capture error",
+								"The recording start reported success but the recording state never confirmed it",
 							),
 						);
 					}

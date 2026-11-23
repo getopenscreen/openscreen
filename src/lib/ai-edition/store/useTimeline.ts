@@ -89,6 +89,13 @@ import { useSequentialTimelineOps } from "./useSequentialTimelineOps";
 // these 2 s, which is what all five add* used to hardcode.
 const DEFAULT_NEW_REGION_SEC = 2;
 
+// The on-load dimension backfill runs in the background, so it can wait far longer than an
+// insert's 5 s probe. It has to: the Linux recorder writes fragmented MP4 with no index, and
+// Chromium walks every fragment before `loadedmetadata`, which takes well past 5 s on a long
+// take (#1610). A failure is retried on a later document change, a bounded number of times.
+const DIMS_PROBE_TIMEOUT_MS = 60_000;
+const DIMS_PROBE_ATTEMPTS = 3;
+
 // NaN-guarded floors. Timeline inputs arrive from drag deltas and persisted
 // documents, both of which can carry NaN; every action needs the same guard.
 const finiteSec = (n: number) => (Number.isFinite(n) ? Math.max(0, n) : 0);
@@ -257,10 +264,14 @@ export function useTimeline() {
 	// cropped clip could show under ORIGINAL while an un-probed 16:9 sibling was missing entirely.
 	// Probe once on load and persist via saveDocument with `history: false` (a write the user
 	// never made must not be what the next Ctrl+Z reverses), so the fix sticks and every consumer
-	// agrees without each re-probing on its own (what the export dialog used to do). Attempt each
-	// asset at most once per session, even on failure, so a file that can't be probed doesn't
-	// spin the effect on every document change.
+	// agrees without each re-probing on its own (what the export dialog used to do). A failed
+	// probe is tried again on a later document change, up to DIMS_PROBE_ATTEMPTS per session, so
+	// one slow open is not final (#1610) and an unreadable file still doesn't spin the effect.
 	const probedAssetIdsRef = useRef<Set<string>>(new Set());
+	const dimsProbeAttemptsRef = useRef<Map<string, number>>(new Map());
+	// Batches write one after another: two that waited on the same save would each re-read the
+	// same document, and the second save would drop the first one's dimensions.
+	const dimsWriteRef = useRef<Promise<void>>(Promise.resolve());
 	useEffect(() => {
 		if (!document) return;
 		const usedAssetIds = new Set(document.timeline.clips.map((c) => c.assetId));
@@ -278,7 +289,8 @@ export function useTimeline() {
 			(a) =>
 				usedAssetIds.has(a.id) &&
 				(needsScreen(a) || needsCamera(a)) &&
-				!probedAssetIdsRef.current.has(a.id),
+				!probedAssetIdsRef.current.has(a.id) &&
+				(dimsProbeAttemptsRef.current.get(a.id) ?? 0) < DIMS_PROBE_ATTEMPTS,
 		);
 		if (missing.length === 0) return;
 		// No cleanup cancels this. The effect re-runs on EVERY document change, and a fresh
@@ -291,54 +303,86 @@ export function useTimeline() {
 		void (async () => {
 			type Dims = { width: number; height: number };
 			const probed: Record<string, { video?: Dims; camera?: Dims }> = {};
+			// Reserve the whole batch before the first await: a run triggered while an earlier
+			// asset is still probing must not pick up a later one and probe it twice.
+			for (const a of missing) probedAssetIdsRef.current.add(a.id);
+			// A path toFileUrl cannot encode (a lone surrogate throws) is a failed probe, not a
+			// throw that skips the cleanup below and strands the whole reserved batch.
+			const probe = async (path: string) => {
+				try {
+					return await probeVideoDimensions(toFileUrl(path), DIMS_PROBE_TIMEOUT_MS);
+				} catch {
+					return null;
+				}
+			};
 			for (const a of missing) {
-				probedAssetIdsRef.current.add(a.id);
 				const entry: { video?: Dims; camera?: Dims } = {};
+				let failed = false;
 				if (needsScreen(a)) {
-					const dims = await probeVideoDimensions(toFileUrl(a.originalPath));
+					const dims = await probe(a.originalPath);
 					if (dims) entry.video = dims;
+					else failed = true;
 				}
 				// Probed independently of the screen: one file being unreadable must not cost
 				// the other its dimensions, and a camera-less asset simply skips this.
 				if (a.cameraTrack && needsCamera(a)) {
-					const dims = await probeVideoDimensions(toFileUrl(a.cameraTrack.sourcePath));
+					const dims = await probe(a.cameraTrack.sourcePath);
 					if (dims) entry.camera = dims;
+					else failed = true;
 				}
 				if (entry.video || entry.camera) probed[a.id] = entry;
+				// Unmarked so a later document change retries what is still missing. Only a failed
+				// probe counts toward the limit: a save deferred below must stay retryable.
+				if (failed) {
+					probedAssetIdsRef.current.delete(a.id);
+					dimsProbeAttemptsRef.current.set(a.id, (dimsProbeAttemptsRef.current.get(a.id) ?? 0) + 1);
+				}
 			}
 			if (Object.keys(probed).length === 0) return;
-			// The store only takes a document once its save returns, so a write still in flight
-			// (the fresh-recording auto-zooms, typically) is invisible here. Building on the store
-			// before it lands and saving after it would erase it. Wait it out; on a timeout,
-			// write nothing and let a later run probe again.
-			if ((await waitForDocumentSaves()) === "timeout") {
-				for (const id of Object.keys(probed)) probedAssetIdsRef.current.delete(id);
-				return;
-			}
-			// Re-read fresh state so a concurrent edit made while probing isn't stomped.
-			const current = useProjectStore.getState().document;
-			if (!current || current.project.id !== originatingProjectId) return;
-			// `history: false` — see the comment above: a backfill nobody asked for must
-			// not become the thing the next Ctrl+Z reverses.
-			await useProjectStore.getState().saveDocument(
-				{
-					...current,
-					assets: current.assets.map((a) => {
-						const found = probed[a.id];
-						if (!found) return a;
-						return {
-							...a,
-							...(found.video
-								? { video: { codec: "unknown", fps: 0, ...a.video, ...found.video } }
-								: {}),
-							...(found.camera && a.cameraTrack
-								? { cameraTrack: { ...a.cameraTrack, ...found.camera } }
-								: {}),
-						};
-					}),
-				},
-				{ history: false },
-			);
+			dimsWriteRef.current = dimsWriteRef.current
+				.then(async () => {
+					// The store only takes a document once its save returns, so a write still in flight
+					// (the fresh-recording auto-zooms, typically) is invisible here. Building on the store
+					// before it lands and saving after it would erase it. Wait it out; on a timeout,
+					// write nothing and let a later run probe again.
+					if ((await waitForDocumentSaves()) === "timeout") {
+						for (const id of Object.keys(probed)) probedAssetIdsRef.current.delete(id);
+						return;
+					}
+					// Re-read fresh state so a concurrent edit made while probing isn't stomped.
+					const current = useProjectStore.getState().document;
+					if (!current || current.project.id !== originatingProjectId) return;
+					// `history: false` — see the comment above: a backfill nobody asked for must
+					// not become the thing the next Ctrl+Z reverses.
+					const saved = await saveWithDeadline(
+						useProjectStore.getState().saveDocument(
+							{
+								...current,
+								assets: current.assets.map((a) => {
+									const found = probed[a.id];
+									if (!found) return a;
+									return {
+										...a,
+										...(found.video
+											? { video: { codec: "unknown", fps: 0, ...a.video, ...found.video } }
+											: {}),
+										...(found.camera && a.cameraTrack
+											? { cameraTrack: { ...a.cameraTrack, ...found.camera } }
+											: {}),
+									};
+								}),
+							},
+							{ history: false },
+						),
+					);
+					// A failed save (disk full, say), or one that never settles, leaves the dims unwritten:
+					// a later change retries them without counting a failed probe. The deadline keeps a
+					// hung save from stalling every batch queued behind it.
+					if (saved !== true)
+						for (const id of Object.keys(probed)) probedAssetIdsRef.current.delete(id);
+				})
+				// A failed write must not stall the next batch.
+				.catch(() => undefined);
 		})();
 	}, [document]);
 

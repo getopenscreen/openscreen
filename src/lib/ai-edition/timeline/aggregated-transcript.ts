@@ -43,6 +43,8 @@ export interface TranscriptPlacement {
 	/** Where the window lands on the RAW ruler. Source time is per asset, so this is
 	 *  the only thing that turns a word back into a moment the playhead can seek to. */
 	timelineStartSec: number;
+	/** The voiceover take this placement is a piece of. Absent on a recording clip. */
+	takeId?: string;
 }
 
 /** Which lane's speech the transcript tab is reading. */
@@ -338,6 +340,7 @@ export function voiceoverPlacements(
 					sourceStartSec: piece.sourceStartSec,
 					sourceEndSec: piece.sourceEndSec,
 					timelineStartSec: piece.rawStartSec,
+					takeId: pill.id,
 				})),
 		);
 }

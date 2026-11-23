@@ -128,7 +128,8 @@ the answer follows from it:
 - The file: a relative path, not a PNG or a JPEG, unreadable, over 32 MB. Fix the path or the
   file and call again.
 - This OpenScreen: no ffmpeg to read the image with, or no image for an effect where it runs. Tell
-  the user, and go on without the image.
+  the user, and go on without the image: a shader that calls `image()` does not compile without
+  one, so take those calls out of the code, or pick an effect that needs no picture.
 
 ## Cost: stay light
 

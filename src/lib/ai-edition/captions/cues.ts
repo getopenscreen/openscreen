@@ -22,7 +22,11 @@ import {
 	splitMergedCaptionsByWordBounds,
 } from "@/lib/captioning/annotationsFromCaptions";
 import type { CaptionSegment } from "@/lib/captioning/transcribe";
-import { readSpeedRegions } from "../document/timeline";
+import {
+	projectPlaybackSecToRawTimeline,
+	projectRawTimelineSecToPlayback,
+	readSpeedRegions,
+} from "../document/timeline";
 import type { AxcutDocument, AxcutTranscript } from "../schema";
 import {
 	lanePlacements,
@@ -30,7 +34,6 @@ import {
 	type TranscriptPlacement,
 } from "../timeline/aggregated-transcript";
 import { removedRawSpans } from "../timeline/programme-time";
-import { type SpeedRegion, screenTimeMs, timelineTimeMs } from "../timeline/speed";
 import {
 	type CaptionAnchorV,
 	type CaptionSettings,
@@ -153,6 +156,12 @@ function translatedWordStream(
 	});
 }
 
+/** Raw ruler ↔ output seconds, through the cuts and the speed regions. */
+export interface VoiceoverClock {
+	toOutputSec(rawSec: number): number;
+	toRulerSec(outSec: number): number;
+}
+
 /**
  * Map a source-time span onto the ruler through the clips that play it.
  *
@@ -169,16 +178,31 @@ export function sourceSpanToTimelineSpans(
 	 *  window and the ruler head, which both providers carry (issue #560). `AxcutClip`
 	 *  stays structurally assignable, so every existing caller is unaffected. */
 	clips: TranscriptPlacement[],
-	/** Pass the speed regions for a VOICEOVER lane only (#1657). A take plays at 1x from
-	 *  its projected head, so a cue must sit at that head plus its source distance on the
-	 *  screen clock, then go back to the ruler the preview and the compositor project. A
-	 *  recording-lane cue keeps the plain ruler time: its picture and sound are stretched. */
-	unstretchedSpeedRegions: readonly SpeedRegion[] = [],
+	/** Pass for a VOICEOVER lane only (#1657): the programme's output clock, cuts and speed
+	 *  included, the one the mixer lays each take piece on. A piece plays at 1x from its
+	 *  projected head and stops where the next piece of its take starts, so a cue sits at
+	 *  that head plus its source distance, back on the ruler. A recording-lane cue keeps
+	 *  the plain ruler time: its picture and sound are stretched together. */
+	voiceoverClock?: VoiceoverClock,
 ): Array<{ startSec: number; endSec: number }> {
 	const out: Array<{ startSec: number; endSec: number }> = [];
-	for (const clip of clips) {
+	for (const [i, clip] of clips.entries()) {
 		if (clip.assetId !== assetId) continue;
-		const clipSourceEnd = clip.sourceEndSec ?? Number.POSITIVE_INFINITY;
+		let clipSourceEnd = clip.sourceEndSec ?? Number.POSITIVE_INFINITY;
+		const headOutSec = voiceoverClock?.toOutputSec(clip.timelineStartSec) ?? 0;
+		const next = clips[i + 1];
+		// The next piece of the SAME take: same file, same raw-to-source shift. The mixer cuts
+		// this piece off at its projected head, so the speech after that is never heard.
+		if (
+			voiceoverClock &&
+			next?.assetId === clip.assetId &&
+			Math.abs(
+				next.timelineStartSec - next.sourceStartSec - (clip.timelineStartSec - clip.sourceStartSec),
+			) < 1e-6
+		) {
+			const audibleSec = voiceoverClock.toOutputSec(next.timelineStartSec) - headOutSec;
+			clipSourceEnd = Math.min(clipSourceEnd, clip.sourceStartSec + audibleSec);
+		}
 		const s = Math.max(startSec, clip.sourceStartSec);
 		const e = Math.min(endSec, clipSourceEnd);
 		if (e <= s) continue;
@@ -186,13 +210,10 @@ export function sourceSpanToTimelineSpans(
 		// carrying an added word plays its media in pieces, and the seconds after the
 		// insertion sit further along the ruler than their distance from the clip's start.
 		// Writing the short version here is what put every caption after an insertion early.
-		const rawSec = (sec: number) => {
-			const raw = placementRawSec(clip, sec);
-			if (unstretchedSpeedRegions.length === 0) return raw;
-			const headScreenMs = screenTimeMs(unstretchedSpeedRegions, clip.timelineStartSec * 1000);
-			const distanceMs = (raw - clip.timelineStartSec) * 1000;
-			return timelineTimeMs(unstretchedSpeedRegions, headScreenMs + distanceMs) / 1000;
-		};
+		const rawSec = (sec: number) =>
+			voiceoverClock
+				? voiceoverClock.toRulerSec(headOutSec + (sec - clip.sourceStartSec))
+				: placementRawSec(clip, sec);
 		out.push({ startSec: rawSec(s), endSec: rawSec(e) });
 	}
 	// Onto the ruler the viewer actually sees. Expanding BOTH ends does the whole job:
@@ -223,7 +244,17 @@ export function deriveCaptionCues(
 		removedRawSpans(document.timeline.clips, document.timeline.trimRanges),
 	);
 	if (placements.length === 0) return [];
-	const voiceoverSpeedRegions = lane === "voiceover" ? readSpeedRegions<SpeedRegion>(document) : [];
+	const speedRegions = readSpeedRegions(document);
+	const { clips, trimRanges } = document.timeline;
+	const voiceoverClock: VoiceoverClock | undefined =
+		lane === "voiceover"
+			? {
+					toOutputSec: (raw) =>
+						projectRawTimelineSecToPlayback(clips, trimRanges, raw, speedRegions),
+					toRulerSec: (out) =>
+						projectPlaybackSecToRawTimeline(clips, trimRanges, out, speedRegions),
+				}
+			: undefined;
 
 	const transcripts = new Map(document.transcripts.map((t) => [t.assetId, t]));
 	// What the film no longer contains is CLIPS-derived on both lanes, deliberately: a cut
@@ -250,7 +281,7 @@ export function deriveCaptionCues(
 				line.startSec,
 				line.endSec,
 				placements,
-				voiceoverSpeedRegions,
+				voiceoverClock,
 			)) {
 				const startMs = Math.round(span.startSec * 1000);
 				const endMs = Math.max(Math.round(span.endSec * 1000), startMs + 1);

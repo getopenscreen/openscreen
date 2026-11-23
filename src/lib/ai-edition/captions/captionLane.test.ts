@@ -4,6 +4,7 @@
 // disagreeing about which lane a project even has.
 
 import { describe, expect, it } from "vitest";
+import { projectRawTimelineSecToPlayback, readSpeedRegions } from "../document/timeline";
 import type { AxcutAudioTrack, AxcutClip, AxcutDocument, AxcutTranscript } from "../schema";
 import { screenTimeMs } from "../timeline/speed";
 import { deriveCaptionCues } from "./cues";
@@ -172,5 +173,53 @@ describe("captions under a speed region (#1657)", () => {
 
 	it("still projects a recording-lane cue with the sped-up picture", () => {
 		expect(onScreen("recording")).toEqual([{ startMs: 2000, endMs: 3000 }]);
+	});
+});
+
+describe("voiceover captions under a cut and a speed region (#1657)", () => {
+	// A 12 s film with a cut at ruler 4–6 s, and a voiceover from 0 s.
+	const FILM: AxcutClip[] = [{ ...CLIPS[0], sourceEndSec: 12, timelineEndSec: 12 }];
+	const CUT = [{ id: "t", assetId: "rec", clipId: "c1", startSec: 4, endSec: 6 }];
+	const said = (startSec: number, endSec: number): AxcutTranscript =>
+		({
+			assetId: "aud",
+			language: "en",
+			segments: [],
+			words: [{ id: "w", segmentId: "s", text: "spoken", startSec, endSec }],
+		}) as unknown as AxcutTranscript;
+	const film = (speech: AxcutTranscript, speed: unknown[], voiceEndMs: number) =>
+		doc({
+			transcripts: [speech],
+			timeline: { ...doc().timeline, clips: FILM, trimRanges: CUT as never },
+			audioTracks: [{ ...VOICE, endMs: voiceEndMs, durationSec: voiceEndMs / 1000 }],
+			legacyEditor: { speedRegions: speed } as unknown as AxcutDocument["legacyEditor"],
+		});
+	// Where the viewer sees each cue: the ruler cue through the cut and the speed region.
+	const heard = (d: AxcutDocument) =>
+		deriveCaptionCues(d, on("voiceover"), {}).map((c) => {
+			const out = (ms: number) =>
+				Math.round(
+					projectRawTimelineSecToPlayback(
+						d.timeline.clips,
+						d.timeline.trimRanges,
+						ms / 1000,
+						readSpeedRegions(d),
+					) * 1000,
+				);
+			return { startMs: out(c.startMs), endMs: out(c.endMs) };
+		});
+
+	it("keeps a cue on the speech when the 1x speech runs past the cut", () => {
+		// 2x over 0–4 s: source 3–3.5 s is heard at output 3–3.5 s, which is past the cut.
+		const d = film(said(3, 3.5), [{ id: "sp", startMs: 0, endMs: 4000, speed: 2 }], 4000);
+		expect(heard(d)).toEqual([{ startMs: 3000, endMs: 3500 }]);
+	});
+
+	it("drops the speech a non-final piece never plays", () => {
+		// 2x over 0–10 s: the first piece stops at output 2 s, where the second one starts.
+		const speed = [{ id: "sp", startMs: 0, endMs: 10000, speed: 2 }];
+		expect(heard(film(said(3, 3.5), speed, 10000))).toEqual([]);
+		// Speech straddling that stop keeps only what is heard.
+		expect(heard(film(said(1.5, 2.5), speed, 10000))).toEqual([{ startMs: 1500, endMs: 2000 }]);
 	});
 });

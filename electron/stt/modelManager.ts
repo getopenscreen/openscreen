@@ -153,8 +153,13 @@ export async function cachedAligner(baseDir: string, language: string): Promise<
 	return actual === CTC_ALIGNERS[language].expectedSha256 ? filePath : null;
 }
 
-/** Abort an aligner download that receives no bytes for this long. */
-export const ALIGNER_STALL_MS = 30_000;
+/**
+ * Abort a model or aligner download that receives no bytes for this long. Without
+ * it, a connection that goes silent (a proxy or a filtered route that drops packets
+ * rather than refusing them) leaves the download pending forever, with no error to
+ * show (#1636).
+ */
+export const DOWNLOAD_STALL_MS = 30_000;
 
 /**
  * Make sure the aligner for `language` is on disk, downloading and verifying it
@@ -175,7 +180,7 @@ export async function ensureAligner(opts: {
 	await ensureFile(filePath, file.url, file.expectedSha256, {
 		fetcher: opts.fetcher,
 		signal: opts.signal,
-		stallMs: opts.stallMs ?? ALIGNER_STALL_MS,
+		stallMs: opts.stallMs ?? DOWNLOAD_STALL_MS,
 	});
 	return filePath;
 }
@@ -395,6 +400,8 @@ export interface EnsureModelsOptions {
 		totalBytes: number;
 	}) => void;
 	fetcher?: typeof fetch;
+	/** Abort a download that receives no bytes for this long; defaults to `DOWNLOAD_STALL_MS`. */
+	stallMs?: number;
 }
 
 /** Ensure the GGML model files are present locally; downloads with progress + retry. */
@@ -418,6 +425,7 @@ export async function ensureModels(opts: EnsureModelsOptions): Promise<void> {
 					totalBytes: file.approximateBytes,
 				}),
 			fetcher: opts.fetcher,
+			stallMs: opts.stallMs ?? DOWNLOAD_STALL_MS,
 		});
 	}
 }

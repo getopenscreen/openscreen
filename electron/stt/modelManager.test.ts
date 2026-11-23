@@ -75,6 +75,21 @@ describe("modelManager", () => {
 		expect(await areModelsPresent(dir)).toBe(true);
 	});
 
+	it("ensureModels gives up on a server that never answers instead of waiting forever", async () => {
+		// A filtered route that drops packets: no response, no error, ever (#1636).
+		const silent: typeof fetch = (_url, init) =>
+			new Promise((_resolve, reject) => {
+				init?.signal?.addEventListener("abort", () => reject(init.signal?.reason), {
+					once: true,
+				});
+			});
+		const paths = modelPaths(dir);
+		await expect(
+			ensureModels({ baseDir: dir, only: ["whisper"], fetcher: silent, stallMs: 50 }),
+		).rejects.toThrow(/stalled/);
+		expect(existsSync(`${paths.whisper}.partial`)).toBe(false);
+	});
+
 	it("ensureModels succeeds when the file is already present (cache hit)", async () => {
 		const paths = modelPaths(dir);
 		await mkdir(path.dirname(paths.whisper), { recursive: true });

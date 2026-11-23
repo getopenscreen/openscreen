@@ -566,6 +566,24 @@ int main(int argc, char** argv) {
 		// VAD on and no speech found: nothing to decode, so nothing to report.
 		const std::vector<float>& input = vctx ? speech : pcm;
 
+		// How sure the language detection is (issue #1664): room noise the VAD
+		// let through resolves to an arbitrary language at a low probability, and
+		// the Node side must not pin on that. whisper_full detects on its own but
+		// only logs the probability, so detect here on the same mel and hand
+		// whisper_full the result: it then skips its own detection, and the
+		// request costs no extra encoder pass. Only on an "auto" request, i.e.
+		// until the Node side pins a language.
+		float language_probability = -1.0f;
+		if (!input.empty() && (language.empty() || language == "auto") &&
+		    whisper_pcm_to_mel(ctx, input.data(), static_cast<int>(input.size()), threads) == 0) {
+			std::vector<float> probs(whisper_lang_max_id() + 1, 0.0f);
+			const int detected = whisper_lang_auto_detect(ctx, 0, threads, probs.data());
+			if (detected >= 0) {
+				language_probability = probs[detected];
+				wparams.language     = whisper_lang_str(detected);
+			}
+		}
+
 		const int rc  = input.empty() ? 0 : whisper_full(ctx, wparams, input.data(), static_cast<int>(input.size()));
 		const auto t1 = std::chrono::steady_clock::now();
 		if (rc != 0) {
@@ -720,17 +738,7 @@ int main(int argc, char** argv) {
 		nlohmann::json reply;
 		reply["language"]          = resolved_language;
 		reply["detected_language"] = resolved_language;
-		// How sure the detection was (issue #1664). whisper_full computes it and
-		// only logs it, so ask again: one more encoder pass on the mel it left in
-		// the state, and only on an "auto" request, i.e. until the Node side pins a
-		// language. Room noise the VAD let through resolves to an arbitrary
-		// language at a low probability; the caller must not pin on that.
-		if (lang_id >= 0 && (language.empty() || language == "auto")) {
-			std::vector<float> probs(whisper_lang_max_id() + 1, 0.0f);
-			if (whisper_lang_auto_detect(ctx, 0, threads, probs.data()) >= 0) {
-				reply["language_probability"] = probs[lang_id];
-			}
-		}
+		if (language_probability >= 0.0f) reply["language_probability"] = language_probability;
 		reply["backend"]           = active_backend;
 		reply["timing"] = {
 			{"elapsed_s", elapsed_s},

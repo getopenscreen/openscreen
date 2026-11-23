@@ -136,6 +136,8 @@ interface WhisperJsonResponse {
 	segments?: WhisperJsonSegment[];
 	language?: string;
 	detected_language?: string;
+	/** How sure whisper was of `detected_language`; only on an "auto" request. */
+	language_probability?: number;
 	backend?: string;
 	timing?: WhisperJsonTiming;
 	/** Silero VAD's speech intervals; absent when the helper runs without the VAD model. */
@@ -636,6 +638,8 @@ export class WhisperServerManager {
 		segments: SttPhraseSegment[];
 		wordSegments: SttWordSegment[];
 		detectedLanguage: string;
+		/** Absent on a forced language, and from a helper that predates the field. */
+		languageProbability?: number;
 		backend: SttBackend;
 		/** Null when the helper reported no usable `timing` block. */
 		timing: SttTiming | null;
@@ -649,6 +653,7 @@ export class WhisperServerManager {
 		segments: SttPhraseSegment[];
 		wordSegments: SttWordSegment[];
 		detectedLanguage: string;
+		languageProbability?: number;
 		backend: SttBackend;
 		timing: SttTiming | null;
 	}> {
@@ -728,7 +733,9 @@ export class WhisperServerManager {
 				timing.elapsedSec += alignSec;
 				timing.rtf = timing.elapsedSec / timing.audioSec;
 			}
-			return { segments, wordSegments, detectedLanguage, backend, timing };
+			const languageProbability =
+				typeof json.language_probability === "number" ? json.language_probability : undefined;
+			return { segments, wordSegments, detectedLanguage, languageProbability, backend, timing };
 		} finally {
 			await cleanupWav(wavPath);
 		}

@@ -60,6 +60,12 @@ const SAMPLE_RATE = 16_000;
 const CHUNK_ATTEMPTS = 3;
 
 /**
+ * Whisper's language probability a chunk needs before the run pins its language.
+ * faster-whisper's default `language_detection_threshold`, for the same job.
+ */
+const LANGUAGE_PIN_MIN_PROBABILITY = 0.5;
+
+/**
  * Model and aligner downloads go through Chromium's network stack rather than Node's
  * global `fetch`, which ignores the system proxy: where huggingface.co is only reachable
  * through one (mainland China, many corporate networks), the download failed with a bare
@@ -378,8 +384,8 @@ export class SttManager {
 		let untimedChunks = 0;
 		// The CPU verdict is worth saying once per run, not once per chunk.
 		let warnedCpu = false;
-		// Only the first chunk auto-detects; every later chunk is forced onto the
-		// language it resolved, so whisper cannot flip mid-recording on a chunk
+		// Only the first chunk that detects with confidence auto-detects; every
+		// later chunk is forced onto the language it resolved, so whisper cannot flip mid-recording on a chunk
 		// that opens with a proper noun or a silence and "transcribe" the rest as
 		// another language.
 		//
@@ -444,9 +450,21 @@ export class SttManager {
 					confidence: word.confidence,
 				});
 			}
-			if (!detectedLanguage && result.detectedLanguage && result.detectedLanguage !== "auto") {
-				detectedLanguage = result.detectedLanguage;
-				if (!language) language = detectedLanguage;
+			const resolved =
+				result.detectedLanguage && result.detectedLanguage !== "auto"
+					? result.detectedLanguage
+					: null;
+			if (resolved && !language) {
+				// Pin only on a confident detection (issue #1664): a chunk of room
+				// noise the VAD let through resolves to an arbitrary language, and
+				// pinning on it wrote the whole take in Korean. Until a chunk is sure,
+				// each one detects on its own. A helper that reports no probability
+				// predates the field: pin as before.
+				const confident = (result.languageProbability ?? 1) >= LANGUAGE_PIN_MIN_PROBABILITY;
+				if (confident || !detectedLanguage) detectedLanguage = resolved;
+				if (confident) language = resolved;
+			} else if (resolved && !detectedLanguage) {
+				detectedLanguage = resolved;
 			}
 			backend = result.backend ?? backend;
 			if (result.timing) {

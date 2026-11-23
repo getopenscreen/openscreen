@@ -22,6 +22,7 @@
 //   {
 //     "language":          "en",
 //     "detected_language": "en",
+//     "language_probability": 0.97,   // only on a "language": "auto" request
 //     "backend":           "whispercpp-vulkan" | "whispercpp-cpu" | ...,
 //     "timing":            { "elapsed_s": <>, "audio_s": <>, "rtf": <> },
 //     "segments": [
@@ -719,6 +720,17 @@ int main(int argc, char** argv) {
 		nlohmann::json reply;
 		reply["language"]          = resolved_language;
 		reply["detected_language"] = resolved_language;
+		// How sure the detection was (issue #1664). whisper_full computes it and
+		// only logs it, so ask again: one more encoder pass on the mel it left in
+		// the state, and only on an "auto" request, i.e. until the Node side pins a
+		// language. Room noise the VAD let through resolves to an arbitrary
+		// language at a low probability; the caller must not pin on that.
+		if (lang_id >= 0 && (language.empty() || language == "auto")) {
+			std::vector<float> probs(whisper_lang_max_id() + 1, 0.0f);
+			if (whisper_lang_auto_detect(ctx, 0, threads, probs.data()) >= 0) {
+				reply["language_probability"] = probs[lang_id];
+			}
+		}
 		reply["backend"]           = active_backend;
 		reply["timing"] = {
 			{"elapsed_s", elapsed_s},

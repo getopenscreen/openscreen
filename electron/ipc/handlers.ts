@@ -11,7 +11,6 @@ import {
 	BrowserWindow,
 	clipboard,
 	desktopCapturer,
-	dialog,
 	ipcMain,
 	safeStorage,
 	screen,
@@ -1981,13 +1980,17 @@ async function resolveMediaLinksForVideo(videoPath: string): Promise<{
  * the menu/tray "Save Diagnostics" entry point in main.ts, which has no
  * renderer-side `projectState`/`logs` to offer and does not need to.
  */
-export async function exportDiagnosticFile(payload: {
-	error: string;
-	stack?: string;
-	projectState: unknown;
-	logs: string[];
-}) {
-	const { filePath, canceled } = await dialog.showSaveDialog({
+export async function exportDiagnosticFile(
+	payload: {
+		error: string;
+		stack?: string;
+		projectState: unknown;
+		logs: string[];
+	},
+	parent: BrowserWindow | null,
+) {
+	// Owned by the requesting window: on macOS a sheet, which an app switch cannot bury (#1667).
+	const { filePath, canceled } = await showSaveDialogOver(parent, {
 		title: "Save Diagnostic File",
 		defaultPath: `openscreen-diagnostic-${Date.now()}.zip`,
 		filters: [{ name: "ZIP", extensions: ["zip"] }],
@@ -5388,8 +5391,10 @@ export function registerIpcHandlers(
 
 	ipcMain.handle(
 		"save-diagnostic",
-		async (_, payload: { error: string; stack?: string; projectState: unknown; logs: string[] }) =>
-			exportDiagnosticFile(payload),
+		async (
+			event,
+			payload: { error: string; stack?: string; projectState: unknown; logs: string[] },
+		) => exportDiagnosticFile(payload, BrowserWindow.fromWebContents(event.sender)),
 	);
 
 	// Same one-instance rule: the service serialises its writes per instance. The folder is

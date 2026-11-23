@@ -1,4 +1,4 @@
-import { ArrowDown, Film, Plus, RotateCw, Search, X } from "lucide-react";
+import { ArrowDown, Film, Image as ImageIcon, Plus, RotateCw, Search, X } from "lucide-react";
 import { useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { Tooltip } from "@/components/ui/tooltip";
@@ -10,6 +10,7 @@ import {
 	useAssetTranscriptions,
 	useTranscriptionStore,
 } from "@/lib/ai-edition/store/transcriptionStore";
+import { isStillAsset } from "@/lib/ai-edition/timeline/clip-parts";
 import { formatSeconds } from "@/lib/ai-edition/timeline/format";
 import {
 	languageLabel,
@@ -119,6 +120,11 @@ export function MediaStage({
 			return;
 		}
 		const picker = await window.electronAPI?.openVideoFilePicker();
+		if (picker && !picker.success && picker.message) {
+			// An image that could not be made into a clip, or a file that cannot be read.
+			toast.error(t("mediaStage.couldNotAddAsset"), { description: picker.message });
+			return;
+		}
 		if (!picker?.success || !picker.path) return;
 		setBusy(true);
 		try {
@@ -186,7 +192,11 @@ export function MediaStage({
 											className={styles.mediaThumb}
 											style={{ background: THUMB_GRADIENTS[i % THUMB_GRADIENTS.length] }}
 										>
-											<Film size={30} strokeWidth={1.8} />
+											{isStillAsset(asset) ? (
+												<ImageIcon size={30} strokeWidth={1.8} />
+											) : (
+												<Film size={30} strokeWidth={1.8} />
+											)}
 										</div>
 										<div className={styles.mediaCardMeta}>
 											{asset.id === selectedId ? (
@@ -212,7 +222,8 @@ export function MediaStage({
 													<span className={styles.size}>{formatBytes(asset.sizeBytes)}</span>
 												</div>
 											</div>
-											<TranscriptionStatusDot view={transcription} />
+											{/* A still has no sound: nothing to transcribe. */}
+											{isStillAsset(asset) ? null : <TranscriptionStatusDot view={transcription} />}
 										</div>
 									</button>
 								);
@@ -316,229 +327,236 @@ export function MediaStage({
 								{t("mediaStage.addToTimeline")}
 							</button>
 
-							<div style={{ marginBottom: 16 }}>
-								<span
-									style={{
-										display: "inline-flex",
-										alignItems: "center",
-										gap: 6,
-										padding: "5px 10px 5px 8px",
-										borderRadius: 9999,
-										// A silent recording reads as a verdict about the media, not as a
-										// broken run, so it keeps the neutral accent rather than the danger
-										// red the engine failures get (issue #628).
-										background:
-											selectedTranscription.status === "failed" &&
-											!isSilentFailure(selectedTranscription)
-												? "var(--danger-soft)"
-												: selectedTranscription.status === "ready"
-													? "var(--success-soft)"
-													: "var(--accent-soft)",
-										color:
-											selectedTranscription.status === "failed" &&
-											!isSilentFailure(selectedTranscription)
-												? "var(--danger)"
-												: selectedTranscription.status === "ready"
-													? "var(--success)"
-													: "var(--accent)",
-										fontSize: 12,
-										fontWeight: 600,
-									}}
-								>
-									<TranscriptionStatusDot view={selectedTranscription} size={5} />
-									{transcriptionLabel(selectedTranscription)}
-								</span>
-								{/* The language whisper resolved on the first chunk, which every later
+							{isStillAsset(selected) ? null : (
+								<>
+									<div style={{ marginBottom: 16 }}>
+										<span
+											style={{
+												display: "inline-flex",
+												alignItems: "center",
+												gap: 6,
+												padding: "5px 10px 5px 8px",
+												borderRadius: 9999,
+												// A silent recording reads as a verdict about the media, not as a
+												// broken run, so it keeps the neutral accent rather than the danger
+												// red the engine failures get (issue #628).
+												background:
+													selectedTranscription.status === "failed" &&
+													!isSilentFailure(selectedTranscription)
+														? "var(--danger-soft)"
+														: selectedTranscription.status === "ready"
+															? "var(--success-soft)"
+															: "var(--accent-soft)",
+												color:
+													selectedTranscription.status === "failed" &&
+													!isSilentFailure(selectedTranscription)
+														? "var(--danger)"
+														: selectedTranscription.status === "ready"
+															? "var(--success)"
+															: "var(--accent)",
+												fontSize: 12,
+												fontWeight: 600,
+											}}
+										>
+											<TranscriptionStatusDot view={selectedTranscription} size={5} />
+											{transcriptionLabel(selectedTranscription)}
+										</span>
+										{/* The language whisper resolved on the first chunk, which every later
 								    chunk was then pinned to. Its only pill used to live in the v3 left
 								    panel's transcript modal, which nothing mounted, so the value was
 								    reaching the document and being displayed nowhere. It belongs next to
 								    "Regenerate as" below in any case: that selector is the control
 								    you set BECAUSE of what was detected. */}
-								{detectedLanguage ? (
-									<span
-										style={{
-											display: "inline-flex",
-											alignItems: "center",
-											marginLeft: 8,
-											padding: "5px 10px",
-											borderRadius: 9999,
-											background: "var(--success-soft)",
-											color: "var(--success)",
-											fontSize: 12,
-											fontWeight: 600,
-										}}
-									>
-										{t("mediaStage.detectedLanguage", {
-											language: languageLabel(detectedLanguage, locale),
-										})}
-									</span>
-								) : null}
-							</div>
+										{detectedLanguage ? (
+											<span
+												style={{
+													display: "inline-flex",
+													alignItems: "center",
+													marginLeft: 8,
+													padding: "5px 10px",
+													borderRadius: 9999,
+													background: "var(--success-soft)",
+													color: "var(--success)",
+													fontSize: 12,
+													fontWeight: 600,
+												}}
+											>
+												{t("mediaStage.detectedLanguage", {
+													language: languageLabel(detectedLanguage, locale),
+												})}
+											</span>
+										) : null}
+									</div>
 
-							{/* Renders itself away — spacing included — unless the run reports progress. */}
-							<TranscriptionProgressBar view={selectedTranscription} />
+									{/* Renders itself away — spacing included — unless the run reports progress. */}
+									<TranscriptionProgressBar view={selectedTranscription} />
 
-							{selectedTranscription.failure ? (
-								<p
-									style={{
-										margin: "-8px 0 16px",
-										fontSize: 12,
-										lineHeight: 1.5,
-										color: "var(--muted)",
-									}}
-								>
-									{failureHintKey ? t(failureHintKey) : selectedTranscription.failure.message}
-								</p>
-							) : null}
-
-							{/* Project-wide: whisper's initial prompt for every run (issue #1023).
-							    Uncontrolled and keyed on the saved value, so an undo that restores
-							    an older list shows it; the save happens on blur, one undo step. */}
-							<label style={{ display: "block", marginBottom: 12 }}>
-								<span
-									style={{
-										display: "block",
-										fontSize: 12.5,
-										fontWeight: 600,
-										color: "var(--fg-2)",
-										marginBottom: 6,
-									}}
-								>
-									{t("mediaStage.namesAndTerms")}
-								</span>
-								<textarea
-									key={`${document?.project.id}:${document?.project.vocabulary ?? ""}`}
-									defaultValue={document?.project.vocabulary ?? ""}
-									maxLength={VOCABULARY_MAX_CHARS}
-									rows={2}
-									spellCheck={false}
-									onBlur={(e) => {
-										// The latest document, not the render's: a save replaces the whole
-										// document, so a stale one would undo a transcript written meanwhile.
-										const latest = useProjectStore.getState().document;
-										const next = latest && withVocabulary(latest, e.target.value);
-										if (next) vocabularySave.current = saveDocument(next, { history: true });
-									}}
-									style={{
-										width: "100%",
-										padding: "8px 10px",
-										borderRadius: 9,
-										border: "1px solid var(--border)",
-										background: "var(--surface-2)",
-										color: "var(--fg)",
-										fontSize: 12.5,
-										lineHeight: 1.5,
-										resize: "vertical",
-										outline: "none",
-									}}
-								/>
-							</label>
-
-							<div style={{ marginBottom: 12 }}>
-								<div
-									style={{
-										fontSize: 12.5,
-										fontWeight: 600,
-										color: "var(--fg-2)",
-										marginBottom: 6,
-									}}
-								>
-									{t("mediaStage.regenerateAs")}
-								</div>
-								<div style={{ display: "flex", gap: 8 }}>
-									<select
-										value={lang}
-										onChange={(e) => setLang(e.target.value as TranscriptLanguageCode)}
-										style={{
-											flex: 1,
-											minWidth: 0,
-											height: 36,
-											padding: "0 10px",
-											borderRadius: 9,
-											border: "1px solid var(--border)",
-											background: "var(--surface-2)",
-											color: "var(--fg)",
-											fontSize: 12.5,
-											fontWeight: 500,
-											outline: "none",
-										}}
-									>
-										{regenLanguageOptions.map(({ code, label }) => (
-											<option key={code} value={code}>
-												{label}
-											</option>
-										))}
-									</select>
-									{/* A bare refresh icon beside a language list: the tip says what it redoes. */}
-									<Tooltip content={t("mediaStage.regenerateTip")}>
-										<button
-											type="button"
-											aria-label={t("mediaStage.regenerate")}
-											// `aria-disabled`, not `disabled`: a natively disabled button cannot take focus or
-											// open its tooltip. It does nothing while a transcription runs.
-											aria-disabled={selectedBusy || undefined}
-											onClick={
-												selectedBusy
-													? undefined
-													: async () => {
-															// Clicking here blurs the terms field, whose save is still in
-															// flight: the run must read the terms it just saved, so a failed
-															// save (already toasted) runs nothing.
-															const saving = vocabularySave.current;
-															vocabularySave.current = undefined;
-															if ((await saving) === false) return;
-															void requestTranscription(selected.id, lang);
-														}
-											}
+									{selectedTranscription.failure ? (
+										<p
 											style={{
-												width: 36,
-												height: 36,
-												flexShrink: 0,
-												display: "grid",
-												placeItems: "center",
-												borderRadius: 9,
-												color: "var(--fg-2)",
-												background: "var(--surface-2)",
-												border: "1px solid var(--border)",
-												cursor: selectedBusy ? "not-allowed" : "pointer",
-												opacity: selectedBusy ? 0.6 : 1,
+												margin: "-8px 0 16px",
+												fontSize: 12,
+												lineHeight: 1.5,
+												color: "var(--muted)",
 											}}
 										>
-											<RotateCw size={14} className={selectedBusy ? "animate-spin" : undefined} />
-										</button>
-									</Tooltip>
-								</div>
-							</div>
+											{failureHintKey ? t(failureHintKey) : selectedTranscription.failure.message}
+										</p>
+									) : null}
 
-							<div
-								style={{
-									padding: "16px",
-									border: "1px solid var(--border)",
-									borderRadius: 12,
-									background: "var(--surface)",
-									fontSize: 12.5,
-									lineHeight: 1.7,
-									color: "var(--fg-2)",
-									maxHeight: 360,
-									overflowY: "auto",
-								}}
-							>
-								{transcript ? (
-									(transcript.segments ?? [])
-										.map((seg) => (seg as { text?: string }).text ?? "")
-										.join(" ") || t("mediaStage.transcriptEmpty")
-								) : (
-									<span style={{ color: "var(--muted)" }}>
-										{selectedBusy
-											? transcriptionLabel(selectedTranscription)
-											: isSilentFailure(selectedTranscription)
-												? t("mediaStage.noAudioTrackHint")
-												: selectedTranscription.status === "failed"
-													? t("mediaStage.generationFailedHint")
-													: t("mediaStage.notGeneratedHint")}
-									</span>
-								)}
-							</div>
+									{/* Project-wide: whisper's initial prompt for every run (issue #1023).
+							    Uncontrolled and keyed on the saved value, so an undo that restores
+							    an older list shows it; the save happens on blur, one undo step. */}
+									<label style={{ display: "block", marginBottom: 12 }}>
+										<span
+											style={{
+												display: "block",
+												fontSize: 12.5,
+												fontWeight: 600,
+												color: "var(--fg-2)",
+												marginBottom: 6,
+											}}
+										>
+											{t("mediaStage.namesAndTerms")}
+										</span>
+										<textarea
+											key={`${document?.project.id}:${document?.project.vocabulary ?? ""}`}
+											defaultValue={document?.project.vocabulary ?? ""}
+											maxLength={VOCABULARY_MAX_CHARS}
+											rows={2}
+											spellCheck={false}
+											onBlur={(e) => {
+												// The latest document, not the render's: a save replaces the whole
+												// document, so a stale one would undo a transcript written meanwhile.
+												const latest = useProjectStore.getState().document;
+												const next = latest && withVocabulary(latest, e.target.value);
+												if (next) vocabularySave.current = saveDocument(next, { history: true });
+											}}
+											style={{
+												width: "100%",
+												padding: "8px 10px",
+												borderRadius: 9,
+												border: "1px solid var(--border)",
+												background: "var(--surface-2)",
+												color: "var(--fg)",
+												fontSize: 12.5,
+												lineHeight: 1.5,
+												resize: "vertical",
+												outline: "none",
+											}}
+										/>
+									</label>
+
+									<div style={{ marginBottom: 12 }}>
+										<div
+											style={{
+												fontSize: 12.5,
+												fontWeight: 600,
+												color: "var(--fg-2)",
+												marginBottom: 6,
+											}}
+										>
+											{t("mediaStage.regenerateAs")}
+										</div>
+										<div style={{ display: "flex", gap: 8 }}>
+											<select
+												value={lang}
+												onChange={(e) => setLang(e.target.value as TranscriptLanguageCode)}
+												style={{
+													flex: 1,
+													minWidth: 0,
+													height: 36,
+													padding: "0 10px",
+													borderRadius: 9,
+													border: "1px solid var(--border)",
+													background: "var(--surface-2)",
+													color: "var(--fg)",
+													fontSize: 12.5,
+													fontWeight: 500,
+													outline: "none",
+												}}
+											>
+												{regenLanguageOptions.map(({ code, label }) => (
+													<option key={code} value={code}>
+														{label}
+													</option>
+												))}
+											</select>
+											{/* A bare refresh icon beside a language list: the tip says what it redoes. */}
+											<Tooltip content={t("mediaStage.regenerateTip")}>
+												<button
+													type="button"
+													aria-label={t("mediaStage.regenerate")}
+													// `aria-disabled`, not `disabled`: a natively disabled button cannot take focus or
+													// open its tooltip. It does nothing while a transcription runs.
+													aria-disabled={selectedBusy || undefined}
+													onClick={
+														selectedBusy
+															? undefined
+															: async () => {
+																	// Clicking here blurs the terms field, whose save is still in
+																	// flight: the run must read the terms it just saved, so a failed
+																	// save (already toasted) runs nothing.
+																	const saving = vocabularySave.current;
+																	vocabularySave.current = undefined;
+																	if ((await saving) === false) return;
+																	void requestTranscription(selected.id, lang);
+																}
+													}
+													style={{
+														width: 36,
+														height: 36,
+														flexShrink: 0,
+														display: "grid",
+														placeItems: "center",
+														borderRadius: 9,
+														color: "var(--fg-2)",
+														background: "var(--surface-2)",
+														border: "1px solid var(--border)",
+														cursor: selectedBusy ? "not-allowed" : "pointer",
+														opacity: selectedBusy ? 0.6 : 1,
+													}}
+												>
+													<RotateCw
+														size={14}
+														className={selectedBusy ? "animate-spin" : undefined}
+													/>
+												</button>
+											</Tooltip>
+										</div>
+									</div>
+
+									<div
+										style={{
+											padding: "16px",
+											border: "1px solid var(--border)",
+											borderRadius: 12,
+											background: "var(--surface)",
+											fontSize: 12.5,
+											lineHeight: 1.7,
+											color: "var(--fg-2)",
+											maxHeight: 360,
+											overflowY: "auto",
+										}}
+									>
+										{transcript ? (
+											(transcript.segments ?? [])
+												.map((seg) => (seg as { text?: string }).text ?? "")
+												.join(" ") || t("mediaStage.transcriptEmpty")
+										) : (
+											<span style={{ color: "var(--muted)" }}>
+												{selectedBusy
+													? transcriptionLabel(selectedTranscription)
+													: isSilentFailure(selectedTranscription)
+														? t("mediaStage.noAudioTrackHint")
+														: selectedTranscription.status === "failed"
+															? t("mediaStage.generationFailedHint")
+															: t("mediaStage.notGeneratedHint")}
+											</span>
+										)}
+									</div>
+								</>
+							)}
 						</div>
 					) : null}
 				</div>

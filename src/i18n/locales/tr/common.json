@@ -1,6 +1,7 @@
 {
 	"actions": {
 		"cancel": "İptal",
+		"tryAgain": "Tekrar dene",
 		"save": "Kaydet",
 		"delete": "Sil",
 		"close": "Kapat",
@@ -58,6 +59,9 @@
 		"blockedLocation": "Güncellemeden önce OpenScreen'i Uygulamalar klasörüne taşıyın.",
 		"failed": "Güncellemeler denetlenemedi.",
 		"downloadFailed": "Güncelleme indirilemedi."
+	},
+	"usagePing": {
+		"notSaved": "OpenScreen bu seçimi kaydedemedi, bu yüzden değişmedi."
 	},
 	"units": {
 		"pixelsPerSecond": "{{value}} piks/sn",

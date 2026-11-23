@@ -67,7 +67,7 @@ ChatGPT 和 GitHub Copilot 登录选项已**在 1.8.0 中移除**。它们的工
 2. 复制那里显示的 **Claude Code** 或 **Codex** 命令，并在终端中运行。Claude Code 命令中带有访问令牌。Codex 则改为从 `OPENSCREEN_MCP_TOKEN` 环境变量读取令牌：请在启动 Codex 的终端中设置它。
 3. 让你的 AI 代理进行编辑，对象可以是 OpenScreen 编辑器中打开的项目，也可以是你列表中的任何其他项目。
 
-这些工具就是内置 AI 代理所使用的工具，另外还有录制、导出和查看视频的工具（[见下文](#letting-an-agent-make-the-whole-video)）。此外还有 `transcribe`：它像编辑器打开项目时那样，在本机用 Whisper 处理项目的媒体。客户端用自己的模型翻译字幕，因此字幕翻译无需在 OpenScreen 中配置提供方。除非客户端指定其他项目，这些工具作用于编辑器中打开的项目：客户端可以列出所有项目，并读取或编辑其中任何一个。它还可以创建项目（空项目，或基于一个视频文件），重命名项目，以及向项目的媒体添加或从中移除视频或音频文件。删除项目不在这些工具之列：这仍由你在应用中完成。在你同时开启 MCP 服务器部分中的**MCP 编辑**之前，MCP 客户端只能**读取**，它们尝试的每项编辑、录制、导出或新建项目都会被拒绝。这个开关独立于内置 AI 代理的**智能体编辑**开关，默认处于关闭状态。开启后，每项编辑都会在生效时立即保存：
+这些工具就是内置 AI 代理所使用的工具，另外还有录制、导出和查看视频的工具（[见下文](#letting-an-agent-make-the-whole-video)）。此外还有 `transcribe`：它像编辑器打开项目时那样，在本机用 Whisper 处理项目的媒体。客户端用自己的模型翻译字幕，因此字幕翻译无需在 OpenScreen 中配置提供方。除非客户端指定其他项目，这些工具作用于编辑器中打开的项目：客户端可以列出所有项目，并读取或编辑其中任何一个。它还可以创建项目（空项目，或基于一个视频文件），重命名项目，以及向项目的媒体添加或从中移除视频、音频或图片文件。图片会作为显示该图片的几秒无声片段添加。删除项目不在这些工具之列：这仍由你在应用中完成。在你同时开启 MCP 服务器部分中的**MCP 编辑**之前，MCP 客户端只能**读取**，它们尝试的每项编辑、录制、导出或新建项目都会被拒绝。这个开关独立于内置 AI 代理的**智能体编辑**开关，默认处于关闭状态。开启后，每项编辑都会在生效时立即保存：
 
 - **对编辑器中打开的项目**，编辑可用 `Ctrl/Cmd + Z` 撤销。客户端会被要求在进行一系列编辑之前保存一个检查点，因此你可以让它们一步把项目恢复原样，而这一步本身也可以用 `Ctrl/Cmd + Z` 撤销。
 - **对其他任何项目**，编辑会保存到它的文件中，`Ctrl/Cmd + Z` 无法撤销。客户端必须在第一次编辑之前保存该项目的检查点，恢复到这个检查点是唯一的撤销方式。
@@ -76,7 +76,9 @@ ChatGPT 和 GitHub Copilot 登录选项已**在 1.8.0 中移除**。它们的工
 
 ## 让 AI 代理制作整段视频 {#letting-an-agent-make-the-whole-video}
 
-AI 代理可以从录制到导出独立完成一整段视频。无论以哪种方式添加 OpenScreen，除编辑工具外，AI 代理都能使用 `listSources`、`startRecording`、`stopRecording`、`setPointerTrack`、`exportVideo`、`getFrames` 和 `createProject`。在应用内的服务器上，`waitForRecording` 还能等待你自己用录制栏录下的一段录制，并像 `stopRecording` 一样返回它。与录制栏一样，录制时也可以录下你的摄像头和系统自带的光标；导出则接受导出对话框的选项：MP4 的画质和帧率，GIF 的帧率、尺寸和循环。
+AI 代理可以从录制到导出独立完成一整段视频。无论以哪种方式添加 OpenScreen，除编辑工具外，AI 代理都能使用 `listSources`、`startRecording`、`stopRecording`、`setPointerTrack`、`exportVideo`、`exportAudio`、`exportCaptions`、`getFrames`、`getContactSheet`、`getBeforeAfter`、`getAudioReport` 和 `createProject`。在应用内的服务器上，`waitForRecording` 还能等待你自己用录制栏录下的一段录制，并像 `stopRecording` 一样返回它。与录制栏一样，录制时也可以录下你的摄像头和系统自带的光标；导出则接受导出对话框的选项：MP4 的画质和帧率，GIF 的帧率、尺寸和循环。`exportAudio` 将项目的音频，或单独一条导入的音轨（用 `importMedia` 和 `addAudio` 添加的旁白），写入 WAV 或 M4A，与 MP4 的混音完全一致。`exportCaptions` 将字幕写入 SRT 或 WebVTT 字幕文件，时间与导出的视频对齐。
+
+AI 代理还能检查自己的成果。`getFrames` 显示视频中选定的时刻，或从 `startSec` 到 `endSec` 的一段；加上 `region` 时，只返回画面的这一部分，并保持视频本身的分辨率，以便看清小字。`getContactSheet` 把许多时刻排在一张图上，每个都标有时间：可以看整段视频的节奏，也可以逐帧看一次缩放。`getBeforeAfter` 把一系列编辑前后的同一时刻并排显示，并指出画面在哪里发生了变化。`getAudioReport` 测量项目声音的响度、真峰值和静音段。在编辑工具中，`listStylePresets` 和 `applyStylePreset` 通过一次编辑，让项目采用某个**预设**的外观。
 
 **通过上面的服务器**，录制由 OpenScreen 自己完成，就像按下它的录制按钮一样：编辑器关闭，录制栏倒计时后开始录制，录好的内容作为新项目在编辑器中打开，你可以看到每项编辑实时生效。这需要开启**MCP 编辑**，录制结束后，录制栏会恢复你自己的设置。
 
@@ -85,10 +87,10 @@ AI 代理可以从录制到导出独立完成一整段视频。无论以哪种�
 最快的方式是把下面这段内容粘贴到你的AI 代理（Claude Code、Codex、Cursor 等）中：
 
 ```text
-Install the OpenScreen demo skill with `npx skills add getopenscreen/openscreen --skill openscreen-demo -y`, then follow it to make a demo video of this feature.
+Install the OpenScreen skills with `npx skills add getopenscreen/openscreen -y`, then follow openscreen-demo to make a demo video of this feature.
 ```
 
-如果缺少 OpenScreen，该技能会在你同意后安装它，并添加它的 MCP 服务器。随后它会请你打开一个新会话，并说出 *continue the OpenScreen demo*：AI 代理只有在新会话中才能获得新工具。若要改为手动设置：
+如果缺少 OpenScreen，这些技能会在你同意后安装它。以这种方式安装、且不使用下面的插件时，`openscreen-demo` 技能会添加 OpenScreen 的 MCP 服务器，随后请你打开一个新会话，并说出 *continue the OpenScreen demo*：AI 代理只有在新会话中才能获得新工具。若要改为手动设置：
 
 ```bash
 claude mcp add openscreen -- "<executable>" mcp
@@ -97,12 +99,14 @@ codex mcp add openscreen -- "<executable>" mcp
 
 `<executable>` 是应用的可执行文件，各系统上的路径列在[运行 CLI](./cli.md#running-the-cli)中。其他客户端（例如 Cursor）以 stdio 服务器的方式添加：可执行文件作为 `command`，`["mcp"]` 作为 `args`。
 
-该技能也以插件形式提供，来自仓库自身的插件市场。在 Claude Code 中：
+这些技能也以插件形式提供，来自仓库自身的插件市场。在 Claude Code 中：
 
 ```text
 /plugin marketplace add getopenscreen/openscreen
 /plugin install openscreen@openscreen
 ```
+
+插件自带 OpenScreen 的 MCP 服务器：一个小型 Node 脚本会找到已安装的应用，并用 `mcp` 启动它，因此执行 `/reload-plugins` 后或在新会话中，工具就已可用，无需 `claude mcp add`。如果找不到可用的应用，它只提供一个工具 `openscreenSetup`，说明它检查了什么，以及如何安装和设置 OpenScreen。
 
 对于共享插件的 Codex 和 ChatGPT 桌面应用：
 
@@ -111,11 +115,11 @@ codex plugin marketplace add getopenscreen/openscreen
 codex plugin add openscreen@openscreen
 ```
 
-之后，OpenScreen 会连同该技能一起出现在应用的已安装插件中。
+之后，OpenScreen 会连同其技能一起出现在应用的已安装插件中。在这里，MCP 服务器用上面的 `codex mcp add` 命令添加。
 
 - **无需端口、令牌或设置**。AI 代理以你的权限自行启动进程，就像它运行 `openscreen record` 一样。因此，它无需**MCP 编辑**开关，就能录制你的屏幕并进行编辑。
 - **每次录制都会成为一个新项目**，出现在你的项目列表中，并且与在应用中录制的内容一样，在录制下来的点击处添加缩放：时间和位置都相近的点击共用一个缩放，开头几秒和结尾保持全屏。AI 代理的每项编辑都会保存到项目文件中。撤销它们要靠 AI 代理创建的检查点，检查点在代理的会话结束前一直有效。只保留最近的 20 个检查点，因此较早的检查点可能会更早失效。
 - **OpenScreen 运行时，AI 代理通过应用进行编辑。** 对编辑器中打开的项目所做的编辑会立即显示在那里，并可用 `Ctrl/Cmd + Z` 撤销。此时 AI 代理的检查点会一直保留到 OpenScreen 退出。如果应用没有响应，对该项目的编辑会被拒绝，因为编辑器会用自己的副本覆盖这些编辑。
 - **在 AI 代理请求之前，录制内容没有转录文本。** AI 代理会在删除词语或开启字幕之前调用 `transcribe`。Whisper 在你的电脑上运行，OpenScreen 打开时则在 OpenScreen 中运行。
 - **由脚本驱动的录制**（例如 Playwright）永远不会移动屏幕指针。AI 代理通过 `setPointerTrack` 把它自己的操作日志交给 OpenScreen，视频照样会有光标及其缩放。
-- **`openscreen-demo` 技能**会教 AI 代理完成整个工作，从分镜脚本到成品视频。之后，它会把视频附加到拉取请求中，让审阅者直接在那里看到改动；或者起草一条 X 帖子，而且只有在你同意之后，它才会发布这条帖子。使用 `npx skills add getopenscreen/openscreen --skill openscreen-demo` 添加它。具体步骤见 [`plugin/skills/openscreen-demo/SKILL.md`](https://github.com/getopenscreen/openscreen/blob/main/plugin/skills/openscreen-demo/SKILL.md)。
+- **这些技能**教 AI 代理如何完成工作。`openscreen-demo` 带它从分镜脚本做到成品视频，之后把视频附加到拉取请求中，让审阅者直接在那里看到改动；或者起草一条 X 帖子，而且只有在你同意之后才会发布。另外六个技能各自深入一个步骤：`openscreen-capture`（干净、可重复的录制，包括不打开任何窗口录制的网页）、`openscreen-motion`（缩放、标注和节奏）、`openscreen-effects`（自定义效果）、`openscreen-sound`（旁白、音乐和响度）、`openscreen-review`（视频发出前的检查）和 `openscreen-deliver`（格式、大小以及交付视频）。使用 `npx skills add getopenscreen/openscreen` 一次全部添加。它们位于 [`plugin/skills/`](https://github.com/getopenscreen/openscreen/tree/main/plugin/skills)。

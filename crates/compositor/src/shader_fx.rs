@@ -12,7 +12,9 @@
 //! l'autre au seek) et l'export (qui les rend dans l'ordre) d'accord.
 
 use crate::frame_geometry::FootageQuad;
-use crate::scene::{SceneShaderEffect, ShaderEffectTarget, ShaderParamDecl, ShaderParamType, ShaderParamValue};
+use crate::scene::{
+    SceneShaderEffect, ShaderEffectTarget, ShaderKeyframe, ShaderParamDecl, ShaderParamType, ShaderParamValue,
+};
 use std::hash::{Hash, Hasher};
 
 /// La version du contrat que ce prélude implémente. Un prélude livré ne change plus : une entrée
@@ -35,6 +37,7 @@ struct FxContext {
     footage_corners: array<vec4<f32>, 2>,
     footage_aspect: f32,
     footage_warp: f32,
+    image: vec4<f32>,
 };
 @group(0) @binding(0) var fx_frame: texture_2d<f32>;
 @group(0) @binding(1) var fx_sampler: sampler;
@@ -178,6 +181,30 @@ fn fx_fs(v: FxVsOut) -> @location(0) vec4<f32> {
 }
 "#;
 
+/// Ce qui s'ajoute au prélude d'un effet qui porte une image (`SceneShaderEffect::image`), et de
+/// lui seul : un effet sans image garde le module d'avant, et un `image` qu'il aurait défini
+/// lui-même ne heurte rien. La texture est prémultipliée (`load_image`), pour que le filtrage
+/// bilinéaire ne tire pas les bords vers la couleur des pixels transparents ; `image()` rend de
+/// l'alpha droit.
+pub const PRELUDE_IMAGE: &str = r#"
+@group(0) @binding(5) var fx_image: texture_2d<f32>;
+
+// The effect's own image, straight alpha: (0,0) its top-left corner, (1,1) its bottom-right.
+// Transparent outside 0..1.
+fn image(uv: vec2<f32>) -> vec4<f32> {
+    let inside = all(uv >= vec2<f32>(0.0)) && all(uv <= vec2<f32>(1.0));
+    let c = select(vec4<f32>(0.0), textureSampleLevel(fx_image, fx_sampler, uv, 0.0), inside);
+    return vec4<f32>(c.rgb / max(c.a, 0.0001), c.a);
+}
+"#;
+
+/// Le plus grand côté d'une image d'effet une fois chargée : au-delà elle est réduite, comme la
+/// copie de l'enregistrement (`footage_copy_px`).
+pub const MAX_IMAGE_SIDE: u32 = 4096;
+/// Combien d'images d'effet un backend garde chargées. Au-delà il repart de zéro : une scène en
+/// montre une poignée, et le nom d'un fichier suit son contenu, donc rien n'y périme.
+pub const IMAGE_CACHE: usize = 16;
+
 /// Combien de clics récents l'effet voit (`ctx.clicks`), du plus récent au plus ancien.
 pub const MAX_CLICKS: usize = 4;
 /// Jusqu'où un clic reste visible des effets : au-delà, son entrée est vide (`w` = 0).
@@ -188,7 +215,7 @@ pub const MAX_ITERATIONS_PER_PIXEL: u64 = 4096;
 /// Taille du constant buffer des paramètres : le plafond technique (32) de `vec4`.
 pub const PARAMS_BUFFER_BYTES: usize = 32 * 16;
 
-/// Le constant buffer `ctx`, au layout de `FxContext` (192 octets).
+/// Le constant buffer `ctx`, au layout de `FxContext` (208 octets).
 #[repr(C)]
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
 pub struct FxContext {
@@ -207,6 +234,64 @@ pub struct FxContext {
     /// 1 : l'homographie des coins (la caméra réelle), 0 : leur warp bilinéaire (`TiltedQuad`).
     pub footage_warp: f32,
     pub _pad: [f32; 2],
+    /// L'image de l'effet : largeur et hauteur en px, largeur sur hauteur, et 1 quand il en a
+    /// une. Posée par le backend, qui charge l'image (`with_image`).
+    pub image: [f32; 4],
+}
+
+impl FxContext {
+    /// Ce contexte pour un effet dont l'image chargée fait `width` par `height`.
+    pub fn with_image(mut self, width: u32, height: u32) -> Self {
+        let (w, h) = (width as f32, height as f32);
+        self.image = [w, h, w / h.max(1.0), 1.0];
+        self
+    }
+}
+
+/// Une image d'effet décodée, prête pour une texture RGBA8 : alpha prémultiplié, le plus grand
+/// côté à `MAX_IMAGE_SIDE` au plus.
+pub struct FxImage {
+    pub width: u32,
+    pub height: u32,
+    pub rgba: Vec<u8>,
+}
+
+/// Charge l'image d'un effet depuis son fichier (PNG ou JPEG, reconnu à son contenu), redressée
+/// selon son orientation EXIF : une photo prise en portrait au téléphone est enregistrée couchée.
+/// Hors du rendu de la frame autant que possible : les backends gardent le résultat par chemin.
+pub fn load_image(path: &str) -> Result<FxImage, String> {
+    use image::ImageDecoder;
+    let fail = |e: image::ImageError| format!("effect image {path}: {e}");
+    let read = |e: std::io::Error| format!("effect image {path}: {e}");
+    let mut decoder = image::ImageReader::open(path)
+        .map_err(read)?
+        .with_guessed_format()
+        .map_err(read)?
+        .into_decoder()
+        .map_err(fail)?;
+    let orientation = decoder.orientation().unwrap_or(image::metadata::Orientation::NoTransforms);
+    let mut picture = image::DynamicImage::from_decoder(decoder).map_err(fail)?;
+    picture.apply_orientation(orientation);
+    let mut img = picture.to_rgba8();
+    // Prémultiplié avant toute réduction : `resize` mélange des pixels voisins, et la couleur
+    // d'un pixel transparent ne doit pas déteindre sur le bord opaque d'à côté.
+    for px in img.pixels_mut() {
+        let a = px.0[3] as u32;
+        for c in &mut px.0[..3] {
+            *c = ((*c as u32 * a + 127) / 255) as u8;
+        }
+    }
+    let longest = img.width().max(img.height());
+    if longest > MAX_IMAGE_SIDE {
+        let side = |px: u32| ((px as u64 * MAX_IMAGE_SIDE as u64 / longest as u64) as u32).max(1);
+        img = image::imageops::resize(
+            &img,
+            side(img.width()),
+            side(img.height()),
+            image::imageops::FilterType::Triangle,
+        );
+    }
+    Ok(FxImage { width: img.width(), height: img.height(), rgba: img.into_raw() })
 }
 
 /// Ce que le plan du curseur et la géométrie de la frame donnent aux effets, en uv de sortie.
@@ -298,9 +383,10 @@ fn params_source(params: &[ShaderParamDecl]) -> String {
 }
 
 /// Le module complet que naga compile : le code de l'agent d'abord, pour que ses lignes gardent
-/// leur numéro dans les erreurs.
-pub fn module_source(user: &str, params: &[ShaderParamDecl]) -> String {
-    format!("{user}\n{}{PRELUDE_V1}", params_source(params))
+/// leur numéro dans les erreurs. `image` : l'effet porte une image, et lit `image()`.
+pub fn module_source(user: &str, params: &[ShaderParamDecl], image: bool) -> String {
+    let image = if image { PRELUDE_IMAGE } else { "" };
+    format!("{user}\n{}{PRELUDE_V1}{image}", params_source(params))
 }
 
 fn check_params(params: &[ShaderParamDecl]) -> Result<(), String> {
@@ -330,24 +416,40 @@ pub struct Parsed {
 
 /// Valide un effet comme l'agent doit le lire : paramètres, syntaxe et types (naga), bornes des
 /// boucles, puis estimation du coût. L'erreur porte la ligne et la colonne du code de l'agent.
-pub fn analyze(user: &str, params: &[ShaderParamDecl]) -> Result<Parsed, String> {
+pub fn analyze(user: &str, params: &[ShaderParamDecl], image: bool) -> Result<Parsed, String> {
     check_params(params)?;
-    let src = module_source(user, params);
-    let module = naga::front::wgsl::parse_str(&src).map_err(|e| e.emit_to_string(&src))?;
+    let src = module_source(user, params, image);
+    let module = naga::front::wgsl::parse_str(&src).map_err(|e| {
+        let message = e.emit_to_string(&src);
+        // `image()` n'existe que pour un effet qui porte une image : le dire, plutôt que de
+        // laisser l'agent chercher une faute de frappe.
+        if !image && message.contains("`image`") {
+            format!("{message}\nThis effect has no image: image() reads the file given as the effect's `image`.")
+        } else {
+            message
+        }
+    })?;
     let info = naga::valid::Validator::new(
         naga::valid::ValidationFlags::all(),
         naga::valid::Capabilities::empty(),
     )
     .validate(&module)
     .map_err(|e| e.emit_to_string(&src))?;
-    // Les bindings sont ceux du prélude, et eux seuls : chaque backend lie ces cinq-là. Linux
-    // valide le pipeline contre ce layout, et une erreur de validation wgpu y fait paniquer.
+    // Les bindings sont ceux du prélude, et eux seuls : chaque backend lie ces six-là, `fx_image`
+    // seulement pour un effet qui porte une image. Sans image, un `fx_image` déclaré par l'effet
+    // tomberait hors du layout : Linux valide le pipeline contre lui, et une erreur de validation
+    // wgpu y fait paniquer.
+    let ours: &[&str] = if image {
+        &["fx_frame", "fx_sampler", "ctx", "params", "fx_footage", "fx_image"]
+    } else {
+        &["fx_frame", "fx_sampler", "ctx", "params", "fx_footage"]
+    };
     for (handle, var) in module.global_variables.iter() {
         let name = var.name.as_deref().unwrap_or("?");
-        if var.binding.is_some() && !["fx_frame", "fx_sampler", "ctx", "params", "fx_footage"].contains(&name) {
+        if var.binding.is_some() && !ours.contains(&name) {
             let line = module.global_variables.get_span(handle).location(&src).line_number;
             return Err(format!(
-                "`{name}` at line {line}: an effect declares no binding of its own, it reads frame(), footage(), ctx and params"
+                "`{name}` at line {line}: an effect declares no binding of its own, it reads frame(), footage(), image(), ctx and params"
             ));
         }
     }
@@ -388,7 +490,7 @@ pub fn reads_footage(effect: &SceneShaderEffect) -> bool {
     if let Some(&footage) = seen.lock().unwrap().get(&key) {
         return footage;
     }
-    let footage = analyze(&effect.code, &effect.params).is_ok_and(|p| p.footage);
+    let footage = analyze(&effect.code, &effect.params, effect.image.is_some()).is_ok_and(|p| p.footage);
     seen.lock().unwrap().insert(key, footage);
     footage
 }
@@ -673,6 +775,9 @@ pub const MSL_PARAMS_BUFFER: u64 = 3;
 /// L'index de texture Metal de `fx_footage`, la copie de l'enregistrement que lit `footage()`.
 #[cfg(target_os = "macos")]
 pub const MSL_FOOTAGE_TEXTURE: u64 = 1;
+/// L'index de texture Metal de `fx_image`, l'image de l'effet que lit `image()`.
+#[cfg(target_os = "macos")]
+pub const MSL_IMAGE_TEXTURE: u64 = 2;
 
 /// Le module traduit en MSL, et les noms que naga a donnés à ses deux étages.
 #[cfg(target_os = "macos")]
@@ -697,6 +802,7 @@ pub fn to_msl(parsed: &Parsed) -> Result<Msl, String> {
         (at(2), msl::BindTarget { buffer: Some(MSL_CTX_BUFFER as u8), ..Default::default() }),
         (at(3), msl::BindTarget { buffer: Some(MSL_PARAMS_BUFFER as u8), ..Default::default() }),
         (at(4), msl::BindTarget { texture: Some(MSL_FOOTAGE_TEXTURE as u8), ..Default::default() }),
+        (at(5), msl::BindTarget { texture: Some(MSL_IMAGE_TEXTURE as u8), ..Default::default() }),
     ]);
     let options = msl::Options {
         lang_version: (2, 0),
@@ -750,8 +856,13 @@ pub type CompiledFx = metal::RenderPipelineState;
 /// lancé par Rust n'en a pas, et les objets autoreleased de Metal (l'erreur de compilation, les
 /// fonctions de la bibliothèque) fuiraient.
 #[cfg(target_os = "macos")]
-pub fn compile_metal(device: &metal::Device, code: &str, params: &[ShaderParamDecl]) -> Result<CompiledFx, String> {
-    let msl = to_msl(&analyze(code, params)?)?;
+pub fn compile_metal(
+    device: &metal::Device,
+    code: &str,
+    params: &[ShaderParamDecl],
+    image: bool,
+) -> Result<CompiledFx, String> {
+    let msl = to_msl(&analyze(code, params, image)?)?;
     objc::rc::autoreleasepool(|| {
         let library = device
             .new_library_with_source(&msl.source, &metal::CompileOptions::new())
@@ -777,10 +888,11 @@ pub fn spawn_compile(
 ) -> std::sync::mpsc::Receiver<Result<CompiledFx, String>> {
     let (tx, rx) = std::sync::mpsc::channel();
     let (code, params, device) = (effect.code.clone(), effect.params.clone(), device.clone());
+    let image = effect.image.is_some();
     std::thread::Builder::new()
         .name("shader-fx".into())
         .spawn(move || {
-            let _ = tx.send(compile_metal(&device, &code, &params));
+            let _ = tx.send(compile_metal(&device, &code, &params, image));
         })
         .expect("thread shader-fx");
     rx
@@ -795,6 +907,8 @@ pub fn source_hash(effect: &SceneShaderEffect) -> u64 {
         p.name.hash(&mut h);
         p.ty.hash(&mut h);
     }
+    // Avec une image, le module porte `image()` et son binding : un autre binaire. Laquelle, non.
+    effect.image.is_some().hash(&mut h);
     h.finish()
 }
 
@@ -860,12 +974,53 @@ pub fn context(
         footage_aspect: inputs.footage_aspect,
         footage_warp: if inputs.footage.projective { 1.0 } else { 0.0 },
         _pad: [0.0; 2],
+        image: [0.0; 4],
     }
 }
 
+/// La valeur d'une piste d'images clés au temps `t` (secondes depuis le début de la pilule) :
+/// palier avant la première et après la dernière, interpolation composante par composante entre
+/// deux, selon la courbe de la première. Vide : aucune valeur.
+pub fn sample_track(track: &[ShaderKeyframe], t: f32) -> Vec<f32> {
+    let floats = |v: &ShaderParamValue| match v {
+        ShaderParamValue::Scalar(x) => vec![*x],
+        ShaderParamValue::Vector(x) => x.clone(),
+    };
+    let Some(i) = track.iter().rposition(|k| k.at_sec <= t) else {
+        return track.first().map(|k| floats(&k.value)).unwrap_or_default();
+    };
+    let (a, Some(b)) = (&track[i], track.get(i + 1)) else { return floats(&track[i].value) };
+    let span = b.at_sec - a.at_sec;
+    if a.hold || span <= 0.0 {
+        return floats(&a.value);
+    }
+    let x = ((t - a.at_sec) / span).clamp(0.0, 1.0);
+    let k = match (a.bezier, a.spring) {
+        (Some([x1, y1, x2, y2]), _) => crate::regions::cubic_bezier(x1, y1, x2, y2, x),
+        (None, Some(bounce)) => spring(bounce, x),
+        (None, None) => x,
+    };
+    floats(&a.value).iter().zip(floats(&b.value)).map(|(from, to)| from + (to - from) * k).collect()
+}
+
+/// Un ressort sur [0, 1] qui part à vitesse nulle et arrive pile sur 1 à la fin. Sans rebond,
+/// c'est le ressort critique des zooms ; avec, l'amortissement baisse (ζ = 1 − rebond) à la même
+/// pulsation, et la petite erreur restante en fin de fenêtre est rattrapée linéairement.
+fn spring(bounce: f32, t: f32) -> f32 {
+    let zeta = 1.0 - bounce.clamp(0.0, 0.9);
+    if zeta >= 0.999 {
+        return crate::regions::ease_spring(t);
+    }
+    let w = crate::regions::SPRING_OMEGA_T;
+    let wd = w * (1.0 - zeta * zeta).sqrt();
+    let x = |t: f32| 1.0 - (-zeta * w * t).exp() * ((wd * t).cos() + zeta * w / wd * (wd * t).sin());
+    x(t) + (1.0 - x(1.0)) * t
+}
+
 /// Les paramètres de la région, rangés comme la struct `FxParams` générée (règles d'alignement de
-/// WGSL), en mots de 4 octets. Une valeur absente vaut 0 : l'app envoie déjà les défauts.
-pub fn pack_params(effect: &SceneShaderEffect) -> Vec<f32> {
+/// WGSL), en mots de 4 octets. Une valeur absente vaut 0 : l'app envoie déjà les défauts. Un
+/// paramètre animé prend la valeur de sa piste à `region_sec` (`ctx.region.z`).
+pub fn pack_params(effect: &SceneShaderEffect, region_sec: f32) -> Vec<f32> {
     let mut words: Vec<f32> = Vec::new();
     let mut offset = 0usize;
     for p in &effect.params {
@@ -873,10 +1028,11 @@ pub fn pack_params(effect: &SceneShaderEffect) -> Vec<f32> {
         offset = offset.div_ceil(align) * align;
         let end = offset + size;
         words.resize(end / 4, 0.0);
-        let value: Vec<f32> = match effect.values.get(&p.name) {
-            Some(ShaderParamValue::Scalar(v)) => vec![*v],
-            Some(ShaderParamValue::Vector(v)) => v.clone(),
-            None => Vec::new(),
+        let value: Vec<f32> = match (effect.animate.get(&p.name), effect.values.get(&p.name)) {
+            (Some(track), _) if !track.is_empty() => sample_track(track, region_sec),
+            (_, Some(ShaderParamValue::Scalar(v))) => vec![*v],
+            (_, Some(ShaderParamValue::Vector(v))) => v.clone(),
+            (_, None) => Vec::new(),
         };
         for (i, v) in value.into_iter().take(size / 4).enumerate() {
             words[offset / 4 + i] = v;
@@ -895,8 +1051,8 @@ pub struct CompiledFx {
 }
 
 #[cfg(windows)]
-pub fn compile_dxbc(code: &str, params: &[ShaderParamDecl]) -> Result<CompiledFx, String> {
-    let parsed = analyze(code, params)?;
+pub fn compile_dxbc(code: &str, params: &[ShaderParamDecl], image: bool) -> Result<CompiledFx, String> {
+    let parsed = analyze(code, params, image)?;
     let hlsl = to_hlsl(&parsed)?;
     Ok(CompiledFx {
         vs: d3d_compile(&hlsl, "fx_vs", "vs_5_0")?,
@@ -947,11 +1103,11 @@ fn d3d_compile(hlsl: &str, entry: &str, profile: &str) -> Result<Vec<u8>, String
 #[cfg(windows)]
 pub fn spawn_compile(effect: &SceneShaderEffect) -> std::sync::mpsc::Receiver<Result<CompiledFx, String>> {
     let (tx, rx) = std::sync::mpsc::channel();
-    let (code, params) = (effect.code.clone(), effect.params.clone());
+    let (code, params, image) = (effect.code.clone(), effect.params.clone(), effect.image.is_some());
     std::thread::Builder::new()
         .name("shader-fx".into())
         .spawn(move || {
-            let _ = tx.send(compile_dxbc(&code, &params));
+            let _ = tx.send(compile_dxbc(&code, &params, image));
         })
         .expect("thread shader-fx");
     rx
@@ -967,22 +1123,23 @@ fn to_spirv(parsed: &Parsed) -> Result<Vec<u32>, String> {
 
 /// Ce que l'outil de l'agent demande avant d'accepter un code : la validation, la compilation
 /// réelle pour le backend de la machine quand elle existe, et le palier.
-pub fn check_for_agent(code: &str, params: &[ShaderParamDecl]) -> Result<EffectReport, String> {
-    let parsed = analyze(code, params)?;
+pub fn check_for_agent(code: &str, params: &[ShaderParamDecl], image: bool) -> Result<EffectReport, String> {
+    let parsed = analyze(code, params, image)?;
     #[cfg(windows)]
-    compile_dxbc(code, params)?;
+    compile_dxbc(code, params, image)?;
     #[cfg(target_os = "linux")]
     to_spirv(&parsed)?;
     #[cfg(target_os = "macos")]
-    compile_metal(&metal::Device::system_default().ok_or("no Metal device")?, code, params)?;
+    compile_metal(&metal::Device::system_default().ok_or("no Metal device")?, code, params, image)?;
     Ok(parsed.report)
 }
 
 /// `check_for_agent`, les paramètres reçus en JSON (`[{ "name", "type" }, …]`) depuis l'addon.
-pub fn check_for_agent_json(code: &str, params_json: &str) -> Result<EffectReport, String> {
+/// `image` : l'effet porte une image.
+pub fn check_for_agent_json(code: &str, params_json: &str, image: bool) -> Result<EffectReport, String> {
     let params: Vec<ShaderParamDecl> =
         serde_json::from_str(params_json).map_err(|e| format!("params: {e}"))?;
-    check_for_agent(code, &params)
+    check_for_agent(code, &params, image)
 }
 
 /// Un effet tel que les tests et les bancs le construisent.
@@ -999,6 +1156,8 @@ pub(crate) fn test_effect(code: &str, params: Vec<ShaderParamDecl>, values: &[(&
         code: code.into(),
         params,
         values: values.iter().map(|(k, v)| (k.to_string(), v.clone())).collect(),
+        animate: Default::default(),
+        image: None,
     }
 }
 
@@ -1014,7 +1173,7 @@ mod tests {
 
     #[test]
     fn a_valid_effect_becomes_hlsl_that_d3d11_accepts() {
-        let parsed = analyze(VIGNETTE, &[decl("strength", ShaderParamType::Number)]).expect("analyze");
+        let parsed = analyze(VIGNETTE, &[decl("strength", ShaderParamType::Number)], false).expect("analyze");
         let hlsl = to_hlsl(&parsed).expect("translate");
         assert!(hlsl.contains("fx_vs") && hlsl.contains("fx_fs"));
         // Les registres que les backends lient : t0, s1, b2 (ctx), b3 (params), sans `space`.
@@ -1027,21 +1186,28 @@ mod tests {
     #[test]
     fn an_error_points_at_the_line_the_agent_wrote() {
         let broken = "fn effect(uv: vec2<f32>) -> vec4<f32> {\n    return frame(uv) * nope;\n}\n";
-        let err = analyze(broken, &[]).err().expect("must fail");
+        let err = analyze(broken, &[], false).err().expect("must fail");
         assert!(err.contains("nope") && err.contains(":2:"), "{err}");
     }
 
     #[test]
     fn an_effect_without_the_entry_function_is_refused() {
-        assert!(analyze("fn other() {}", &[]).is_err());
+        assert!(analyze("fn other() {}", &[], false).is_err());
     }
 
     #[test]
     fn an_effect_declares_no_binding_of_its_own() {
         let code = "@group(0) @binding(5) var extra: texture_2d<f32>;\n\
                     fn effect(uv: vec2<f32>) -> vec4<f32> { return textureLoad(extra, vec2<i32>(0), 0); }\n";
-        let err = analyze(code, &[]).err().expect("refusé");
+        let err = analyze(code, &[], false).err().expect("refusé");
         assert!(err.contains("`extra` at line 1"), "{err}");
+        // Sans image, le nom du binding de l'image ne passe pas non plus : il tomberait hors du
+        // layout. Avec une image, le prélude le déclare déjà.
+        let own_image = "@group(1) @binding(0) var fx_image: texture_2d<f32>;\n\
+                         fn effect(uv: vec2<f32>) -> vec4<f32> { return textureSampleLevel(fx_image, fx_sampler, uv, 0.0); }\n";
+        let err = analyze(own_image, &[], false).err().expect("refusé sans image");
+        assert!(err.contains("`fx_image` at line 1"), "{err}");
+        assert!(analyze(own_image, &[], true).is_err());
     }
 
     const LOUPE: &str = "fn effect(uv: vec2<f32>) -> vec4<f32> {\n\
@@ -1052,10 +1218,10 @@ mod tests {
     /// backend s'il doit préparer l'enregistrement : jamais pour un effet qui ne le lit pas.
     #[test]
     fn footage_reads_count_and_only_an_effect_that_reads_it_asks_for_the_copy() {
-        let parsed = analyze(LOUPE, &[]).expect("analyze");
+        let parsed = analyze(LOUPE, &[], false).expect("analyze");
         assert!(parsed.footage);
         assert_eq!(parsed.report.frame_reads, 2);
-        let plain = analyze(VIGNETTE, &[decl("strength", ShaderParamType::Number)]).expect("analyze");
+        let plain = analyze(VIGNETTE, &[decl("strength", ShaderParamType::Number)], false).expect("analyze");
         assert!(!plain.footage);
     }
 
@@ -1070,17 +1236,17 @@ mod tests {
     #[cfg(target_os = "linux")]
     #[test]
     fn a_valid_effect_becomes_spirv() {
-        let parsed = analyze(VIGNETTE, &[decl("strength", ShaderParamType::Number)]).expect("analyze");
+        let parsed = analyze(VIGNETTE, &[decl("strength", ShaderParamType::Number)], false).expect("analyze");
         assert!(!to_spirv(&parsed).expect("spirv").is_empty());
     }
 
     #[test]
     fn parameter_names_are_checked() {
         for bad in ["Strength", "2x", "unused", "a-b"] {
-            assert!(analyze(VIGNETTE, &[decl(bad, ShaderParamType::Number)]).is_err(), "{bad}");
+            assert!(analyze(VIGNETTE, &[decl(bad, ShaderParamType::Number)], false).is_err(), "{bad}");
         }
         let twice = [decl("a", ShaderParamType::Number), decl("a", ShaderParamType::Color)];
-        assert!(analyze(VIGNETTE, &twice).is_err());
+        assert!(analyze(VIGNETTE, &twice, false).is_err());
     }
 
     /// Le packer et la struct générée doivent placer chaque paramètre au même octet : un écart lirait
@@ -1095,7 +1261,7 @@ mod tests {
             decl("b", ShaderParamType::Number),
         ];
         let code = "fn effect(uv: vec2<f32>) -> vec4<f32> { return frame(uv) * params.a + params.tint * params.on + vec4<f32>(params.at, params.b, 0.0); }";
-        let parsed = analyze(code, &params).expect("analyze");
+        let parsed = analyze(code, &params, false).expect("analyze");
         let ty = parsed
             .module
             .types
@@ -1111,7 +1277,7 @@ mod tests {
             ("at", ShaderParamValue::Vector(vec![7.0, 8.0])),
             ("b", ShaderParamValue::Scalar(9.0)),
         ];
-        let words = pack_params(&test_effect(code, params, &values));
+        let words = pack_params(&test_effect(code, params, &values), 0.0);
         assert_eq!(words.len() * 4, (*span as usize).div_ceil(16) * 16);
         let first = |name: &str| members.iter().find(|m| m.name.as_deref() == Some(name)).unwrap().offset as usize / 4;
         assert_eq!(words[first("a")], 1.0);
@@ -1121,9 +1287,114 @@ mod tests {
         assert_eq!(words[first("b")], 9.0);
     }
 
+    fn key(at_sec: f32, value: ShaderParamValue) -> ShaderKeyframe {
+        ShaderKeyframe { at_sec, value, bezier: None, spring: None, hold: false }
+    }
+
+    fn scalar(track: &[ShaderKeyframe], t: f32) -> f32 {
+        sample_track(track, t)[0]
+    }
+
+    #[test]
+    fn a_track_holds_outside_its_keyframes_and_is_linear_between() {
+        let track = [key(1.0, ShaderParamValue::Scalar(2.0)), key(3.0, ShaderParamValue::Scalar(6.0))];
+        assert_eq!(scalar(&track, 0.0), 2.0);
+        assert_eq!(scalar(&track, 2.0), 4.0);
+        assert_eq!(scalar(&track, 3.0), 6.0);
+        assert_eq!(scalar(&track, 10.0), 6.0);
+        assert_eq!(sample_track(&[key(0.5, ShaderParamValue::Scalar(7.0))], 9.0), vec![7.0]);
+        // Composante par composante : une couleur, un point.
+        let color = [
+            key(0.0, ShaderParamValue::Vector(vec![0.0, 0.0, 0.0, 1.0])),
+            key(2.0, ShaderParamValue::Vector(vec![1.0, 0.5, 0.0, 1.0])),
+        ];
+        assert_eq!(sample_track(&color, 1.0), vec![0.5, 0.25, 0.0, 1.0]);
+    }
+
+    #[test]
+    fn a_bezier_segment_follows_the_regions_curve() {
+        let mut from = key(0.0, ShaderParamValue::Scalar(0.0));
+        from.bezier = Some([0.42, 0.0, 0.58, 1.0]);
+        let track = [from, key(2.0, ShaderParamValue::Scalar(10.0))];
+        for t in [0.3_f32, 0.5, 1.0, 1.7] {
+            let expected = 10.0 * crate::regions::cubic_bezier(0.42, 0.0, 0.58, 1.0, t / 2.0);
+            assert_eq!(scalar(&track, t), expected);
+        }
+        assert!(scalar(&track, 0.3) < 1.5, "ease-in-out starts slow");
+    }
+
+    #[test]
+    fn a_spring_lands_exactly_on_the_next_keyframe() {
+        for bounce in [0.0_f32, 0.3, 0.9] {
+            let mut from = key(1.0, ShaderParamValue::Scalar(0.0));
+            from.spring = Some(bounce);
+            let track = [from, key(2.0, ShaderParamValue::Scalar(5.0))];
+            assert_eq!(scalar(&track, 1.0), 0.0);
+            assert!((scalar(&track, 1.999_99) - 5.0).abs() < 1e-3, "bounce {bounce}");
+            assert_eq!(scalar(&track, 2.0), 5.0);
+        }
+        // Avec du rebond, la courbe dépasse la cible avant d'y revenir.
+        let mut from = key(0.0, ShaderParamValue::Scalar(0.0));
+        from.spring = Some(0.5);
+        let track = [from, key(1.0, ShaderParamValue::Scalar(1.0))];
+        assert!((1..100).any(|i| scalar(&track, i as f32 / 100.0) > 1.01));
+        assert_eq!(spring(0.0, 0.4), crate::regions::ease_spring(0.4));
+    }
+
+    /// Un toggle arrive en `hold` (la scène le force) : il saute à chaque image clé, sans valeur
+    /// intermédiaire.
+    #[test]
+    fn a_hold_segment_steps_at_the_keyframe() {
+        let mut off = key(0.0, ShaderParamValue::Scalar(0.0));
+        off.hold = true;
+        let track = [off, key(1.0, ShaderParamValue::Scalar(1.0))];
+        assert_eq!(scalar(&track, 0.999), 0.0);
+        assert_eq!(scalar(&track, 1.0), 1.0);
+    }
+
+    /// Ce qui garde un projet sans animation identique à avant : sans piste, les mots sont ceux des
+    /// valeurs, quel que soit le temps.
+    #[test]
+    fn without_a_track_the_packed_words_are_the_values() {
+        let params = vec![decl("a", ShaderParamType::Number), decl("tint", ShaderParamType::Color)];
+        let values = [("a", ShaderParamValue::Scalar(0.25)), ("tint", ShaderParamValue::Vector(vec![0.1, 0.2, 0.3, 1.0]))];
+        let effect = test_effect(VIGNETTE, params, &values);
+        let expected = vec![0.25, 0.0, 0.0, 0.0, 0.1, 0.2, 0.3, 1.0];
+        assert_eq!(pack_params(&effect, 0.0), expected);
+        assert_eq!(pack_params(&effect, 42.0), expected);
+    }
+
+    #[test]
+    fn an_animated_parameter_packs_its_sampled_value() {
+        let params = vec![decl("a", ShaderParamType::Number), decl("b", ShaderParamType::Number)];
+        let values = [("a", ShaderParamValue::Scalar(9.0)), ("b", ShaderParamValue::Scalar(3.0))];
+        let mut effect = test_effect(VIGNETTE, params, &values);
+        effect.animate.insert(
+            "a".into(),
+            vec![key(0.0, ShaderParamValue::Scalar(0.0)), key(2.0, ShaderParamValue::Scalar(1.0))],
+        );
+        assert_eq!(pack_params(&effect, 1.0), vec![0.5, 3.0, 0.0, 0.0]);
+    }
+
+    #[test]
+    fn a_scene_without_animate_parses_and_one_with_it_reads_every_curve() {
+        let plain: SceneShaderEffect =
+            serde_json::from_str(r#"{"startSec":0,"endSec":1,"code":"x","values":{"a":1}}"#).unwrap();
+        assert!(plain.animate.is_empty());
+        let json = r#"{"startSec":0,"endSec":1,"code":"x","animate":{"a":[
+            {"atSec":0,"value":0,"bezier":[0.42,0,1,1]},{"atSec":1,"value":1,"spring":0.4},
+            {"atSec":2,"value":2,"hold":true},{"atSec":3,"value":3,"future":"curve"}]}}"#;
+        let animated: SceneShaderEffect = serde_json::from_str(json).unwrap();
+        let track = &animated.animate["a"];
+        assert_eq!(track[0].bezier, Some([0.42, 0.0, 1.0, 1.0]));
+        assert_eq!(track[1].spring, Some(0.4));
+        assert!(track[2].hold);
+        assert_eq!(track[3].bezier, None);
+    }
+
     #[test]
     fn the_context_matches_its_wgsl_struct() {
-        let parsed = analyze(VIGNETTE, &[decl("strength", ShaderParamType::Number)]).unwrap();
+        let parsed = analyze(VIGNETTE, &[decl("strength", ShaderParamType::Number)], false).unwrap();
         let ty = parsed.module.types.iter().find(|(_, t)| t.name.as_deref() == Some("FxContext")).unwrap().1;
         let naga::TypeInner::Struct { members, span } = &ty.inner else { panic!("struct") };
         assert_eq!(std::mem::size_of::<FxContext>(), *span as usize);
@@ -1135,19 +1406,144 @@ mod tests {
         assert_eq!(offset("camera"), &c.camera as *const _ as usize - base);
         assert_eq!(offset("footage_corners"), &c.footage_corners as *const _ as usize - base);
         assert_eq!(offset("footage_warp"), &c.footage_warp as *const _ as usize - base);
+        assert_eq!(offset("image"), &c.image as *const _ as usize - base);
+    }
+
+    const LOGO: &str = "fn effect(uv: vec2<f32>) -> vec4<f32> {\n    let c = frame(uv);\n    let logo = image((uv - vec2<f32>(0.8, 0.8)) / vec2<f32>(0.15, 0.15 * ctx.aspect / ctx.image.z));\n    return vec4<f32>(mix(c.rgb, logo.rgb, logo.a), c.a);\n}\n";
+
+    /// `image()` et son binding n'existent que pour un effet qui porte une image. Sans, le module
+    /// est celui d'avant, à la lettre près du champ ajouté en fin de `FxContext`.
+    #[test]
+    fn image_is_bound_only_for_an_effect_that_carries_one() {
+        let parsed = analyze(LOGO, &[], true).expect("analyze");
+        let bound = |m: &naga::Module| m.global_variables.iter().any(|(_, v)| v.name.as_deref() == Some("fx_image"));
+        assert!(bound(&parsed.module));
+        // Deux lectures : la frame et l'image. Le coût les compte toutes.
+        assert_eq!(parsed.report.frame_reads, 2);
+        let plain = analyze(VIGNETTE, &[decl("strength", ShaderParamType::Number)], false).expect("analyze");
+        assert!(!bound(&plain.module));
+        assert!(!module_source(VIGNETTE, &[], false).contains("fx_image"));
+    }
+
+    /// Sans image, `image()` n'est pas défini : l'erreur dit quoi donner à l'effet. Et un effet
+    /// d'avant qui définit son propre `image` compile toujours.
+    #[test]
+    fn calling_image_without_one_says_what_is_missing() {
+        let err = analyze(LOGO, &[], false).err().expect("refusé");
+        assert!(err.contains("This effect has no image"), "{err}");
+        let own = "fn image(p: vec2<f32>) -> vec4<f32> { return frame(p); }\nfn effect(uv: vec2<f32>) -> vec4<f32> { return image(uv); }";
+        analyze(own, &[], false).expect("un `image` défini par l'effet ne heurte rien");
+    }
+
+    /// Le cache des shaders compilés distingue l'effet avec image de l'effet sans : deux modules.
+    /// Le fichier, lui, ne change pas la clé.
+    #[test]
+    fn the_cache_key_follows_whether_there_is_an_image_not_which() {
+        let plain = test_effect(LOGO, vec![], &[]);
+        let with = |path: &str| SceneShaderEffect { image: Some(path.into()), ..plain.clone() };
+        assert_ne!(source_hash(&plain), source_hash(&with("a.png")));
+        assert_eq!(source_hash(&with("a.png")), source_hash(&with("b.png")));
+    }
+
+    /// L'image chargée est prémultipliée, et ramenée à 4 096 de côté sans changer de proportions.
+    #[test]
+    fn an_effect_image_loads_premultiplied_and_within_the_size_cap() {
+        let dir = std::env::temp_dir().join(format!("fx-image-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let small = dir.join("small.png");
+        image::RgbaImage::from_fn(2, 1, |x, _| image::Rgba(if x == 0 { [200, 100, 50, 128] } else { [10, 20, 30, 0] }))
+            .save(&small)
+            .unwrap();
+        let loaded = load_image(small.to_str().unwrap()).expect("charge");
+        assert_eq!((loaded.width, loaded.height), (2, 1));
+        assert_eq!(loaded.rgba, [100, 50, 25, 128, 0, 0, 0, 0]);
+
+        let wide = dir.join("wide.png");
+        image::RgbaImage::from_pixel(8192, 2, image::Rgba([255, 255, 255, 255])).save(&wide).unwrap();
+        let loaded = load_image(wide.to_str().unwrap()).expect("charge");
+        assert_eq!((loaded.width, loaded.height), (4096, 1));
+
+        // Réduite, une image garde des bords propres : la moitié gauche transparente porte du
+        // rouge, qui ne doit pas teinter le blanc opaque d'à côté. Prémultiplié avant la
+        // réduction, un pixel du bord est un gris : r = g = b.
+        let edge = dir.join("edge.png");
+        image::RgbaImage::from_fn(8192, 2, |x, _| {
+            image::Rgba(if x < 4096 { [255, 0, 0, 0] } else { [255, 255, 255, 255] })
+        })
+        .save(&edge)
+        .unwrap();
+        let loaded = load_image(edge.to_str().unwrap()).expect("charge");
+        let mut mixed = 0;
+        for px in loaded.rgba.chunks(4).filter(|px| px[3] > 0 && px[3] < 255) {
+            assert!(px[0].abs_diff(px[1]) <= 1 && px[1].abs_diff(px[2]) <= 1, "bord teinté : {px:?}");
+            mixed += 1;
+        }
+        assert!(mixed > 0, "aucun pixel de bord");
+
+        // Nommé .png, un JPEG se lit à son contenu.
+        let named_png = dir.join("photo.png");
+        let mut jpeg = Vec::new();
+        image::RgbImage::from_pixel(4, 2, image::Rgb([10, 200, 30]))
+            .write_to(&mut std::io::Cursor::new(&mut jpeg), image::ImageFormat::Jpeg)
+            .unwrap();
+        std::fs::write(&named_png, &jpeg).unwrap();
+        let loaded = load_image(named_png.to_str().unwrap()).expect("lu à son contenu");
+        assert_eq!((loaded.width, loaded.height), (4, 2));
+        assert!(load_image(dir.join("absent.png").to_str().unwrap()).is_err());
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    /// Une photo enregistrée couchée avec l'orientation EXIF 6 (tourner de 90° vers la droite) se
+    /// charge redressée, comme dans toute visionneuse et comme les clips d'image fixe.
+    #[test]
+    fn an_effect_image_is_turned_upright_by_its_exif_orientation() {
+        let dir = std::env::temp_dir().join(format!("fx-image-exif-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        // 16 par 8 : rouge à gauche, bleu à droite.
+        let mut jpeg = Vec::new();
+        image::RgbImage::from_fn(16, 8, |x, _| image::Rgb(if x < 8 { [255, 0, 0] } else { [0, 0, 255] }))
+            .write_to(&mut std::io::Cursor::new(&mut jpeg), image::ImageFormat::Jpeg)
+            .unwrap();
+        // Un segment APP1 Exif juste après SOI, d'une seule entrée : Orientation (0x0112) = 6.
+        let tiff: &[u8] = &[
+            0x4d, 0x4d, 0x00, 0x2a, 0x00, 0x00, 0x00, 0x08, 0x00, 0x01, 0x01, 0x12, 0x00, 0x03,
+            0x00, 0x00, 0x00, 0x01, 0x00, 0x06, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+        ];
+        let len = (2 + 6 + tiff.len()) as u16;
+        let mut app1 = vec![0xff, 0xe1, (len >> 8) as u8, len as u8];
+        app1.extend_from_slice(b"Exif\0\0");
+        app1.extend_from_slice(tiff);
+        jpeg.splice(2..2, app1);
+        let file = dir.join("portrait.jpg");
+        std::fs::write(&file, &jpeg).unwrap();
+
+        let loaded = load_image(file.to_str().unwrap()).expect("charge");
+        assert_eq!((loaded.width, loaded.height), (8, 16));
+        // La colonne de gauche devient la ligne du haut : rouge en haut, bleu en bas.
+        let px = |x: u32, y: u32| loaded.rgba[((y * loaded.width + x) * 4) as usize..][..3].to_vec();
+        assert!(px(4, 3)[0] > 200 && px(4, 3)[2] < 60, "{:?}", px(4, 3));
+        assert!(px(4, 12)[2] > 200 && px(4, 12)[0] < 60, "{:?}", px(4, 12));
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn the_context_carries_the_image_size_once_loaded() {
+        let ctx = FxContext::default().with_image(400, 100);
+        assert_eq!(ctx.image, [400.0, 100.0, 4.0, 1.0]);
+        assert_eq!(FxContext::default().image, [0.0; 4]);
     }
 
     #[test]
     fn a_for_loop_with_literal_bounds_is_counted() {
         let code = "fn effect(uv: vec2<f32>) -> vec4<f32> {\n    var acc = vec4<f32>(0.0);\n    for (var i = 0; i < 16; i++) {\n        acc += frame(uv + vec2<f32>(f32(i) * 0.001, 0.0));\n    }\n    return acc / 16.0;\n}\n";
-        let r = analyze(code, &[]).expect("analyze").report;
+        let r = analyze(code, &[], false).expect("analyze").report;
         assert_eq!((r.frame_reads, r.iterations, r.tier), (16, 16, Tier::Medium));
     }
 
     #[test]
     fn nested_loops_multiply_and_called_functions_are_unfolded() {
         let code = "fn tap(uv: vec2<f32>) -> vec4<f32> { return frame(uv) + frame(uv * 0.5); }\nfn effect(uv: vec2<f32>) -> vec4<f32> {\n    var acc = vec4<f32>(0.0);\n    for (var y = 0u; y <= 7u; y += 1u) {\n        for (var x = 8; x > 0; x--) {\n            acc += tap(uv);\n        }\n    }\n    return acc;\n}\n";
-        let r = analyze(code, &[]).expect("analyze").report;
+        let r = analyze(code, &[], false).expect("analyze").report;
         assert_eq!(r.frame_reads, 8 * 8 * 2);
         assert_eq!(r.iterations, 8 * (8 + 1));
         assert_eq!(r.tier, Tier::Heavy);
@@ -1156,7 +1552,7 @@ mod tests {
     #[test]
     fn a_branch_counts_for_the_dearer_side() {
         let code = "fn effect(uv: vec2<f32>) -> vec4<f32> {\n    if (uv.x > 0.5) { return frame(uv) + frame(uv) + frame(uv); }\n    return frame(uv);\n}\n";
-        assert_eq!(analyze(code, &[]).unwrap().report.frame_reads, 4, "branche chère + suite");
+        assert_eq!(analyze(code, &[], false).unwrap().report.frame_reads, 4, "branche chère + suite");
     }
 
     #[test]
@@ -1169,7 +1565,7 @@ mod tests {
             ("fn effect(uv: vec2<f32>) -> vec4<f32> {\n    for (var i = 0; i < 4; i--) {}\n    return frame(uv);\n}\n", 2),
         ];
         for (code, line) in refused {
-            let err = analyze(code, &[]).err().unwrap_or_else(|| panic!("accepted: {code}"));
+            let err = analyze(code, &[], false).err().unwrap_or_else(|| panic!("accepted: {code}"));
             assert!(err.contains(&format!("line {line}")) && err.contains("for (var i = 0"), "{err}");
         }
     }
@@ -1181,7 +1577,7 @@ mod tests {
     fn the_counter_starts_from_its_value_at_the_loop() {
         let wrap = |body: &str| format!("fn effect(uv: vec2<f32>) -> vec4<f32> {{\n    var i = 0;\n{body}\n    return frame(uv);\n}}\n");
         let reused = wrap("    i = 2;\n    for (; i < 6; i++) {}");
-        assert_eq!(analyze(&reused, &[]).expect("analyze").report.iterations, 4);
+        assert_eq!(analyze(&reused, &[], false).expect("analyze").report.iterations, 4);
         let refused = [
             // Écrit après la boucle : si son bloc se répète, la valeur d'entrée n'est plus 0.
             wrap("    for (; i < 4; i++) {}\n    i = -100000;"),
@@ -1191,7 +1587,7 @@ mod tests {
             wrap("    for (; i < 4; i++) { }\n    for (; i < 8; i++) { }"),
         ];
         for code in refused {
-            let err = analyze(&code, &[]).err().unwrap_or_else(|| panic!("accepted: {code}"));
+            let err = analyze(&code, &[], false).err().unwrap_or_else(|| panic!("accepted: {code}"));
             assert!(err.contains("writes its counter outside its header"), "{err}");
         }
     }
@@ -1199,13 +1595,13 @@ mod tests {
     #[test]
     fn a_module_constant_is_a_literal_bound() {
         let code = "const TAPS = 12;\nfn effect(uv: vec2<f32>) -> vec4<f32> {\n    var acc = vec4<f32>(0.0);\n    for (var i = 0; i < TAPS; i += 3) { acc += frame(uv); }\n    return acc;\n}\n";
-        assert_eq!(analyze(code, &[]).expect("analyze").report.iterations, 4);
+        assert_eq!(analyze(code, &[], false).expect("analyze").report.iterations, 4);
     }
 
     #[test]
     fn the_safety_ceiling_refuses_runaway_work() {
         let code = "fn effect(uv: vec2<f32>) -> vec4<f32> {\n    var a = 0.0;\n    for (var i = 0; i < 100; i++) { for (var j = 0; j < 100; j++) { a += 1.0; } }\n    return frame(uv) * a;\n}\n";
-        let err = analyze(code, &[]).err().expect("must fail");
+        let err = analyze(code, &[], false).err().expect("must fail");
         assert!(err.contains("10100") && err.contains("4096"), "{err}");
     }
 
@@ -1227,7 +1623,7 @@ mod tests {
     #[test]
     fn the_ripple_of_the_spec_is_light() {
         let (code, params) = spec_ripple();
-        let r = analyze(code, &params).expect("l'exemple de la spec compile").report;
+        let r = analyze(code, &params, false).expect("l'exemple de la spec compile").report;
         assert_eq!((r.frame_reads, r.tier), (1, Tier::Light));
     }
 
@@ -1236,8 +1632,19 @@ mod tests {
     #[test]
     fn the_examples_of_the_mcp_contract_compile() {
         let [(ripple, ripple_params), (vignette, vignette_params)] = mcp_examples();
-        assert_eq!(analyze(&ripple, &ripple_params).expect("ripple").report.tier, Tier::Light);
-        assert_eq!(analyze(&vignette, &vignette_params).expect("vignette").report.tier, Tier::Light);
+        assert_eq!(analyze(&ripple, &ripple_params, false).expect("ripple").report.tier, Tier::Light);
+        assert_eq!(analyze(&vignette, &vignette_params, false).expect("vignette").report.tier, Tier::Light);
+    }
+
+    /// L'exemple de la section « An image » de la même ressource : il compile pour un effet qui
+    /// porte une image, et lit la frame et l'image une fois chacune.
+    #[test]
+    fn the_image_example_of_the_mcp_contract_compiles() {
+        let src = include_str!("../../../electron/mcp/effects-contract.ts");
+        let section = src.split("## An image").nth(1).and_then(|s| s.split("## Rules").next()).expect("la section");
+        let code = section.lines().filter_map(|l| l.strip_prefix("    ")).collect::<Vec<_>>().join("\n");
+        let report = analyze(&code, &[decl("opacity", ShaderParamType::Number)], true).expect("l'exemple").report;
+        assert_eq!(report.frame_reads, 2);
     }
 
     /// Les deux exemples de la ressource MCP (`electron/mcp/effects-contract.ts`), le ripple et la
@@ -1342,12 +1749,12 @@ mod tests {
     #[cfg(windows)]
     #[test]
     fn fxc_compiles_both_stages() {
-        let c = compile_dxbc(VIGNETTE, &[decl("strength", ShaderParamType::Number)]).expect("compile");
+        let c = compile_dxbc(VIGNETTE, &[decl("strength", ShaderParamType::Number)], false).expect("compile");
         assert!(!c.vs.is_empty() && !c.ps.is_empty());
         // `fx_footage` en t4, le registre que `compositor_windows::apply_shader_effect` lie.
-        let hlsl = to_hlsl(&analyze(LOUPE, &[]).expect("analyze")).expect("translate");
+        let hlsl = to_hlsl(&analyze(LOUPE, &[], false).expect("analyze")).expect("translate");
         assert!(hlsl.contains("register(t4)"), "footage() hors de t4 :\n{hlsl}");
-        compile_dxbc(LOUPE, &[]).expect("compile");
+        compile_dxbc(LOUPE, &[], false).expect("compile");
     }
 
     /// Les bindings que `compositor_macos` lie sont ceux du MSL : la texture en 0, `ctx` et
@@ -1355,14 +1762,14 @@ mod tests {
     #[cfg(target_os = "macos")]
     #[test]
     fn a_valid_effect_becomes_msl_with_the_bindings_metal_binds() {
-        let parsed = analyze(VIGNETTE, &[decl("strength", ShaderParamType::Number)]).expect("analyze");
+        let parsed = analyze(VIGNETTE, &[decl("strength", ShaderParamType::Number)], false).expect("analyze");
         let msl = to_msl(&parsed).expect("translate");
         assert!(msl.source.contains(&msl.vs) && msl.source.contains(&msl.fs));
         for binding in ["[[texture(0)]]", "[[buffer(2)]]", "[[buffer(3)]]", "constexpr metal::sampler"] {
             assert!(msl.source.contains(binding), "{binding} missing:\n{}", msl.source);
         }
         assert!(!msl.source.contains("fake"), "binding inventé :\n{}", msl.source);
-        let loupe = to_msl(&analyze(LOUPE, &[]).expect("analyze")).expect("translate");
+        let loupe = to_msl(&analyze(LOUPE, &[], false).expect("analyze")).expect("translate");
         assert!(loupe.source.contains("[[texture(1)]]"), "footage() hors de texture(1) :\n{}", loupe.source);
     }
 
@@ -1377,9 +1784,9 @@ mod tests {
             return;
         };
         let (ripple, ripple_params) = spec_ripple();
-        compile_metal(&device, ripple, &ripple_params).expect("le ripple de la spec");
+        compile_metal(&device, ripple, &ripple_params, false).expect("le ripple de la spec");
         for (code, params) in mcp_examples() {
-            compile_metal(&device, &code, &params).expect("un exemple de la ressource MCP");
+            compile_metal(&device, &code, &params, false).expect("un exemple de la ressource MCP");
         }
         let every_type = [
             decl("a", ShaderParamType::Number),
@@ -1388,7 +1795,7 @@ mod tests {
             decl("at", ShaderParamType::Point),
         ];
         let code = "fn effect(uv: vec2<f32>) -> vec4<f32> {\n    let n = fx_hash(vec2<u32>(uv * ctx.resolution));\n    let d = distance(uv, params.at) * ctx.aspect + fx_px(4.0) + n * 0.0;\n    return mix(frame(uv), params.tint, params.on * params.a * ctx.clicks[0].w * d);\n}\n";
-        compile_metal(&device, code, &every_type).expect("chaque type de paramètre");
-        check_for_agent(VIGNETTE, &[decl("strength", ShaderParamType::Number)]).expect("check_for_agent");
+        compile_metal(&device, code, &every_type, false).expect("chaque type de paramètre");
+        check_for_agent(VIGNETTE, &[decl("strength", ShaderParamType::Number)], false).expect("check_for_agent");
     }
 }

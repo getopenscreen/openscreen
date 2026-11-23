@@ -1,6 +1,7 @@
 {
 	"actions": {
 		"cancel": "取消",
+		"tryAgain": "重試",
 		"save": "儲存",
 		"delete": "刪除",
 		"close": "關閉",
@@ -58,6 +59,9 @@
 		"blockedLocation": "更新前請將 OpenScreen 移至「應用程式」資料夾。",
 		"failed": "無法檢查更新。",
 		"downloadFailed": "無法下載更新。"
+	},
+	"usagePing": {
+		"notSaved": "OpenScreen 無法儲存此選擇，因此維持不變。"
 	},
 	"units": {
 		"pixelsPerSecond": "{{value}} 像素/秒",

@@ -37,7 +37,12 @@ import type { ToolExecutionStep } from "../../../src/lib/ai-edition/chatExecutio
 import { AUDIO_FADE_MAX_MS } from "../../../src/lib/ai-edition/document/audioTracks";
 import { VOCABULARY_MAX_CHARS } from "../../../src/lib/ai-edition/document/transcript";
 import type { AxcutDocument } from "../../../src/lib/ai-edition/schema";
-import type { ShaderEffectChecker } from "../../../src/lib/ai-edition/shaderEffects";
+import type {
+	ShaderEffectChecker,
+	ShaderEffectImageStore,
+	ShaderEffectImageStored,
+} from "../../../src/lib/ai-edition/shaderEffects";
+import type { StylePreset } from "../../../src/lib/ai-edition/stylePresets";
 import { collectAutoZoomSuggestionsForDocument } from "../../../src/lib/ai-edition/timeline/apply-auto-zooms";
 // ponytail: the legend is DERIVED from the depth→scale table, not retyped. Both
 // tool descriptions used to assert "depth 1–6 maps to 1.0×–3.5×" — a formula
@@ -49,6 +54,7 @@ import {
 	ZOOM_DEPTH_LEGEND,
 } from "../../../src/lib/ai-edition/timeline/zoom-scale";
 import { ZOOM_TRANSITION_LEGEND } from "../../../src/lib/ai-edition/timeline/zoom-transitions";
+import { TEXT_FONT_FAMILIES } from "../../../src/lib/textFonts";
 import type { AgentTurnUsage, SegmentationSupport } from "../../../src/native/contracts";
 import {
 	AGENT_EDITS_SETTING,
@@ -66,6 +72,7 @@ import {
 	addZoomsArgs,
 	type CursorTelemetryLoad,
 	duplicateClipArgs,
+	effectImageToStore,
 	executeAgentTool,
 	getCursorTrackArgs,
 	getEffectArgs,
@@ -109,7 +116,11 @@ import {
 	executionText,
 	toolExecutionStep,
 } from "../chat-execution";
-import { setEditorSettingsArgs } from "../editor-settings-tool";
+import {
+	applyStylePresetArgs,
+	listStylePresetsArgs,
+	setEditorSettingsArgs,
+} from "../editor-settings-tool";
 import { abortable } from "./cancellation";
 import {
 	createOpenScreenChatModel,
@@ -252,11 +263,11 @@ export const TOOL_DESCRIPTIONS: Record<string, string> = {
 	addTrims: `Add MANY trim ranges in one call: \`ranges\` is a list, each entry taking exactly the fields addTrim takes. Use this whenever you have more than one cut to make — 'remove the silences' on a half-hour recording is hundreds of cuts, and sending them one at a time costs one round trip each. Each range stands or falls ALONE: one that cannot be placed is refused by itself and listed in \`refused\` with its index and the reason, while every other range is still applied. Nothing is rolled back, so a single bad bound never costs you the rest. The result leads with requested / appliedCount / refusedCount so you can see a partial outcome without re-reading the document — report what was refused rather than claiming the whole list landed. ${ZOOM_TRANSITIONS_NOTE} Each applied entry carries the same \`cutTransitions\` warning addTrim reports.`,
 	setTrim: `Move or resize an existing trim range by id. Times are source-time seconds. The cut follows to whichever clip the new range lands in, when that clip is unambiguous. ${ZOOM_TRANSITIONS_NOTE} ${CUT_TRANSITIONS_RESULT}`,
 	setClipRange:
-		"Set a clip's in/out points (source-time seconds) to shorten its head or tail — distinct from a trim (which cuts a span inside the clip) — and/or its crop. Only the fields you pass are changed. All clips are re-laid back-to-back afterwards, so downstream clips shift automatically. Change the range ONLY when the user explicitly asks to shorten or extend a clip. Do NOT use this for 'remove silences' or 'cut pauses' — for those, use addTrim. cropRegion is the part of the source frame the clip shows, {x, y, width, height} in 0–1 fractions of it, per clip as in the editor's Edit clip; null shows the whole frame again. getCurrentDocument reports it on the clip, absent when the clip shows the whole frame. Two neighbouring clips of the same asset whose source ranges meet and whose crops match are one clip: the result says joinedIntoNeighbour when an edit made them so.",
+		"Set a clip's in/out points (source-time seconds) to shorten its head or tail — distinct from a trim (which cuts a span inside the clip) — and/or its crop and rotation. Only the fields you pass are changed. All clips are re-laid back-to-back afterwards, so downstream clips shift automatically. Change the range ONLY when the user explicitly asks to shorten or extend a clip. Do NOT use this for 'remove silences' or 'cut pauses' — for those, use addTrim. cropRegion is the part of the source frame the clip shows, {x, y, width, height} in 0–1 fractions of it, per clip as in the editor's Edit clip; null shows the whole frame again. getCurrentDocument reports it on the clip, absent when the clip shows the whole frame. rotation 180 turns the clip's picture upside down (a camera mounted the wrong way up), 0 turns it upright again, as the Edit clip dialog's rotation does: the clip's zoom focus and its privacy blurs follow the turned picture, text and arrows on the frame do not move, and cropRegion stays in the recording's own unturned coordinates. getCurrentDocument reports rotation on the clip, absent when upright. Two neighbouring clips of the same asset whose source ranges meet and whose crops and rotations match are one clip: the result says joinedIntoNeighbour when an edit made them so. A clip of an imported image (a still) can be shortened, never made longer than the holdSec it was imported with: import the image again for a longer one.",
 	moveClip:
 		"Reorder a placed clip: move `clipId` so it plays just before `beforeClipId` (pass null, or omit it, to move it last). Ids come from getCurrentDocument, where each clip carries its `index` and its label in `reason`. This preserves every clip id, every source range, every trim, and the zooms / speed regions / annotations anchored to each clip. This is the tool for 'swap these clips', 'put X first' and 'change the clip order' — replaceTimeline cannot reorder anything.",
 	insertClip:
-		"Place a clip of a video asset on the timeline, just before `beforeClipId` (null, or omitted, places it last): another take, or footage imported in the editor. Any video asset of getCurrentDocument works, the primary one too. sourceStartSec/sourceEndSec pick the stretch of the asset in its source seconds, the whole asset by default. Clips stay back to back, so the clips after it shift. Its media continuing the clip before it makes the two one clip (joinedIntoNeighbour). An audio asset is not footage: use addAudio. Nothing here imports a file from disk.",
+		"Place a clip of a video asset on the timeline, just before `beforeClipId` (null, or omitted, places it last): another take, or footage imported in the editor. Any video asset of getCurrentDocument works, the primary one too. sourceStartSec/sourceEndSec pick the stretch of the asset in its source seconds, the whole asset by default. Clips stay back to back, so the clips after it shift. Its media continuing the clip before it makes the two one clip (joinedIntoNeighbour). An audio asset is not footage: use addAudio. An imported image (a still) is a video asset too: by default its clip shows the image for its whole holdSec. Nothing here imports a file from disk.",
 	duplicateClip:
 		"Copy a clip, placed right after it: the same footage, crop and source range, with its own copy of the clip's trims and of the zooms, speed regions, annotations and camera-fullscreen regions on it. Edits to one no longer touch the other. Returns the copy's clipId; moveClip puts it somewhere else.",
 	replaceTimeline:
@@ -270,20 +281,23 @@ export const TOOL_DESCRIPTIONS: Record<string, string> = {
 		"Add a speed-change region over a span of the edited timeline (virtual seconds). speed > 1 fast-forwards, < 1 slows down, from 0.25× to 16× (default 1.5×). Use to speed through slow stretches without cutting them.",
 	setSpeed:
 		"Move, resize, or change the multiplier of an existing speed region by id (virtual-timeline seconds). Only the fields you pass are changed.",
-	addAnnotation:
-		"Add an annotation over a span of the edited timeline (virtual seconds). type picks what it is: 'text' (the default) for callouts, labels and titles; 'figure' for an arrow pointing at something; 'blur' for a privacy mask that blurs or pixelates what is under it, the way to hide an email address, a token, a password field or any private detail the recording shows. Image annotations are not available here: they need a file, added in the editor. x/y place the centre, 0–100 percent of the annotation's box (default the centre). Text and arrows sit on the output frame, the whole picture padding included, as the editor places them: zooms and padding never move them. A blur sits on the recording's picture instead, so x/y/width/height are percent of the recording and it stays on what it hides when padding or a zoom moves the picture. A text box is sized to its words and kept inside the frame; it is drawn on a dark plate by default, and fontSize, color, background, bold and animation set its look. An arrow or a blur takes width/height (default 30 × 20) and its own data: figureData {arrowDirection, color, strokeWidth} for an arrow, blurData {type 'blur' or 'mosaic', shape 'rectangle' or 'oval', color, intensity, blockSize} for a blur. The result reads the annotation back as getCurrentDocument reports it.",
+	addAnnotation: `Add an annotation over a span of the edited timeline (virtual seconds). type picks what it is: 'text' (the default) for callouts, labels and titles; 'figure' for an arrow pointing at something; 'blur' for a privacy mask that blurs or pixelates what is under it, the way to hide an email address, a token, a password field or any private detail the recording shows. Image annotations are not available here: they need a file, added in the editor. x/y place the centre, 0–100 percent of the annotation's box (default the centre). Text and arrows sit on the output frame, the whole picture padding included, as the editor places them: zooms and padding never move them. A blur sits on the recording's picture instead, so x/y/width/height are percent of the recording and it stays on what it hides when padding or a zoom moves the picture. A text box is sized to its words and kept inside the frame; it is drawn on a dark plate by default, and fontSize, fontFamily (${TEXT_FONT_FAMILIES.join(", ")}; Inter by default), color, background, bold and animation set its look. An arrow or a blur takes width/height (default 30 × 20) and its own data: figureData {arrowDirection, color, strokeWidth} for an arrow, blurData {type 'blur' or 'mosaic', shape 'rectangle' or 'oval', color, intensity, blockSize} for a blur. The result reads the annotation back as getCurrentDocument reports it.`,
 	setAnnotation:
-		"Change an existing annotation by id: its span (virtual-timeline seconds), its type, its centre (x/y, percent of its box), its size (width/height, arrow and blur only), its text and look (text only: fontSize, color, background, bold, animation), or its figureData / blurData, of which only the keys you pass change. Only the fields you pass are changed. A type change converts it as the editor's type switch does: it stays where it is on screen, a text turned into an arrow or a blur takes the default box, and the text is kept to come back to. A text box is refitted to its text around its centre. Arguments that belong to another kind (width on a text, blurData on an arrow) are refused. A new span that would run into another annotation is refused, naming it.",
+		"Change an existing annotation by id: its span (virtual-timeline seconds), its type, its centre (x/y, percent of its box), its size (width/height, arrow and blur only), its text and look (text only: fontSize, fontFamily, color, background, bold, animation), or its figureData / blurData, of which only the keys you pass change. Only the fields you pass are changed. A type change converts it as the editor's type switch does: it stays where it is on screen, a text turned into an arrow or a blur takes the default box, and the text is kept to come back to. A text box is refitted to its text around its centre. Arguments that belong to another kind (width on a text, blurData on an arrow) are refused. A new span that would run into another annotation is refused, naming it.",
 	setAspectRatio:
 		"Set the shape of the exported video: 16:9 for X, YouTube or a slide, 9:16 for a vertical story or short, 1:1 or 4:5 for a square feed, auto to follow the recording, or one of the clips' own shapes (getCurrentDocument's settingsContext.originalAspectRatios). Annotations on the frame keep their place and shape. The same as setEditorSettings with aspectRatio alone.",
 	setEditorSettings:
 		'Change the project\'s look: pass only the settings to change, named as getCurrentDocument returns them under `settings`. Background: wallpaper (a bundled path from settingsContext.bundledWallpapers, a CSS colour or gradient, or a base64 PNG/JPEG data URL; never a file path or web URL; an embedded image reads back as a marker, leave the key out to keep it), wallpaperMotion (moves a gradient or image only), backgroundBlur 0–1. Frame: aspectRatio ("auto", a preset, or an originalAspectRatios token; a fixed format picked for the first time fills the frame with a window that follows the cursor, which formatFollowCursor turns off when settingsContext.formatFill is "available"), padding 0–100 %, borderRadius 0–64 px, shadowIntensity 0–1, frame (none, window, laptop, phone, monitor) and frameTheme (light, dark), motionBlurAmount 0–1, depthOfField (blurs 3D-tilted zooms only). Camera: webcamLayoutPreset, webcamMirrored, webcamReactiveZoom (shrinks on zoom), webcamMaskShape (square or rectangle, the camera\'s own proportions; an untouched roundness follows it), webcamRoundness 0–1, webcamSizePreset 15–60, webcamAnchor (a corner or an edge middle), webcamCropRegion (the framing: a square share of the picture, width = height ≥ 1/3) and webcamCropPan (where that window sits, 0–1 per axis, 0.5 centred), webcamBackgroundMode (none, transparent, blur, custom: needs settingsContext.cameraSegmentation ready), webcamBlurIntensity 0–1, webcamWallpaper (as wallpaper). Cursor, under `cursor`: show, autoHide, theme (settingsContext.cursorThemes), asArrow (the recorded cursor kinds drawn as the arrow instead), size 1.5–6, smoothing 0–1, motionBlur 0–1, clickBounce 0–2, clickImpact, clickSound (only heard when the take recorded clicks) and clickSoundGainDb −24–0, model3d. Also autoFocusAll (every zoom follows the cursor), audioGainDb −12–12 dB, the master volume, and recordingMuted (silences the recording\'s own sound in the preview and the export; added audio tracks still play). A value out of range or a key not listed is refused with the reason, and nothing changes. The result lists what was applied, including what the editor changes with it, and `inactive` for any of those the current state leaves without effect.',
+	listStylePresets:
+		"List the style presets the editor's Style presets menu offers: the built-in OpenScreen look first, then the user's saved presets. Each comes with its id, name, builtIn, forNewProjects when new projects start from it, `look` (the settings it applies, in the editor's settings shape, embedded images elided) and `active`, true for the one preset whose look is the project's look now (at most one). Takes no arguments. `warning` says when the saved presets could not be read from here and only the built-in one is listed.",
+	applyStylePreset:
+		"Apply a style preset by its id from listStylePresets, as the editor's Style presets menu applies it: the whole look in one edit (background, frame, padding, corners, shadow, blur, output format, camera shape and style, cursor look). A preset is the project's look, never its content: clips, cuts, zooms, annotations, captions and audio are untouched. The result gives the project's settings after it, in getCurrentDocument's `settings` shape, and `inactive` for any setting the current state leaves without effect. setEditorSettings changes single settings afterwards.",
 	addEffect:
-		"Write a visual effect as a shader and pose it over a span of the edited timeline (virtual seconds), or pose one of this project's effects again (effectId). Use it for a look the settings do not offer. `effect.code` is WGSL that defines `fn effect(uv: vec2<f32>) -> vec4<f32>`, called for every pixel; uv is 0..1 with (0,0) top-left. Available inside it: `frame(uv)` samples the composed picture; `footage(p)` samples the recording itself at its own resolution at point p of its surface (the space of `fx_to_footage`), transparent outside 0..1, with no cursor or webcam on it: read it for anything that magnifies, frame() for the rest; `params.<name>` reads each declared parameter; `ctx.time` is programme seconds; `ctx.region.x` goes 0 to 1 across the region (y its length in s, z seconds since it began); `ctx.resolution` and `ctx.aspect`; `ctx.cursor` (xy in uv, z = 1 when on screen); `ctx.clicks[0..3]`, the last four clicks, newest first (xy in uv where it happened, z seconds since, w = 1 when the slot holds one); `ctx.footage` and `ctx.camera`, the recording's and the webcam's rects (x, y, w, h in uv; camera zero-sized when absent) — all already placed through zoom and layout; `fx_to_footage(uv)` and `fx_from_footage(p)` map between output uv and the recording's own surface (0..1 across the recording) through the warp the compositor draws it with, zoom, layout and 3D camera included, and `ctx.footage_aspect` is its width over height: the effect works in whichever of the two spaces fits it; `fx_px(n)`, n pixels of a 1080p frame as a fraction of the height; `fx_hash(vec2<u32>)`, a random number in [0,1) identical on every GPU. Rules: the effect is a pure function of those inputs (no state between frames), so the preview and the export show the same pixels; reason in uv or fx_px, never raw pixels; every loop is a `for` with literal bounds (`for (var i = 0; i < 16; i++)`), at most 4096 iterations per pixel — the one hard rule. `params` declares up to 8 (recommended) parameters, each `{type: number|toggle|color|point, name, label, default}` (number also `min`, `max`); declare one only when moving it visibly changes the effect over its whole range. `target`: `image` (default: the picture under the annotations and captions), `text` (the annotations and captions alone, premultiplied alpha), `both` (everything); use text or both only when asked. One effect runs at a time: to combine two looks, write them in one shader. The result gives the cost tier, in frame() and footage() reads per pixel, with what a 1080p frame pays on a fast discrete GPU (RTX 4070 Ti) and on an integrated one (Apple M1): light ≤ 8, up to 0.06 ms and 1.3 ms; medium ≤ 32, 0.14 ms and 4.3 ms; heavy ≤ 128, 0.54 ms and 16 ms; very heavy beyond, 2 ms and 49 ms at 512 reads. It also gives a recommendation when the tier runs long: light anywhere, medium up to a minute, heavy up to 10 s, very heavy a few seconds. It is a recommendation, never a refusal. Code that does not compile is refused with the compiler's error at the line of your code: fix it and call again. Check the result with getFrames.",
+		"Write a visual effect as a shader and pose it over a span of the edited timeline (virtual seconds), or pose one of this project's effects again (effectId). Use it for a look the settings do not offer. `effect.code` is WGSL that defines `fn effect(uv: vec2<f32>) -> vec4<f32>`, called for every pixel; uv is 0..1 with (0,0) top-left. Available inside it: `frame(uv)` samples the composed picture; `footage(p)` samples the recording itself at its own resolution at point p of its surface (the space of `fx_to_footage`), transparent outside 0..1, with no cursor or webcam on it: read it for anything that magnifies, frame() for the rest; `image(p)` samples the effect's own image, when it was given one as `effect.image` (the absolute path of a PNG or JPEG, a logo or a texture, of which OpenScreen keeps a copy): p is the image's own uv, (0,0) its top-left and (1,1) its bottom-right, straight alpha, transparent outside 0..1, and `ctx.image` holds its size in pixels (xy), its width over height (z) and 1 when there is one (w); `params.<name>` reads each declared parameter; `ctx.time` is programme seconds; `ctx.region.x` goes 0 to 1 across the region (y its length in s, z seconds since it began); `ctx.resolution` and `ctx.aspect`; `ctx.cursor` (xy in uv, z = 1 when on screen); `ctx.clicks[0..3]`, the last four clicks, newest first (xy in uv where it happened, z seconds since, w = 1 when the slot holds one); `ctx.footage` and `ctx.camera`, the recording's and the webcam's rects (x, y, w, h in uv; camera zero-sized when absent) — all already placed through zoom and layout; `fx_to_footage(uv)` and `fx_from_footage(p)` map between output uv and the recording's own surface (0..1 across the recording) through the warp the compositor draws it with, zoom, layout and 3D camera included, and `ctx.footage_aspect` is its width over height: the effect works in whichever of the two spaces fits it; `fx_px(n)`, n pixels of a 1080p frame as a fraction of the height; `fx_hash(vec2<u32>)`, a random number in [0,1) identical on every GPU. Rules: the effect is a pure function of those inputs (no state between frames), so the preview and the export show the same pixels; reason in uv or fx_px, never raw pixels; every loop is a `for` with literal bounds (`for (var i = 0; i < 16; i++)`), at most 4096 iterations per pixel — the one hard rule. `params` declares up to 8 (recommended) parameters, each `{type: number|toggle|color|point, name, label, default}` (number also `min`, `max`); declare one only when moving it visibly changes the effect over its whole range. `target`: `image` (default: the picture under the annotations and captions), `text` (the annotations and captions alone, premultiplied alpha), `both` (everything); use text or both only when asked. One effect runs at a time: to combine two looks, write them in one shader. The result gives the cost tier, in frame() and footage() reads per pixel, with what a 1080p frame pays on a fast discrete GPU (RTX 4070 Ti) and on an integrated one (Apple M1): light ≤ 8, up to 0.06 ms and 1.3 ms; medium ≤ 32, 0.14 ms and 4.3 ms; heavy ≤ 128, 0.54 ms and 16 ms; very heavy beyond, 2 ms and 49 ms at 512 reads. It also gives a recommendation when the tier runs long: light anywhere, medium up to a minute, heavy up to 10 s, very heavy a few seconds. It is a recommendation, never a refusal. Code that does not compile is refused with the compiler's error at the line of your code: fix it and call again. When a parameter's motion is a timing decision (a fade in, a pulse on a beat), animate it with `animate: { <param>: [{ atSec, value, ease? }] }` (atSec from the region's start; ease linear, hold, ease-in, ease-out, ease-in-out, a cubic-bezier [x1, y1, x2, y2] or { spring: { bounce } }) instead of writing the timing into the shader: it stays tunable without new code. Check the result with getFrames.",
 	setEffect:
-		"Move, resize or re-tune an effect region by id (virtual seconds): its span, its parameter `values`, or its `target`. Only the fields you pass change; a value equal to the default is dropped. Refused if the new span runs into another effect: one runs at a time.",
+		"Move, resize or re-tune an effect region by id (virtual seconds): its span, its parameter `values`, or its `target`. Only the fields you pass change; a value equal to the default is dropped. `animate` sets a parameter's keyframes `[{ atSec, value, ease? }]`, so its timing stays tunable without rewriting the shader: each parameter you pass replaces its whole list, and an empty list removes it. Refused if the new span runs into another effect: one runs at a time.",
 	setEffectDefinition:
-		"Change an effect itself by effectId — its name, description, WGSL `code` or `params` — and with it every region that uses it. New code is compiled first and refused with the compiler's error if it does not compile. A removed parameter's values drop; the bounds re-clamp the others. Read the current code with getEffect before rewriting it.",
+		"Change an effect itself by effectId — its name, description, WGSL `code`, `params` or `image` (the absolute path of a PNG or JPEG to read with image() from now on, or null to take the image away) — and with it every region that uses it. New code is compiled first and refused with the compiler's error if it does not compile; so is the code in place when the image it reads is taken away. A removed parameter's values and keyframes drop, and so do the keyframes of a re-typed one; the bounds re-clamp the others. Read the current code with getEffect before rewriting it.",
 	getEffect:
 		"Read one effect of the project in full: its WGSL code, parameters, description, cost and the regions that use it. getCurrentDocument lists effects without their code.",
 	addAudio: `Lay an ALREADY-IMPORTED audio file over the recording across a span of the edited timeline (virtual seconds): a voiceover, or a music bed. assetId must name an asset whose kind is 'audio' — getCurrentDocument lists them. If there is none, a file has to be imported first (importMedia, where it is offered): never guess an id. Omit endSec to play the whole file from offsetSec. kind picks the lane ('voiceover' or 'music'). offsetSec is where in the FILE playback starts, gainDb its level (0 unchanged, negative ducks it), fadeInMs / fadeOutMs its fades (0 to ${AUDIO_FADE_MAX_MS} ms, default none; a track too short for both shares its span between them). A voiceover-lane track is also what gets transcribed, so the lane is not only cosmetic.`,
@@ -347,7 +361,17 @@ export interface ToolRuntime {
 	cameraSegmentation?: () => SegmentationSupport;
 	/** Asks the compositor to check an effect's WGSL. */
 	checkShaderEffect?: ShaderEffectChecker;
+	/** Keeps a copy of the image file an effect reads (`storeEffectImage`). */
+	storeEffectImage?: ShaderEffectImageStore;
+	/** Reads the user's saved style presets (`StylePresetService.list`). */
+	stylePresets?: () => Promise<StylePreset[]>;
 }
+
+/** The tools that read the user's saved style presets before the executor runs. */
+const TOOLS_READING_STYLE_PRESETS: ReadonlySet<string> = new Set([
+	"listStylePresets",
+	"applyStylePreset",
+]);
 
 /**
  * The tools whose RESULT depends on the recorded pointer track, so the async
@@ -490,8 +514,32 @@ export async function runDocumentTool(
 		effectSource && runtime.checkShaderEffect
 			? shaderEffectCheckLookup(
 					effectSource,
-					await runtime.checkShaderEffect(effectSource.code, effectSource.params),
+					await runtime.checkShaderEffect(
+						effectSource.code,
+						effectSource.params,
+						effectSource.image,
+					),
 				)
+			: undefined;
+	// The image an effect reads is copied into the project's own folder: file work, done here
+	// for the same reason. A file that is no image is the executor's refusal to word.
+	const imageSource = editsAllowed ? effectImageToStore(name, args) : null;
+	const effectImage: ShaderEffectImageStored | undefined =
+		imageSource !== null && runtime.storeEffectImage
+			? await runtime.storeEffectImage(imageSource).then(
+					(image) => ({ source: imageSource, image }),
+					(error) => ({
+						source: imageSource,
+						error: error instanceof Error ? error.message : String(error),
+					}),
+				)
+			: undefined;
+	const stylePresets =
+		TOOLS_READING_STYLE_PRESETS.has(name) && runtime.stylePresets
+			? await runtime.stylePresets().catch((error) => {
+					console.warn("[agent] style presets unavailable:", error);
+					return undefined;
+				})
 			: undefined;
 	// Async work above is read-only. An abort discards its result before the
 	// synchronous executor or document holder can commit anything.
@@ -501,7 +549,9 @@ export async function runDocumentTool(
 		cursorTelemetry: { availableByAssetId: runtime.availableByAssetId, load },
 		cameraSegmentation: runtime.cameraSegmentation,
 		checkShaderEffect,
+		effectImage,
 		autoZooms,
+		stylePresets,
 	});
 }
 
@@ -625,6 +675,8 @@ export const TOOL_ARG_SCHEMAS: ReadonlyArray<readonly [string, z.ZodObject]> = [
 	["removeClip", removeClipArgs],
 	["setAspectRatio", setAspectRatioArgs],
 	["setEditorSettings", setEditorSettingsArgs],
+	["listStylePresets", listStylePresetsArgs],
+	["applyStylePreset", applyStylePresetArgs],
 	["getCaptions", getCaptionsArgs],
 	["setCaptionSettings", setCaptionSettingsArgs],
 	["getCaptionTranslationUnits", getCaptionTranslationUnitsArgs],
@@ -673,6 +725,10 @@ export interface InvokeArgs {
 	cameraSegmentation?: () => SegmentationSupport;
 	/** Injected the same way: the compositor's check of an effect's WGSL. */
 	checkShaderEffect?: ShaderEffectChecker;
+	/** Injected the same way: the copy kept of the image an effect reads. */
+	storeEffectImage?: ShaderEffectImageStore;
+	/** Injected the same way: the user's saved style presets. */
+	stylePresets?: () => Promise<StylePreset[]>;
 }
 
 /** One cheap probe per asset, run before the tools are built so the very first
@@ -775,6 +831,8 @@ export async function invokeOpenScreenAgent(args: InvokeArgs): Promise<InvokeRes
 				availableByAssetId,
 				cameraSegmentation: args.cameraSegmentation,
 				checkShaderEffect: args.checkShaderEffect,
+				storeEffectImage: args.storeEffectImage,
+				stylePresets: args.stylePresets,
 			},
 		);
 		const agent = createAgent({

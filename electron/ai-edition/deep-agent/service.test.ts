@@ -24,6 +24,8 @@ import {
 	createEmptyDocument,
 	documentSchema,
 } from "../../../src/lib/ai-edition/schema";
+import type { StylePreset } from "../../../src/lib/ai-edition/stylePresets";
+import { factoryStylePresetAppearance } from "../../../src/lib/ai-edition/stylePresetsEditor";
 import {
 	ZOOM_DEPTH_LEGEND,
 	ZOOM_DEPTH_SCALES,
@@ -115,6 +117,8 @@ const ARGS: Record<string, unknown> = {
 	removeClip: { clipId: "clip_1" },
 	setAspectRatio: { aspectRatio: "16:9" },
 	setEditorSettings: { padding: 30 },
+	listStylePresets: {},
+	applyStylePreset: { presetId: "openscreen-factory" },
 	getCaptions: {},
 	setCaptionSettings: { enabled: true, style: "bold" },
 	getCaptionTranslationUnits: { language: "fr" },
@@ -445,6 +449,7 @@ describe("one description of the tools, not two", () => {
 			"getTranscriptWords",
 			"getCursorTrack",
 			"getEffect",
+			"listStylePresets",
 			"getCaptions",
 			"getCaptionTranslationUnits",
 		]);
@@ -820,6 +825,51 @@ describe("addAutoZooms reads the clicks through the runtime's cursor reader", ()
 		const result = await runDocumentTool(fixtureDocument(), "addAutoZooms", {}, true, { cursor });
 		expect(result.ok).toBe(false);
 		expect(result.resultJson).toContain("could not be read");
+	});
+});
+
+describe("the style preset tools read the saved presets before the executor runs", () => {
+	const preset = (padding: number): StylePreset => ({
+		id: "Roomy",
+		name: "Roomy",
+		updatedAt: "2026-11-01T00:00:00.000Z",
+		appearance: { ...factoryStylePresetAppearance(), padding },
+	});
+
+	it("hands the executor the list the runtime reads, and only to those two tools", async () => {
+		let reads = 0;
+		const runtime = {
+			stylePresets: async () => {
+				reads += 1;
+				return [preset(40)];
+			},
+		};
+		const listed = await runDocumentTool(fixtureDocument(), "listStylePresets", {}, true, runtime);
+		expect(JSON.parse(listed.resultJson).presets.map((p: { id: string }) => p.id)).toEqual([
+			"openscreen-factory",
+			"Roomy",
+		]);
+		const applied = await runDocumentTool(
+			fixtureDocument(),
+			"applyStylePreset",
+			{ presetId: "Roomy" },
+			true,
+			runtime,
+		);
+		expect(applied.ok).toBe(true);
+		expect(JSON.parse(applied.resultJson).settings.padding).toBe(40);
+		await runDocumentTool(fixtureDocument(), "getCurrentDocument", {}, true, runtime);
+		expect(reads).toBe(2);
+	});
+
+	it("reports a folder that cannot be read rather than failing the call", async () => {
+		const result = await runDocumentTool(fixtureDocument(), "listStylePresets", {}, true, {
+			stylePresets: async () => {
+				throw new Error("EACCES");
+			},
+		});
+		expect(result.ok).toBe(true);
+		expect(JSON.parse(result.resultJson).warning).toContain("could not be read");
 	});
 });
 

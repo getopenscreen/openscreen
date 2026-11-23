@@ -13,6 +13,7 @@ describe("Wayland startup configuration", () => {
 		};
 		configureWaylandSupport(commandLine, env);
 		expect(commandLine.appendSwitch).toHaveBeenCalledWith("ozone-platform", "wayland");
+		expect(commandLine.appendSwitch).toHaveBeenCalledWith("force-device-scale-factor", "1");
 		expect(commandLine.appendSwitch).toHaveBeenCalledWith("disable-features", "Vulkan");
 	});
 
@@ -28,10 +29,24 @@ describe("Wayland startup configuration", () => {
 		configureWaylandSupport(commandLine, { XDG_SESSION_TYPE: "wayland" });
 		expect(switches.get("ozone-platform")).toBe(platform);
 		expect(commandLine.appendSwitch).not.toHaveBeenCalledWith("ozone-platform", expect.anything());
+		expect(switches.get("force-device-scale-factor")).toBe(platform === "x11" ? undefined : "1");
 		// Capture still goes through PipeWire under Xwayland: X11 cannot see Wayland windows.
 		expect(commandLine.appendSwitch).toHaveBeenCalledWith(
 			"enable-features",
 			"WaylandWindowDrag,WebRTCPipeWireCapturer",
+		);
+	});
+
+	it("preserves an explicit device scale factor in a Wayland session", () => {
+		const commandLine = {
+			appendSwitch: vi.fn(),
+			hasSwitch: (name: string) => name === "force-device-scale-factor",
+			getSwitchValue: (name: string) => (name === "force-device-scale-factor" ? "1.25" : ""),
+		};
+		configureWaylandSupport(commandLine, { XDG_SESSION_TYPE: "wayland" });
+		expect(commandLine.appendSwitch).not.toHaveBeenCalledWith(
+			"force-device-scale-factor",
+			expect.anything(),
 		);
 	});
 

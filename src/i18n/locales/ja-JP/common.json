@@ -1,6 +1,7 @@
 {
 	"actions": {
 		"cancel": "キャンセル",
+		"tryAgain": "再試行",
 		"save": "保存",
 		"delete": "削除",
 		"close": "閉じる",
@@ -58,6 +59,9 @@
 		"blockedLocation": "アップデートする前に OpenScreen をアプリケーションフォルダに移動してください。",
 		"failed": "アップデートを確認できませんでした。",
 		"downloadFailed": "アップデートをダウンロードできませんでした。"
+	},
+	"usagePing": {
+		"notSaved": "OpenScreen はこの選択を保存できなかったため、変更されていません。"
 	},
 	"units": {
 		"pixelsPerSecond": "{{value}} px/秒",

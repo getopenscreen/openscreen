@@ -118,6 +118,11 @@ export class CameraPreviewController {
 	}
 
 	configure(owner: WebContents, enabled: boolean, visible: boolean): void {
+		// The HUD configures on mount, camera on or off. With the camera off, do not open a
+		// second content-protected transparent window beside the HUD at launch: v2.3.0 did,
+		// and on macOS 15 the HUD then never painted (#1639). The macOS capture paths still
+		// reserve the window before they read exclusion IDs (ensureMacCameraPreviewWindow).
+		if (!enabled && !this.window) return;
 		const previewWindow = this.ensure(owner);
 		if (!previewWindow) return;
 		this.visible = enabled && visible;

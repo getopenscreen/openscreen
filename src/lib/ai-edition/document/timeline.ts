@@ -4,6 +4,7 @@
 // or a new document with updated clips.
 
 import { clampToBound } from "../../projectDefaults";
+import { type ClipRotation, clipRotation } from "../clipRotation";
 import type {
 	AxcutClip,
 	AxcutClipCropRegion,
@@ -340,6 +341,44 @@ export function projectRawTimelineSecToPlayback(
 	// Past every kept frame: programme end plus whatever raw time hangs off the end (identity when
 	// there are no clips at all). A value ≥ programme length just means the mixer skips the track.
 	return landed ?? outCursor + Math.max(0, rawSec - lastRawEnd);
+}
+
+/**
+ * Inverse of {@link projectRawTimelineSecToPlayback}: the raw ruler second that plays at output
+ * second `outSec`. A moment on a cut's edge lands on the kept side that follows it.
+ */
+export function projectPlaybackSecToRawTimeline(
+	clips: AxcutClip[],
+	trimRanges: AxcutTrimRange[],
+	outSec: number,
+	speedRegions: PlaybackSpeedRegion[] = [],
+): number {
+	const ordered = [...clips].sort((a, b) => a.timelineStartSec - b.timelineStartSec);
+	let outCursor = 0;
+	let lastRawEnd = 0;
+	for (const seg of keptRawSpans(ordered, trimRanges)) {
+		const segOut = outputDurationOfRawSpan(seg.startSec, seg.endSec, speedRegions);
+		if (outSec < outCursor + segOut) {
+			// Walk the constant-speed pieces the forward projection sums.
+			const edges = new Set<number>([seg.startSec, seg.endSec]);
+			for (const region of speedRegions) {
+				for (const edge of [region.startMs / 1000, region.endMs / 1000]) {
+					if (edge > seg.startSec && edge < seg.endSec) edges.add(edge);
+				}
+			}
+			const sorted = [...edges].sort((a, b) => a - b);
+			let left = Math.max(0, outSec - outCursor);
+			for (let i = 0; i < sorted.length - 1; i++) {
+				const pieceOut = outputDurationOfRawSpan(sorted[i], sorted[i + 1], speedRegions);
+				if (left < pieceOut) return sorted[i] + (left / pieceOut) * (sorted[i + 1] - sorted[i]);
+				left -= pieceOut;
+			}
+			return seg.endSec;
+		}
+		outCursor += segOut;
+		lastRawEnd = seg.endSec;
+	}
+	return lastRawEnd + Math.max(0, outSec - outCursor);
 }
 
 export function invertIntervals(intervals: Interval[], durationSec: number): Interval[] {
@@ -1145,6 +1184,68 @@ export function setClipCrop(
 			c.id === clipId ? { ...c, cropRegion: cropRegion ?? undefined } : c,
 		),
 	);
+}
+
+/**
+ * The single mutator for a clip's rotation, shared by the Edit clip dialog and the agent's
+ * `setClipRange`: `0` removes the field, `180` sets it. Turning the clip moves its content to
+ * the mirrored point, so the clip's own zoom focus and footage-space privacy blurs (freehand
+ * outline included) follow it; frame-space annotations, text and arrows do not turn. Clamped
+ * at 0 like `turnCropRegion`: a box flush against the far edge would turn to -5e-15.
+ *
+ * It does not relay or fold the clips: the caller follows it with `setClipSourceRange` or
+ * `setClipCrop`, which do, so a clip turned in the same edit that makes its media meet an
+ * upright neighbour is not swallowed by it. An unknown `clipId` is a no-op. Pure.
+ */
+export function setClipRotation(
+	document: AxcutDocument,
+	clipId: string,
+	rotation: ClipRotation,
+): AxcutDocument {
+	const current = document.timeline.clips.find((c) => c.id === clipId);
+	const turning = !!current && clipRotation(current) !== rotation;
+	return {
+		...document,
+		timeline: {
+			...document.timeline,
+			clips: document.timeline.clips.map((c) => {
+				if (c.id !== clipId) return c;
+				const { rotation: _old, ...rest } = c;
+				return rotation === 180 ? { ...rest, rotation: 180 as const } : rest;
+			}),
+		},
+		zoomRanges: turning
+			? document.zoomRanges.map((z) =>
+					z.clipId === clipId
+						? { ...z, focus: { ...z.focus, cx: 1 - z.focus.cx, cy: 1 - z.focus.cy } }
+						: z,
+				)
+			: document.zoomRanges,
+		annotations: turning
+			? document.annotations.map((a) =>
+					a.clipId === clipId && a.type === "blur" && a.space !== "frame"
+						? {
+								...a,
+								position: {
+									x: Math.max(0, 100 - a.position.x - a.size.width),
+									y: Math.max(0, 100 - a.position.y - a.size.height),
+								},
+								...(a.blurData?.freehandPoints
+									? {
+											blurData: {
+												...a.blurData,
+												freehandPoints: a.blurData.freehandPoints.map((p) => ({
+													x: Math.max(0, 100 - p.x),
+													y: Math.max(0, 100 - p.y),
+												})),
+											},
+										}
+									: {}),
+							}
+						: a,
+				)
+			: document.annotations,
+	};
 }
 
 /**

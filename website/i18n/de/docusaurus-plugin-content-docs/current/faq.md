@@ -36,12 +36,12 @@ OpenScreen ist ein kostenloser Bildschirmrekorder und Videoeditor unter MIT-Lize
 - **github.com, einmal pro Sprache.** Auf einem Rechner mit GPU lädt die erste englische oder französische Transkription zusätzlich das Modell herunter, das jedes Wort neu zeitlich ausrichtet: etwa 110 MB für Englisch, 350 MB für Französisch.
 - **github.com und api.github.com.** Builds, die sich selbst aktualisieren, suchen eine Minute nach dem Start, dann alle sechs Stunden und auf deine Anfrage nach einer neuen Version. Sie laden sie im Hintergrund herunter und zeigen eine Update-Schaltfläche; installiert wird erst, wenn du darauf klickst.
 - **fonts.googleapis.com, nur für eine in 1.x hinzugefügte Schrift.** Eine eigene Schrift für Annotationen, die in einer früheren Version hinzugefügt wurde, wird beim Start weiterhin geladen, obwohl 2.x sie nicht mehr zeichnet.
-- **PostHog, einmal täglich.** Eine anonyme Zählung aktiver Installationen, gesendet an die EU-Server von PostHog. Sie enthält die App-Version, das Betriebssystem, die Prozessorarchitektur, die Art der Installation, ob die App direkt oder über ihren MCP-Server von einem KI-Agenten genutzt wurde, ob es die erste Zählung der Woche und des Monats ist und in welcher Woche die App installiert wurde. Mehr nicht: keine Installationskennung (jede Zählung erhält eine neue Zufalls-ID), keine gespeicherte IP-Adresse, nichts über deine Aufnahmen. Entferne im Menü des Symbols im Infobereich das Häkchen bei **Anonyme Nutzungszählung senden**, um sie abzuschalten, oder setze `DO_NOT_TRACK=1`.
+- **PostHog, einmal täglich.** Eine anonyme Zählung aktiver Installationen, gesendet an die EU-Server von PostHog. Sie enthält die App-Version, das Betriebssystem, die Prozessorarchitektur, die Art der Installation, ob die App direkt oder über ihren MCP-Server von einem KI-Agenten genutzt wurde, ob es die erste Zählung der Woche und des Monats ist, in welcher Woche die App installiert wurde und wie oft ein KI-Agent jedes Werkzeug des MCP-Servers seit der vorherigen Zählung aufgerufen hat: der Name des Werkzeugs und eine Zahl, nie das, was ihm übergeben wurde. Mehr nicht: keine Installationskennung (jede Zählung erhält eine neue Zufalls-ID), keine gespeicherte IP-Adresse, nichts über deine Aufnahmen. Entferne im Menü des Symbols im Infobereich das Häkchen bei **Anonyme Nutzungszählung senden**, um sie abzuschalten, oder setze `DO_NOT_TRACK=1`.
 - **Dein KI-Anbieter, nur wenn du einen verbindest.** Die Chat-Bearbeitung sendet deine Nachrichten und die Projektdaten, die sie liest, etwa Zeitleiste und Transkript. Die Untertitelübersetzung sendet den Untertiteltext. Beides bleibt aus, bis du einen Anbieter verbindest. Siehe [KI-Bearbeitung](./ai-editing.md).
 
 ## Sammelt OpenScreen Analysedaten oder Absturzberichte? {#does-openscreen-collect-analytics-or-crash-reports}
 
-**Eine anonyme tägliche Zählung, sonst nichts.** Die App enthält kein SDK für Analysen oder Absturzberichte, und nichts zeichnet auf, was du in ihr tust.
+**Eine anonyme tägliche Zählung, sonst nichts.** Die App enthält kein SDK für Analysen oder Absturzberichte, und nichts zeichnet auf, was du in ihr tust. Als einziges Maß der Nutzung enthält die Zählung, wie oft ein KI-Agent jedes Werkzeug des MCP-Servers aufgerufen hat.
 
 - Einmal täglich meldet die App, dass eine Installation aktiv war. [Funktioniert OpenScreen offline?](#does-openscreen-work-offline) listet genau auf, was diese Zählung enthält und wie du sie abschaltest.
 - Die Zählung trägt keine Installationskennung: Jede erhält eine neue Zufalls-ID, und nichts anderes darin ist spezifisch für deinen Computer. Die Installationswoche darin, etwa `2026-W44`, ist die Woche der Installation, für alle gleich, die in dieser Woche installiert haben, und keine Kennung.
@@ -144,7 +144,7 @@ Wenn du eines davon brauchst, ist OpenScreen nicht das richtige Werkzeug:
 
 - **Gehostetes Teilen.** Keine Freigabelinks, kein Cloudspeicher, keine Team-Arbeitsbereiche, keine Kommentare. Deine Dateien bleiben auf deiner Festplatte. Siehe [OpenScreen als Loom-Alternative](/alternatives/loom/).
 - **Livestreaming.** Siehe [OpenScreen vs OBS Studio](/compare/openscreen-vs-obs/).
-- **Untertiteldateien.** Untertitel werden ins Video eingebrannt. Es gibt keinen Export als SRT oder VTT. Siehe [Untertitel](./captions.md).
+- **Untertiteldateien aus dem Editor oder der CLI.** Beide brennen Untertitel ins Video ein und schreiben keine SRT- oder VTT-Datei; ein Agent kann eine mit `exportCaptions` schreiben. Siehe [Untertitel](./captions.md).
 - **Mobilgeräte.** Keine Mobil-App und keine Aufnahme unter iOS oder Android.
 
 ## Wie fange ich an? {#how-do-i-get-started}

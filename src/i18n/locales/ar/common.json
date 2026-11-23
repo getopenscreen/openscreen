@@ -1,6 +1,7 @@
 {
 	"actions": {
 		"cancel": "الغاء",
+		"tryAgain": "إعادة المحاولة",
 		"save": "حفظ",
 		"delete": "حذف",
 		"close": "اغلاق",
@@ -58,6 +59,9 @@
 		"blockedLocation": "انقل OpenScreen إلى مجلد التطبيقات قبل التحديث.",
 		"failed": "تعذّر التحقق من وجود تحديثات.",
 		"downloadFailed": "تعذّر تنزيل التحديث."
+	},
+	"usagePing": {
+		"notSaved": "تعذّر على OpenScreen حفظ هذا الاختيار، لذا لم يتغيّر."
 	},
 	"units": {
 		"pixelsPerSecond": "{{value}} بكسل/ثانية",

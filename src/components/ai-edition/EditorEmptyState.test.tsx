@@ -199,6 +199,42 @@ describe("EditorEmptyState (new editor)", () => {
 		});
 	});
 
+	it("imports a picked image as the still made from it, under the image's name", async () => {
+		bridgeMocks.create.mockResolvedValue({ success: true, document: sampleDoc });
+		const still = "/rec/stills/logo_1a2b3c4d_5000.still.mp4";
+		bridgeMocks.openVideoFilePicker.mockResolvedValue({
+			success: true,
+			path: still,
+			name: "logo.png",
+		});
+		bridgeMocks.addAsset.mockResolvedValue({ assetId: "asset_1", document: sampleDoc });
+
+		renderWithI18n(<EditorEmptyState hasProject={false} />);
+		await act(async () => {
+			fireEvent.click(screen.getByRole("button", { name: /import a video/i }));
+		});
+
+		await waitFor(() => {
+			expect(bridgeMocks.addAsset).toHaveBeenCalledWith("proj_test", still, "logo.png");
+		});
+	});
+
+	it("adds nothing when the picked image could not be made into a clip", async () => {
+		bridgeMocks.openVideoFilePicker.mockResolvedValue({
+			success: false,
+			message: "OpenScreen found no ffmpeg to turn the image into a clip with.",
+		});
+
+		renderWithI18n(<EditorEmptyState hasProject={false} />);
+		await act(async () => {
+			fireEvent.click(screen.getByRole("button", { name: /import a video/i }));
+		});
+
+		await waitFor(() => expect(bridgeMocks.openVideoFilePicker).toHaveBeenCalledTimes(1));
+		expect(bridgeMocks.addAsset).not.toHaveBeenCalled();
+		expect(bridgeMocks.create).not.toHaveBeenCalled();
+	});
+
 	it("creates a project when importing with no project loaded", async () => {
 		bridgeMocks.create.mockResolvedValue({ success: true, document: sampleDoc });
 		bridgeMocks.openVideoFilePicker.mockResolvedValue({

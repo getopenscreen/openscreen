@@ -98,7 +98,7 @@ In the **Transcript** facet, click **Captions** and turn on **Show captions**. T
 
 Whisper detects the spoken language, or you can force one of 100 languages with **Regenerate as** in the Media stage. To publish in another language, **Translate** into one of 15 targets and select that language under **Display** before exporting. Translation goes through your own LLM provider, so it needs a key.
 
-Captions are burned into the video. OpenScreen does not write an `.srt` or `.vtt` file, so a player cannot turn them off. Details: [Captions & transcript](../captions.md), and [how the captions feature works](/features/captions/).
+Captions are burned into the video. The editor and the CLI write no `.srt` or `.vtt` file, so a player cannot turn them off. An agent can write one with `exportCaptions`. Details: [Captions & transcript](../captions.md), and [how the captions feature works](/features/captions/).
 
 ## 8. Export
 
@@ -121,7 +121,7 @@ OpenScreen does not host your video, create share links or count views. Upload t
 
 - **You want a hosted link with viewer analytics or comments.** A hosted recorder fits better. Loom, for example, shares each recording as a link on loom.com, and its pricing page lists viewer insights and video comments on every plan (as of September 2026). See [OpenScreen as a Loom alternative](/alternatives/loom/) for the narrower case where OpenScreen does fit.
 - **You want an interactive demo** that the viewer clicks through. OpenScreen exports video and GIF only.
-- **Your video player needs a separate caption file.** OpenScreen only burns captions in.
+- **Your video player needs a separate caption file from the editor or the CLI.** Both only burn captions in; an agent can write one with `exportCaptions`.
 - **You record on a phone or tablet.** OpenScreen is a desktop app for Windows, macOS 13 or later, and Linux.
 
 ## Sources

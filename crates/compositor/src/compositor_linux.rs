@@ -464,6 +464,9 @@ pub struct Compositor {
     /// Effets shader de la scène, compilés une fois par source, les moins récents évincés au-delà
     /// de `SHADER_FX_CACHE`.
     shader_fx: RefCell<std::collections::HashMap<u64, ShaderFxEntry>>,
+    /// Les images des effets (`image()`), par chemin : chargées au premier usage. `None` : le
+    /// fichier ne se charge pas, et on ne le redemande pas à chaque frame.
+    fx_images: RefCell<std::collections::HashMap<String, Option<(wgpu::TextureView, u32, u32)>>>,
     shader_fx_tick: std::cell::Cell<u64>,
     /// Vrai par défaut : une frame dont l'effet compile encore attend son pipeline, parce qu'un
     /// export ne doit jamais rendre de frame sans l'effet. La preview le passe à faux et saute
@@ -770,6 +773,16 @@ impl Compositor {
                         multisampled: false,
                     },
                 ),
+                // `image()` : déclaré par les seuls effets qui portent une image. Un layout peut
+                // porter un binding que le module n'a pas.
+                fx_entry(
+                    5,
+                    wgpu::BindingType::Texture {
+                        sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                        view_dimension: wgpu::TextureViewDimension::D2,
+                        multisampled: false,
+                    },
+                ),
             ],
         });
         let shader_fx_layout = gpu.device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
@@ -854,6 +867,7 @@ impl Compositor {
             shader_fx_bgl,
             shader_fx_layout,
             shader_fx: RefCell::new(std::collections::HashMap::new()),
+            fx_images: RefCell::new(std::collections::HashMap::new()),
             shader_fx_tick: std::cell::Cell::new(0),
             shader_fx_blocking: std::cell::Cell::new(true),
             text_layer: RefCell::new(None),
@@ -1326,15 +1340,15 @@ impl Compositor {
     ) -> std::sync::mpsc::Receiver<Result<wgpu::RenderPipeline, String>> {
         let (tx, rx) = std::sync::mpsc::channel();
         let (device, layout) = (self.gpu.device.clone(), self.shader_fx_layout.clone());
-        let (code, params) = (effect.code.clone(), effect.params.clone());
+        let (code, params, image) = (effect.code.clone(), effect.params.clone(), effect.image.is_some());
         std::thread::Builder::new()
             .name("shader-fx".into())
             .spawn(move || {
-                let built = crate::shader_fx::analyze(&code, &params).map(|_| {
+                let built = crate::shader_fx::analyze(&code, &params, image).map(|_| {
                     let module = device.create_shader_module(wgpu::ShaderModuleDescriptor {
                         label: Some("shader-fx"),
                         source: wgpu::ShaderSource::Wgsl(
-                            crate::shader_fx::module_source(&code, &params).into(),
+                            crate::shader_fx::module_source(&code, &params, image).into(),
                         ),
                     });
                     device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
@@ -1415,6 +1429,8 @@ impl Compositor {
         footage: Option<&wgpu::TextureView>,
     ) {
         let Some(pipeline) = self.shader_fx_ready(effect) else { return };
+        let image = effect.image.as_deref().and_then(|path| self.fx_image(path));
+        let ctx = &image.as_ref().map_or(*ctx, |(_, w, h)| ctx.with_image(*w, *h));
         let ctx_bytes = unsafe {
             std::slice::from_raw_parts(
                 ctx as *const crate::shader_fx::FxContext as *const u8,
@@ -1422,7 +1438,7 @@ impl Compositor {
             )
         };
         let params: Vec<u8> =
-            crate::shader_fx::pack_params(effect).iter().flat_map(|v| v.to_ne_bytes()).collect();
+            crate::shader_fx::pack_params(effect, ctx.region[2]).iter().flat_map(|v| v.to_ne_bytes()).collect();
         let uniform = |label: &str, contents: &[u8]| {
             self.gpu.device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
                 label: Some(label),
@@ -1431,10 +1447,15 @@ impl Compositor {
             })
         };
         let (ctx_buf, params_buf) = (uniform("shader-fx-ctx", ctx_bytes), uniform("shader-fx-params", &params));
-        // Les bindings du prélude : la frame (0), le sampler (1), `ctx` (2), `params` (3) et
-        // `footage()` (4), une texture vide pour un effet qui ne la lit pas.
-        let dummy = footage.is_none().then(|| self.dummy_view());
-        let footage = footage.or(dummy.as_ref()).expect("une vue ou l'autre");
+        // Les bindings du prélude : la frame (0), le sampler (1), `ctx` (2), `params` (3),
+        // `footage()` (4) et `image()` (5). Une texture vide pour ce que l'effet n'a pas.
+        let dummy = self.dummy_view();
+        let footage = footage.unwrap_or(&dummy);
+        // Une image attendue mais illisible se lit transparente. Sans image, le module n'a pas ce
+        // binding : la texture vide suffit.
+        let blank = (image.is_none() && effect.image.is_some())
+            .then(|| self.rgba_texture(&[0; 4], 1, 1).create_view(&wgpu::TextureViewDescriptor::default()));
+        let image = image.as_ref().map(|(view, _, _)| view).or(blank.as_ref()).unwrap_or(&dummy);
         let bind = self.gpu.device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("shader-fx"),
             layout: &self.shader_fx_bgl,
@@ -1450,6 +1471,7 @@ impl Compositor {
                 wgpu::BindGroupEntry { binding: 2, resource: ctx_buf.as_entire_binding() },
                 wgpu::BindGroupEntry { binding: 3, resource: params_buf.as_entire_binding() },
                 wgpu::BindGroupEntry { binding: 4, resource: wgpu::BindingResource::TextureView(footage) },
+                wgpu::BindGroupEntry { binding: 5, resource: wgpu::BindingResource::TextureView(image) },
             ],
         });
         encoder.copy_texture_to_texture(
@@ -1830,7 +1852,34 @@ impl Compositor {
                 .to_rgba8()
         };
         let (w, h) = (img.width(), img.height());
-        let pixels = img.into_raw();
+        Ok((self.rgba_texture(&img.into_raw(), w, h), w, h))
+    }
+
+    /// L'image d'un effet (`image()`), chargée au premier usage et gardée par chemin : l'app
+    /// nomme le fichier d'après son contenu, un chemin ne change donc jamais d'image. `None` si
+    /// elle ne se charge pas : l'effet lit alors du transparent.
+    // ponytail: décodée sur le thread de rendu à la première frame qui la montre ; à déplacer
+    // vers le thread de compilation si une grande image fait sauter la preview.
+    fn fx_image(&self, path: &str) -> Option<(wgpu::TextureView, u32, u32)> {
+        if let Some(hit) = self.fx_images.borrow().get(path) {
+            return hit.clone();
+        }
+        let loaded = crate::shader_fx::load_image(path).map_err(|e| eprintln!("[shader-fx] {e}")).ok().map(|img| {
+            let view = self
+                .rgba_texture(&img.rgba, img.width, img.height)
+                .create_view(&wgpu::TextureViewDescriptor::default());
+            (view, img.width, img.height)
+        });
+        let mut images = self.fx_images.borrow_mut();
+        if images.len() >= crate::shader_fx::IMAGE_CACHE {
+            images.clear();
+        }
+        images.insert(path.to_string(), loaded.clone());
+        loaded
+    }
+
+    /// Des pixels RGBA8 → texture.
+    fn rgba_texture(&self, pixels: &[u8], w: u32, h: u32) -> wgpu::Texture {
         let tex = self.gpu.device.create_texture(&wgpu::TextureDescriptor {
             label: Some("sprite"),
             size: wgpu::Extent3d { width: w, height: h, depth_or_array_layers: 1 },
@@ -1848,7 +1897,7 @@ impl Compositor {
                 origin: wgpu::Origin3d::ZERO,
                 aspect: wgpu::TextureAspect::All,
             },
-            &pixels,
+            pixels,
             wgpu::TexelCopyBufferLayout {
                 offset: 0,
                 bytes_per_row: Some(w * 4),
@@ -1856,7 +1905,7 @@ impl Compositor {
             },
             wgpu::Extent3d { width: w, height: h, depth_or_array_layers: 1 },
         );
-        Ok((tex, w, h))
+        tex
     }
 
     /// Champ de distance du sprite `path` (binding 2 du mode 15) et sa forme, calcules au
@@ -7305,6 +7354,44 @@ mod tests {
         assert_eq!(corner, [0, 255, 0]);
     }
 
+    /// Une piste d'images clés remplace la valeur fixe : `tint` est vert dans `values`, sa piste le
+    /// tient bleu jusqu'à 1,5 s. À 2 s de programme, soit 1 s dans la région, le shader lit bleu.
+    #[test]
+    fn an_animated_parameter_reaches_the_shader_at_its_keyframe_value() {
+        let mut effect = fx(TINT, "image");
+        effect["animate"] = serde_json::json!({"tint": [
+            {"atSec": 0.0, "value": [0.0, 0.0, 1.0, 1.0], "hold": true},
+            {"atSec": 1.5, "value": [0.0, 1.0, 0.0, 1.0]},
+        ]});
+        let Some(corner) = corner_under(serde_json::json!([effect])) else { return };
+        assert_eq!(corner, [0, 0, 255]);
+    }
+
+    /// L'image d'un effet arrive au shader : `image()` la rend en alpha droit, `ctx.image` dit sa
+    /// taille. Un fichier illisible ne casse rien : l'effet lit du transparent, et `ctx.image.w`
+    /// reste à 0.
+    #[test]
+    fn an_effect_reads_its_image() {
+        let dir = std::env::temp_dir().join(format!("fx-image-gpu-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let file = dir.join("half-red.png");
+        image::RgbaImage::from_pixel(4, 2, image::Rgba([255, 0, 0, 128])).save(&file).unwrap();
+        let corner = |code: &str, image: &std::path::Path| {
+            let mut effect = fx(code, "image");
+            effect["image"] = serde_json::json!(image.to_str().unwrap());
+            corner_under(serde_json::json!([effect]))
+        };
+        const COLOUR: &str =
+            "fn effect(uv: vec2<f32>) -> vec4<f32> { let i = image(uv); return vec4<f32>(i.rgb, 1.0); }";
+        const FACTS: &str = "fn effect(uv: vec2<f32>) -> vec4<f32> { return vec4<f32>(image(uv).a, ctx.image.z / 8.0, ctx.image.w, 1.0); }";
+        // Rouge à moitié transparent : du rouge plein, un alpha de moitié, 4 sur 2 de côté.
+        let Some(colour) = corner(COLOUR, &file) else { return };
+        assert_eq!(colour, [255, 0, 0]);
+        assert_eq!(corner(FACTS, &file), Some([128, 64, 255]));
+        assert_eq!(corner(FACTS, &dir.join("absent.png")), Some([0, 0, 0]));
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
     /// La scène de ces tests masque le curseur (`cursor.show` faux) : rien n'est dessiné, mais un
     /// effet voit toujours la pointe et le clic de l'enregistrement (`effect_pointer`). Il peint
     /// `ctx.cursor.z` en rouge et `ctx.clicks[0].w` en vert : jaune, il a vu les deux.
@@ -7380,7 +7467,7 @@ mod tests {
             eprintln!("{w}x{h} : sans effet {base:.3} ms/frame");
             for reads in [1u32, 8, 32, 128, 512] {
                 let code = reads_effect(reads);
-                let report = crate::shader_fx::analyze(&code, &[]).expect("analyse").report;
+                let report = crate::shader_fx::analyze(&code, &[], false).expect("analyse").report;
                 let with = (0..3)
                     .map(|_| per_frame(w, h, serde_json::json!([fx(&code, "image")])))
                     .fold(f64::MAX, f64::min);

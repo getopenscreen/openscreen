@@ -92,6 +92,18 @@ describe("X11 source resolution", () => {
 			y: 0,
 		});
 	});
+	it("records the only display when Electron's X11 display_id matches no screen id (#1629)", () => {
+		const laptop = [
+			{ id: 2_147_483_648, bounds: { x: 0, y: 0, width: 1920, height: 1080 }, scaleFactor: 1 },
+		];
+		expect(resolveX11CaptureSource({ id: "screen:383:0", display_id: "2" }, laptop)).toEqual({
+			kind: "display",
+			x: 0,
+			y: 0,
+			width: 1920,
+			height: 1080,
+		});
+	});
 	it("rejects stale, missing and malformed sources instead of recording something else", () => {
 		expect(() => resolveX11CaptureSource(null, displays)).toThrow();
 		expect(() =>

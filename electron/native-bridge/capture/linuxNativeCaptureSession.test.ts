@@ -700,6 +700,39 @@ describe("LinuxNativeCaptureSession", () => {
 		expect(helper.stdinWrites).not.toContain("resume\n");
 	});
 
+	it("closes the cursor pause range when the helper stops while paused, before stop() (#1637)", async () => {
+		const now = vi.spyOn(Date, "now").mockReturnValue(900);
+		const session = newSession();
+		await startReady(session);
+
+		emitCaptureStarted(1_000);
+		emitCursorSample(1_100);
+		await flushStdout();
+
+		now.mockReturnValue(1_200);
+		session.pause();
+		emitCursorSample(1_300);
+		await flushStdout();
+
+		now.mockReturnValue(1_500);
+		helper.emitEvent({
+			event: "capture-stopped",
+			timestampMs: 1_500,
+			path: "/tmp/recording.mp4",
+			durationMs: 200,
+			frames: 6,
+			dropped: 0,
+		});
+		await flushStdout();
+
+		now.mockReturnValue(1_600);
+		const stopping = session.stop();
+		helper.emit("exit", 0, null);
+		const result = await stopping;
+
+		expect(result.cursor.samples.map((sample) => sample.timeMs)).toEqual([100]);
+	});
+
 	/**
 	 * A non-fatal `error` event after the first frame does not end the capture;
 	 * a later wait is still satisfied.

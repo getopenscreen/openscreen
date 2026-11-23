@@ -18,7 +18,7 @@ Effekte kommen von einem Agenten: dem eingebauten Chat oder einem MCP-Client wie
 
 ## Einen Effekt anfragen {#asking-for-an-effect}
 
-Beschreibe, was du sehen willst, und wann: „eine Welle bei jedem Klick“, „Abblende ins Schwarze über die letzten zwei Sekunden, Untertitel inklusive“. Der Agent schreibt den Effekt, legt ihn auf die Zeitleiste und kann sich das Ergebnis mit `getFrames` ansehen, ohne das Video zu exportieren.
+Beschreibe, was du sehen willst, und wann: „eine Welle bei jedem Klick“, „Abblende ins Schwarze über die letzten zwei Sekunden, Untertitel inklusive“. Der Agent schreibt den Effekt, legt ihn auf die Zeitleiste und kann sich das Ergebnis mit `getFrames` ansehen, ohne das Video zu exportieren. Der Skill `openscreen-effects` im Plugin von OpenScreen gibt einem Agenten ausgearbeitete Beispiele für den Einstieg.
 
 Ein Effekt weiß, wo der Cursor ist und wo jeder Klick gelandet ist, wo die Aufnahme und die Webcam nach Zooms und Layout im Video sitzen, und welcher Zeitpunkt gerade ist. So kann ein Lichthof der Maus folgen, und eine Welle kann von jedem Klick ausgehen, wohin der Zoom ihn auch verschoben hat.
 

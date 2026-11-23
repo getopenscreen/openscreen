@@ -32,6 +32,7 @@ export async function serveMcpOverStdio(options: {
 	runners: MediaToolDeps["runners"];
 	openVideo: MediaToolDeps["openVideo"];
 	renderFrames?: MediaToolDeps["renderFrames"];
+	images?: MediaToolDeps["images"];
 	/** A newer OpenScreen to tell the agent about (update-notice.ts). */
 	updateNotice?: string;
 	/** The client went away: nothing is left to serve. */
@@ -57,6 +58,7 @@ export async function serveMcpOverStdio(options: {
 		documents: options.documents,
 		openVideo: options.openVideo,
 		renderFrames: options.renderFrames,
+		images: options.images,
 		readCursor: options.readCursorTelemetry,
 		runTool,
 	});

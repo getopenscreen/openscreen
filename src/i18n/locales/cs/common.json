@@ -1,6 +1,7 @@
 {
 	"actions": {
 		"cancel": "Zrušit",
+		"tryAgain": "Zkusit znovu",
 		"save": "Uložit",
 		"delete": "Smazat",
 		"close": "Zavřít",
@@ -58,6 +59,9 @@
 		"blockedLocation": "Před aktualizací přesuňte OpenScreen do složky Aplikace.",
 		"failed": "Nepodařilo se zkontrolovat aktualizace.",
 		"downloadFailed": "Nepodařilo se stáhnout aktualizaci."
+	},
+	"usagePing": {
+		"notSaved": "OpenScreen tuto volbu nemohl uložit, takže zůstává beze změny."
 	},
 	"units": {
 		"pixelsPerSecond": "{{value}} px/s",

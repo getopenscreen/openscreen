@@ -28,6 +28,17 @@ export function configureWaylandSupport(commandLine: CommandLine, env: Env): voi
 	if (!commandLine.hasSwitch("ozone-platform")) {
 		commandLine.appendSwitch("ozone-platform", "wayland");
 	}
+	/*
+	 * Chromium's unscaled Wayland size limits can clip the HUD with GTK text scaling.
+	 * Electron 46 alpha has the fix; OpenScreen adoption may take 3–4 months (Nov 2026).
+	 * TODO: Once we ship the fix for crbug.com/566940916, verify on Hyprland and remove.
+	 */
+	if (
+		usesWaylandBackend("linux", commandLine, env) &&
+		!commandLine.hasSwitch("force-device-scale-factor")
+	) {
+		commandLine.appendSwitch("force-device-scale-factor", "1");
+	}
 	// Enable WebRTCPipeWireCapturer for screen capture on Wayland
 	appendFeatures(commandLine, "enable-features", "WaylandWindowDrag,WebRTCPipeWireCapturer");
 	// Chromium's Wayland Ozone backend can't use Vulkan. When it tries, the WebRTC

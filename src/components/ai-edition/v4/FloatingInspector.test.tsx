@@ -778,14 +778,14 @@ describe("FloatingInspector on an agent-written effect", () => {
 		values: {},
 		target: "image",
 	};
-	const renderEffect = () => {
+	const renderEffect = (shown: object = effect) => {
 		const updateShaderEffect = vi.fn();
 		const tl = {
 			selection: { kind: "shaderEffect", id: "fxr_1" },
 			clearSelection: vi.fn(),
 			selectedAudioTrackId: null,
 			shaderEffectRanges: [region],
-			shaderEffects: [effect],
+			shaderEffects: [shown],
 			updateShaderEffect,
 			updateShaderEffectLive: vi.fn(),
 			commitShaderEffectChange: vi.fn(),
@@ -819,7 +819,21 @@ describe("FloatingInspector on an agent-written effect", () => {
 		expect(await screen.findByRole("alert")).toHaveTextContent("no definition in scope for `nope`");
 		expect(screen.getByText("editor.inspector.effectTierLight")).toBeInTheDocument();
 		expect(screen.getByText(effect.code)).toBeInTheDocument();
-		expect(checkShaderEffectCode).toHaveBeenCalledWith(effect.code, effect.params);
+		// Checked as code that reads no image: this effect has none.
+		expect(checkShaderEffectCode).toHaveBeenCalledWith(effect.code, effect.params, false);
+	});
+
+	it("checks the code of an effect that has an image as code that may read it", async () => {
+		checkShaderEffectCode.mockResolvedValue({ tier: "light", frameReads: 2, iterations: 0 });
+		const withImage = {
+			...effect,
+			image: { path: "/recordings/effect-images/0123456789abcdef.png", width: 400, height: 160 },
+		};
+		renderEffect(withImage);
+		await waitFor(() =>
+			expect(checkShaderEffectCode).toHaveBeenCalledWith(withImage.code, withImage.params, true),
+		);
+		expect(screen.queryByRole("alert")).toBeNull();
 	});
 
 	it("retargets the effect in one write, and says nothing of code that compiles", async () => {

@@ -580,6 +580,21 @@ export const shaderEffectValueSchema = z.union([
 	shaderEffectPoint,
 ]);
 
+// How a parameter moves from one keyframe to the next: a named curve, a cubic-bezier
+// (x1, y1, x2, y2; the x values within 0..1), or a spring. Linear when absent.
+export const shaderEffectEaseSchema = z.union([
+	z.enum(["linear", "hold", "ease-in", "ease-out", "ease-in-out"]),
+	z.tuple([z.number().min(0).max(1), z.number(), z.number().min(0).max(1), z.number()]),
+	z.object({ spring: z.object({ bounce: z.number().min(0).max(0.9) }) }),
+]);
+
+// `atSec` counts from the start of the region's pill, on the clock of `ctx.region.z`.
+export const shaderEffectKeyframeSchema = z.object({
+	atSec: z.number().nonnegative(),
+	value: shaderEffectValueSchema,
+	ease: shaderEffectEaseSchema.optional(),
+});
+
 export const shaderEffectSchema = z
 	.object({
 		id: z.string().min(1),
@@ -593,6 +608,16 @@ export const shaderEffectSchema = z
 		code: z.string().min(1).max(65_536),
 		// The `max` here is a technical ceiling, not a budget: see the cost tiers.
 		params: z.array(shaderEffectParamSchema).max(32).default([]),
+		// The one image the code reads with `image(uv)`: OpenScreen's own copy of the file, named
+		// after its content, and its size in pixels. Optional and absent for most effects, so a
+		// document without it parses and saves unchanged.
+		image: z
+			.object({
+				path: z.string().min(1),
+				width: z.number().int().positive(),
+				height: z.number().int().positive(),
+			})
+			.optional(),
 		origin: z.enum(["agent", "user"]).default("agent"),
 		// The compositor's cost estimate, cached when the code was last checked. Derived, never an
 		// input: `frameReads` is `frame()` reads per pixel, `tier` its indicative tier.
@@ -633,6 +658,9 @@ export const shaderEffectRangeSchema = endGteStart(
 		effectId: z.string().min(1),
 		// Only the values that differ from the definition's defaults.
 		values: z.record(z.string(), shaderEffectValueSchema).default({}),
+		// Parameters that follow keyframes over the region instead of a fixed value. Optional and
+		// absent when nothing is animated, so a document without it parses and saves unchanged.
+		animate: z.record(z.string(), z.array(shaderEffectKeyframeSchema).min(1).max(64)).optional(),
 		// What the effect transforms: the picture under the texts, the texts alone, or both.
 		target: z.enum(["image", "text", "both"]).default("image"),
 	}),
@@ -1445,6 +1473,7 @@ export type AxcutShaderEffect = z.infer<typeof shaderEffectSchema>;
 export type AxcutShaderEffectParam = z.infer<typeof shaderEffectParamSchema>;
 export type AxcutShaderEffectRange = z.infer<typeof shaderEffectRangeSchema>;
 export type AxcutShaderEffectValue = z.infer<typeof shaderEffectValueSchema>;
+export type AxcutShaderEffectKeyframe = z.infer<typeof shaderEffectKeyframeSchema>;
 export type AxcutLegacyEditor = z.infer<typeof legacyEditorSchema>;
 export type AxcutDocument = z.infer<typeof documentSchema>;
 export type AxcutDocumentInput = z.input<typeof documentSchema>;

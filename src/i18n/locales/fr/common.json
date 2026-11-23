@@ -1,6 +1,7 @@
 {
 	"actions": {
 		"cancel": "Annuler",
+		"tryAgain": "Réessayer",
 		"save": "Enregistrer",
 		"delete": "Supprimer",
 		"close": "Fermer",
@@ -58,6 +59,9 @@
 		"blockedLocation": "Déplacez OpenScreen dans le dossier Applications avant de le mettre à jour.",
 		"failed": "Impossible de rechercher les mises à jour.",
 		"downloadFailed": "Impossible de télécharger la mise à jour."
+	},
+	"usagePing": {
+		"notSaved": "OpenScreen n'a pas pu enregistrer ce choix : il reste inchangé."
 	},
 	"units": {
 		"pixelsPerSecond": "{{value}} pixels/s",

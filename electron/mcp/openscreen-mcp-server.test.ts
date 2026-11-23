@@ -156,7 +156,7 @@ async function connect(
 	options: {
 		editsAllowed?: boolean;
 		headers?: Record<string, string>;
-		media?: Pick<McpToolDeps, "openVideo" | "approveMedia">;
+		media?: Pick<McpToolDeps, "openVideo" | "approveMedia" | "makeStill">;
 		waitForRecording?: MediaToolDeps["waitForRecording"];
 	} = {},
 ) {
@@ -331,7 +331,11 @@ describe("the MCP tool surface", () => {
 			"setPointerTrack",
 			"exportVideo",
 			"exportAudio",
+			"exportCaptions",
+			"getAudioReport",
 			"getFrames",
+			"getContactSheet",
+			"getBeforeAfter",
 			"createProject",
 		]);
 		for (const tool of tools.slice(1, 1 + OPENSCREEN_TOOL_NAMES.length)) {
@@ -382,7 +386,7 @@ describe("the MCP tool surface", () => {
 		);
 		expect(instructions).toContain("startRecording hands over to OpenScreen's recording bar");
 		expect(instructions).toContain(
-			"startRecording, exportVideo, exportAudio and createProject are refused too",
+			"startRecording, exportVideo, exportAudio, exportCaptions and createProject are refused too",
 		);
 		expect(instructions).toContain("all of them are lost when OpenScreen quits.");
 		expect(instructions).toContain("turn on 'MCP edits' under MCP server in AI settings");
@@ -683,6 +687,91 @@ describe("the project's name and media", () => {
 			expect(resultText(result)).toContain(says);
 		}
 		expect(openVideo).not.toHaveBeenCalled();
+		expect(editor.applied).toHaveLength(0);
+	});
+
+	/** Stands in for stillClip.ts: writes the file the import stats, at the size it reports. */
+	function stillMaker() {
+		return vi.fn(async (imagePath: string, holdSec: number) => {
+			const still = path.join(dir, `${path.parse(imagePath).name}_${holdSec * 1000}.still.mp4`);
+			writeFileSync(still, "still");
+			return { path: still, width: 802, height: 602 };
+		});
+	}
+
+	it("imports an image as a silent video of its hold, 5 seconds by default", async () => {
+		const editor = new FakeEditor();
+		const openVideo = probe();
+		const approveMedia = vi.fn();
+		const makeStill = stillMaker();
+		const mcp = await connect(editor, { media: { openVideo, approveMedia, makeStill } });
+		const image = mediaFile("logo.png");
+		const result = await mcp.callTool({ name: "importMedia", arguments: { path: image } });
+		expect(result.isError).toBeFalsy();
+		const payload = JSON.parse(resultText(result));
+		expect(payload).toMatchObject({
+			kind: "video",
+			still: true,
+			label: "logo.png",
+			durationSec: 5,
+			width: 802,
+			height: 602,
+		});
+		expect(makeStill).toHaveBeenCalledWith(image, 5);
+		const asset = editor.document?.assets.find((a) => a.id === payload.assetId);
+		expect(asset).toMatchObject({ kind: "video", durationSec: 5 });
+		expect(asset?.originalPath).toMatch(/\.still\.mp4$/);
+		expect(asset?.video).toMatchObject({ width: 802, height: 602, fps: 30 });
+		// The editor plays the generated video, never the image.
+		expect(approveMedia).toHaveBeenCalledWith(asset?.originalPath);
+		expect(openVideo).not.toHaveBeenCalled();
+	});
+
+	it("takes a hold from 0.5 to 60 seconds, for an image only", async () => {
+		const editor = new FakeEditor();
+		const makeStill = stillMaker();
+		const mcp = await connect(editor, { media: { makeStill } });
+		const image = mediaFile("card.jpg");
+		for (const holdSec of [0.5, 60]) {
+			const result = await mcp.callTool({
+				name: "importMedia",
+				arguments: { path: image, holdSec },
+			});
+			expect(JSON.parse(resultText(result)).durationSec).toBe(holdSec);
+		}
+		for (const holdSec of [0.4, 61]) {
+			const result = await mcp.callTool({
+				name: "importMedia",
+				arguments: { path: image, holdSec },
+			});
+			expect(result.isError).toBe(true);
+		}
+		const onVideo = await mcp.callTool({
+			name: "importMedia",
+			arguments: { path: mediaFile("take.mp4"), holdSec: 3 },
+		});
+		expect(onVideo.isError).toBe(true);
+		expect(resultText(onVideo)).toContain("holdSec is for an image only");
+		expect(makeStill).toHaveBeenCalledTimes(2);
+	});
+
+	it("names the image extensions when it refuses one, and reports a still it could not make", async () => {
+		const editor = new FakeEditor();
+		const makeStill = vi.fn(async () => {
+			throw new Error("OpenScreen found no ffmpeg to turn the image into a clip with.");
+		});
+		const mcp = await connect(editor, { media: { makeStill } });
+		const gif = await mcp.callTool({
+			name: "importMedia",
+			arguments: { path: mediaFile("a.gif") },
+		});
+		expect(resultText(gif)).toContain("Image: .png, .jpg, .jpeg, .webp");
+		const failed = await mcp.callTool({
+			name: "importMedia",
+			arguments: { path: mediaFile("b.webp") },
+		});
+		expect(failed.isError).toBe(true);
+		expect(resultText(failed)).toContain("found no ffmpeg");
 		expect(editor.applied).toHaveLength(0);
 	});
 

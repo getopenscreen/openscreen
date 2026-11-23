@@ -66,12 +66,14 @@ export async function probeSegmentationSupport(): Promise<SegmentationSupport> {
 export async function checkShaderEffectCode(
 	code: string,
 	params: ReadonlyArray<{ name: string; type: string }>,
+	/** The effect carries an image, so its code may call `image()`. */
+	image: boolean,
 ): Promise<ShaderEffectCheck | null> {
 	try {
 		const { check } = await requireNativeBridgeData<{ check: ShaderEffectCheck | null }>({
 			domain: "compositor",
 			action: "checkShaderEffect",
-			payload: { code, params: params.map(({ name, type }) => ({ name, type })) },
+			payload: { code, params: params.map(({ name, type }) => ({ name, type })), image },
 		});
 		return check;
 	} catch {

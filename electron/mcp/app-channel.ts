@@ -45,6 +45,8 @@ import {
 	LIST_PROJECTS_TOOL,
 	type McpToolDeps,
 	type McpToolRunner,
+	READ_CHECKPOINT_SCHEMA,
+	READ_CHECKPOINT_TOOL,
 	TRANSCRIBE_TOOL,
 } from "./openscreen-mcp-server";
 import { PROJECT_EDIT_TOOLS } from "./project-tools";
@@ -104,7 +106,8 @@ export async function serveAppChannel(options: {
 }): Promise<AppChannel> {
 	const token = randomBytes(32).toString("hex");
 	const endpoint = newEndpoint(options.userDataDir);
-	const deps: McpToolDeps = { ...options.deps, editsAllowed: () => true };
+	// No tool-call count here: `openscreen mcp` counted each call where its client made it.
+	const deps: McpToolDeps = { ...options.deps, editsAllowed: () => true, onToolCall: undefined };
 	const runTool = (name: string, args: unknown) =>
 		options.runTool(name, args, { editsAllowed: true });
 	const sockets = new Set<net.Socket>();
@@ -149,6 +152,10 @@ export async function serveAppChannel(options: {
 							edit: (document) => pointerTrackEdit(document, events, takes, recordingStartedAt),
 						},
 					),
+			);
+			// The checkpoints are this process's: `openscreen mcp` reads one here for getBeforeAfter.
+			session.registerTool(READ_CHECKPOINT_TOOL, { inputSchema: READ_CHECKPOINT_SCHEMA }, (args) =>
+				options.runTool(READ_CHECKPOINT_TOOL, args, { editsAllowed: true }),
 			);
 			socket.once("close", () => void session.close());
 			// A JSON-RPC-lines transport over any stream pair, despite its name.

@@ -1,0 +1,1877 @@
+{
+	"tools": [
+		{
+			"name": "addAnnotation",
+			"description": "Add an annotation over a span of the edited timeline (virtual seconds). type picks what it is: 'text' (the default) for callouts, labels and titles; 'figure' for an arrow pointing at something; 'blur' for a privacy mask that blurs or pixelates what is under it, the way to hide an email address, a token, a password field or any private detail the recording shows. Image annotations are not available here: they need a file, added in the editor. x/y place the centre, 0–100 percent of the annotation's box (default the centre). Text and arrows sit on the output frame, the whole picture padding included, as the editor places them: zooms and padding never move them. A blur sits on the recording's picture instead, so x/y/width/height are percent of the recording and it stays on what it hides when padding or a zoom moves the picture. A text box is sized to its words and kept inside the frame; it is drawn on a dark plate by default, and fontSize, fontFamily (Inter, Lora, Oswald, Caveat, IBM Plex Mono; Inter by default), color, background, bold and animation set its look. An arrow or a blur takes width/height (default 30 × 20) and its own data: figureData {arrowDirection, color, strokeWidth} for an arrow, blurData {type 'blur' or 'mosaic', shape 'rectangle' or 'oval', color, intensity, blockSize} for a blur. The result reads the annotation back as getCurrentDocument reports it.",
+			"inputSchema": {
+				"type": "object",
+				"properties": {
+					"startSec": {
+						"type": "number",
+						"minimum": 0
+					},
+					"endSec": {
+						"type": "number",
+						"minimum": 0
+					},
+					"type": {
+						"default": "text",
+						"type": "string",
+						"enum": ["text", "figure", "blur"],
+						"description": "text: words on the frame. figure: an arrow. blur: a privacy mask that blurs or pixelates what is under it, such as an email address or a token on screen."
+					},
+					"text": {
+						"default": "",
+						"type": "string"
+					},
+					"x": {
+						"default": 50,
+						"type": "number",
+						"minimum": 0,
+						"maximum": 100
+					},
+					"y": {
+						"default": 50,
+						"type": "number",
+						"minimum": 0,
+						"maximum": 100
+					},
+					"fontSize": {
+						"description": "Text size; 32 is the editor's default, a title reads well at 56 to 80.",
+						"type": "number",
+						"minimum": 8,
+						"maximum": 200
+					},
+					"fontFamily": {
+						"description": "Typeface: one of the families the app ships and draws. Inter by default.",
+						"type": "string",
+						"enum": ["Inter", "Lora", "Oswald", "Caveat", "IBM Plex Mono"]
+					},
+					"color": {
+						"description": "Text colour, a CSS colour such as #ffffff.",
+						"type": "string"
+					},
+					"background": {
+						"description": "Colour of the plate behind the text, or \"none\" for no plate.",
+						"type": "string"
+					},
+					"bold": {
+						"type": "boolean"
+					},
+					"animation": {
+						"description": "How the text enters: typewriter types it out, pop springs it in, and so on.",
+						"type": "string",
+						"enum": ["none", "fade", "rise", "pop", "slide-left", "typewriter", "pulse"]
+					},
+					"width": {
+						"description": "Box width, in percent of the annotation's box: the output frame for an arrow, the recording's picture for a blur. Not for text, whose box is its words.",
+						"type": "number",
+						"exclusiveMinimum": 0,
+						"maximum": 100
+					},
+					"height": {
+						"description": "Box height, in percent of the same box as width.",
+						"type": "number",
+						"exclusiveMinimum": 0,
+						"maximum": 100
+					},
+					"figureData": {
+						"description": "An arrow's direction, colour and stroke width.",
+						"type": "object",
+						"properties": {
+							"arrowDirection": {
+								"default": "right",
+								"type": "string",
+								"enum": [
+									"up",
+									"down",
+									"left",
+									"right",
+									"up-right",
+									"up-left",
+									"down-right",
+									"down-left"
+								]
+							},
+							"color": {
+								"default": "#34B27B",
+								"type": "string"
+							},
+							"strokeWidth": {
+								"default": 4,
+								"type": "number",
+								"minimum": 0
+							}
+						}
+					},
+					"blurData": {
+						"description": "A blur's look: type blur or mosaic, shape rectangle or oval, color of the mosaic grid, intensity, blockSize.",
+						"type": "object",
+						"properties": {
+							"type": {
+								"default": "mosaic",
+								"type": "string",
+								"enum": ["blur", "mosaic"]
+							},
+							"shape": {
+								"default": "rectangle",
+								"type": "string",
+								"enum": ["rectangle", "oval", "freehand"]
+							},
+							"color": {
+								"default": "white",
+								"type": "string",
+								"enum": ["white", "black"]
+							},
+							"intensity": {
+								"default": 12,
+								"type": "number",
+								"minimum": 0
+							},
+							"blockSize": {
+								"default": 12,
+								"type": "number",
+								"minimum": 0
+							},
+							"freehandPoints": {
+								"type": "array",
+								"items": {
+									"type": "object",
+									"properties": {
+										"x": {
+											"type": "number",
+											"minimum": 0
+										},
+										"y": {
+											"type": "number",
+											"minimum": 0
+										}
+									},
+									"required": ["x", "y"]
+								}
+							}
+						}
+					},
+					"projectId": {
+						"description": "The project to act on, from listProjects. Omit it only for the project open in the OpenScreen editor, which works only while the app runs.",
+						"type": "string"
+					}
+				},
+				"required": ["startSec", "endSec"]
+			}
+		},
+		{
+			"name": "addAudio",
+			"description": "Lay an ALREADY-IMPORTED audio file over the recording across a span of the edited timeline (virtual seconds): a voiceover, or a music bed. assetId must name an asset whose kind is 'audio' — getCurrentDocument lists them. If there is none, a file has to be imported first (importMedia, where it is offered): never guess an id. Omit endSec to play the whole file from offsetSec. kind picks the lane ('voiceover' or 'music'). offsetSec is where in the FILE playback starts, gainDb its level (0 unchanged, negative ducks it), fadeInMs / fadeOutMs its fades (0 to 5000 ms, default none; a track too short for both shares its span between them). A voiceover-lane track is also what gets transcribed, so the lane is not only cosmetic.",
+			"inputSchema": {
+				"type": "object",
+				"properties": {
+					"assetId": {
+						"type": "string",
+						"minLength": 1
+					},
+					"startSec": {
+						"type": "number",
+						"minimum": 0
+					},
+					"endSec": {
+						"type": "number",
+						"minimum": 0
+					},
+					"kind": {
+						"default": "music",
+						"type": "string",
+						"enum": ["voiceover", "music"]
+					},
+					"offsetSec": {
+						"default": 0,
+						"type": "number",
+						"minimum": 0
+					},
+					"gainDb": {
+						"default": 0,
+						"type": "number",
+						"minimum": -60,
+						"maximum": 12
+					},
+					"fadeInMs": {
+						"default": 0,
+						"type": "integer",
+						"minimum": 0,
+						"maximum": 5000
+					},
+					"fadeOutMs": {
+						"default": 0,
+						"type": "integer",
+						"minimum": 0,
+						"maximum": 5000
+					},
+					"projectId": {
+						"description": "The project to act on, from listProjects. Omit it only for the project open in the OpenScreen editor, which works only while the app runs.",
+						"type": "string"
+					}
+				},
+				"required": ["assetId", "startSec"]
+			}
+		},
+		{
+			"name": "addAutoZooms",
+			"description": "Plan zooms on the clicks recorded with each take on the timeline and add them, as the timeline's Automatic zooms does: clicks close in time and on screen share one zoom, the first seconds and the click that stopped the take get none, and no zoom lands on one already there. Takes no arguments. Use it after cutting or rearranging a project, or on one whose zooms were removed. The result lists the zooms added, and telemetry gives each recording's read: ok, no-sidecar (it has no recorded clicks), or unavailable (it could not be read from here, which says nothing about the recording). added 0 is an answer, not a failure.",
+			"inputSchema": {
+				"type": "object",
+				"properties": {
+					"projectId": {
+						"description": "The project to act on, from listProjects. Omit it only for the project open in the OpenScreen editor, which works only while the app runs.",
+						"type": "string"
+					}
+				}
+			}
+		},
+		{
+			"name": "addEffect",
+			"description": "Write a visual effect as a shader and pose it over a span of the edited timeline (virtual seconds), or pose one of this project's effects again (effectId). Use it for a look the settings do not offer. `effect.code` is WGSL that defines `fn effect(uv: vec2<f32>) -> vec4<f32>`, called for every pixel; uv is 0..1 with (0,0) top-left. Available inside it: `frame(uv)` samples the composed picture; `footage(p)` samples the recording itself at its own resolution at point p of its surface (the space of `fx_to_footage`), transparent outside 0..1, with no cursor or webcam on it: read it for anything that magnifies, frame() for the rest; `params.<name>` reads each declared parameter; `ctx.time` is programme seconds; `ctx.region.x` goes 0 to 1 across the region (y its length in s, z seconds since it began); `ctx.resolution` and `ctx.aspect`; `ctx.cursor` (xy in uv, z = 1 when on screen); `ctx.clicks[0..3]`, the last four clicks, newest first (xy in uv where it happened, z seconds since, w = 1 when the slot holds one); `ctx.footage` and `ctx.camera`, the recording's and the webcam's rects (x, y, w, h in uv; camera zero-sized when absent) — all already placed through zoom and layout; `fx_to_footage(uv)` and `fx_from_footage(p)` map between output uv and the recording's own surface (0..1 across the recording) through the warp the compositor draws it with, zoom, layout and 3D camera included, and `ctx.footage_aspect` is its width over height: the effect works in whichever of the two spaces fits it; `fx_px(n)`, n pixels of a 1080p frame as a fraction of the height; `fx_hash(vec2<u32>)`, a random number in [0,1) identical on every GPU. Rules: the effect is a pure function of those inputs (no state between frames), so the preview and the export show the same pixels; reason in uv or fx_px, never raw pixels; every loop is a `for` with literal bounds (`for (var i = 0; i < 16; i++)`), at most 4096 iterations per pixel — the one hard rule. `params` declares up to 8 (recommended) parameters, each `{type: number|toggle|color|point, name, label, default}` (number also `min`, `max`); declare one only when moving it visibly changes the effect over its whole range. `target`: `image` (default: the picture under the annotations and captions), `text` (the annotations and captions alone, premultiplied alpha), `both` (everything); use text or both only when asked. One effect runs at a time: to combine two looks, write them in one shader. The result gives the cost tier, in frame() and footage() reads per pixel, with what a 1080p frame pays on a fast discrete GPU (RTX 4070 Ti) and on an integrated one (Apple M1): light ≤ 8, up to 0.06 ms and 1.3 ms; medium ≤ 32, 0.14 ms and 4.3 ms; heavy ≤ 128, 0.54 ms and 16 ms; very heavy beyond, 2 ms and 49 ms at 512 reads. It also gives a recommendation when the tier runs long: light anywhere, medium up to a minute, heavy up to 10 s, very heavy a few seconds. It is a recommendation, never a refusal. Code that does not compile is refused with the compiler's error at the line of your code: fix it and call again. Check the result with getFrames.",
+			"inputSchema": {
+				"type": "object",
+				"properties": {
+					"startSec": {
+						"type": "number",
+						"minimum": 0
+					},
+					"endSec": {
+						"type": "number",
+						"minimum": 0
+					},
+					"effectId": {
+						"type": "string",
+						"minLength": 1
+					},
+					"effect": {
+						"type": "object",
+						"properties": {
+							"name": {
+								"type": "string",
+								"minLength": 1,
+								"maxLength": 60
+							},
+							"description": {
+								"type": "string",
+								"maxLength": 500
+							},
+							"code": {
+								"type": "string",
+								"minLength": 1,
+								"maxLength": 65536
+							},
+							"params": {
+								"maxItems": 32,
+								"type": "array",
+								"items": {
+									"oneOf": [
+										{
+											"type": "object",
+											"properties": {
+												"type": {
+													"type": "string",
+													"const": "number"
+												},
+												"name": {
+													"type": "string",
+													"pattern": "^[a-z][a-z0-9_]{0,31}$"
+												},
+												"label": {
+													"default": "",
+													"type": "string",
+													"maxLength": 40
+												},
+												"default": {
+													"type": "number"
+												},
+												"min": {
+													"type": "number"
+												},
+												"max": {
+													"type": "number"
+												}
+											},
+											"required": ["type", "name", "default", "min", "max"]
+										},
+										{
+											"type": "object",
+											"properties": {
+												"type": {
+													"type": "string",
+													"const": "toggle"
+												},
+												"name": {
+													"type": "string",
+													"pattern": "^[a-z][a-z0-9_]{0,31}$"
+												},
+												"label": {
+													"default": "",
+													"type": "string",
+													"maxLength": 40
+												},
+												"default": {
+													"type": "boolean"
+												}
+											},
+											"required": ["type", "name", "default"]
+										},
+										{
+											"type": "object",
+											"properties": {
+												"type": {
+													"type": "string",
+													"const": "color"
+												},
+												"name": {
+													"type": "string",
+													"pattern": "^[a-z][a-z0-9_]{0,31}$"
+												},
+												"label": {
+													"default": "",
+													"type": "string",
+													"maxLength": 40
+												},
+												"default": {
+													"type": "string",
+													"pattern": "^#(?:[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$"
+												}
+											},
+											"required": ["type", "name", "default"]
+										},
+										{
+											"type": "object",
+											"properties": {
+												"type": {
+													"type": "string",
+													"const": "point"
+												},
+												"name": {
+													"type": "string",
+													"pattern": "^[a-z][a-z0-9_]{0,31}$"
+												},
+												"label": {
+													"default": "",
+													"type": "string",
+													"maxLength": 40
+												},
+												"default": {
+													"type": "object",
+													"properties": {
+														"x": {
+															"type": "number",
+															"minimum": 0,
+															"maximum": 1
+														},
+														"y": {
+															"type": "number",
+															"minimum": 0,
+															"maximum": 1
+														}
+													},
+													"required": ["x", "y"]
+												}
+											},
+											"required": ["type", "name", "default"]
+										}
+									]
+								}
+							}
+						},
+						"required": ["name", "description", "code"]
+					},
+					"values": {
+						"type": "object",
+						"propertyNames": {
+							"type": "string"
+						},
+						"additionalProperties": {
+							"anyOf": [
+								{
+									"type": "number"
+								},
+								{
+									"type": "boolean"
+								},
+								{
+									"type": "string",
+									"pattern": "^#(?:[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$"
+								},
+								{
+									"type": "object",
+									"properties": {
+										"x": {
+											"type": "number",
+											"minimum": 0,
+											"maximum": 1
+										},
+										"y": {
+											"type": "number",
+											"minimum": 0,
+											"maximum": 1
+										}
+									},
+									"required": ["x", "y"]
+								}
+							]
+						}
+					},
+					"target": {
+						"type": "string",
+						"enum": ["image", "text", "both"]
+					},
+					"projectId": {
+						"description": "The project to act on, from listProjects. Omit it only for the project open in the OpenScreen editor, which works only while the app runs.",
+						"type": "string"
+					}
+				},
+				"required": ["startSec", "endSec"]
+			}
+		},
+		{
+			"name": "addSpeed",
+			"description": "Add a speed-change region over a span of the edited timeline (virtual seconds). speed > 1 fast-forwards, < 1 slows down, from 0.25× to 16× (default 1.5×). Use to speed through slow stretches without cutting them.",
+			"inputSchema": {
+				"type": "object",
+				"properties": {
+					"startSec": {
+						"type": "number",
+						"minimum": 0
+					},
+					"endSec": {
+						"type": "number",
+						"minimum": 0
+					},
+					"speed": {
+						"default": 1.5,
+						"type": "number",
+						"minimum": 0.25,
+						"maximum": 16
+					},
+					"projectId": {
+						"description": "The project to act on, from listProjects. Omit it only for the project open in the OpenScreen editor, which works only while the app runs.",
+						"type": "string"
+					}
+				},
+				"required": ["startSec", "endSec"]
+			}
+		},
+		{
+			"name": "addTrims",
+			"description": "Add MANY trim ranges in one call: `ranges` is a list, each entry taking exactly the fields addTrim takes. Use this whenever you have more than one cut to make — 'remove the silences' on a half-hour recording is hundreds of cuts, and sending them one at a time costs one round trip each. Each range stands or falls ALONE: one that cannot be placed is refused by itself and listed in `refused` with its index and the reason, while every other range is still applied. Nothing is rolled back, so a single bad bound never costs you the rest. The result leads with requested / appliedCount / refusedCount so you can see a partial outcome without re-reading the document — report what was refused rather than claiming the whole list landed. A zoom HOLDS over its span: it animates in during the window just before startSec and out during the window just after endSec. Each move lasts 0.6 s + 0.55 s × ln(renderedScale) of SCREEN time (0.72 s at 1.25×, 0.82 s at 1.50×, 0.92 s at 1.80×, 1.03 s at 2.20×, 1.29 s at 3.50×, 1.49 s at 5.00×), so a speed region scales the timeline it covers by its speed: longer above 1×, shorter below. getCurrentDocument gives each zoom's zoomInFromSec and zoomOutUntilSec, in virtual seconds like the zoom. A trim inside either window cuts that move and the export jumps at the cut: leave the windows untrimmed. Two zooms at most 1.5 s apart on screen, on the same clip with no trim between them, are chained: the camera pans from one to the next over 1 s of screen time from the first one's end (panUntilSec), with no zoom-out or zoom-in between them. Each applied entry carries the same `cutTransitions` warning addTrim reports.",
+			"inputSchema": {
+				"type": "object",
+				"properties": {
+					"ranges": {
+						"minItems": 1,
+						"type": "array",
+						"items": {
+							"anyOf": [
+								{
+									"type": "object",
+									"properties": {
+										"startSec": {
+											"type": "number",
+											"minimum": 0
+										},
+										"endSec": {
+											"type": "number",
+											"minimum": 0
+										},
+										"assetId": {
+											"type": "string",
+											"minLength": 1
+										},
+										"clipId": {
+											"type": "string",
+											"minLength": 1
+										},
+										"reason": {
+											"default": "",
+											"type": "string"
+										}
+									},
+									"required": ["startSec", "endSec"]
+								},
+								{}
+							]
+						}
+					},
+					"projectId": {
+						"description": "The project to act on, from listProjects. Omit it only for the project open in the OpenScreen editor, which works only while the app runs.",
+						"type": "string"
+					}
+				},
+				"required": ["ranges"]
+			}
+		},
+		{
+			"name": "addZooms",
+			"description": "Add MANY zooms in one call: `regions` is a list, each entry taking exactly the fields addZoom takes (same depth table, 1=1.25×, 2=1.50×, 3=1.80×, 4=2.20×, 5=3.50×, 6=5.00×). Use this for the smart-zoom pass, where you have decided every zoom before emitting the first one — sending them one at a time costs one round trip each. Each region stands or falls ALONE: one that covers no clip is refused by itself and listed in `refused` with its index and the reason, while the others are still applied. The result leads with requested / appliedCount / refusedCount, and each applied entry carries its renderedScale — quote that, never the depth — plus the same `cursorAnchor` addZoom reports, whenever the footage under that region has readable pointer telemetry, and the same `cutTransitions` warning. A zoom HOLDS over its span: it animates in during the window just before startSec and out during the window just after endSec. Each move lasts 0.6 s + 0.55 s × ln(renderedScale) of SCREEN time (0.72 s at 1.25×, 0.82 s at 1.50×, 0.92 s at 1.80×, 1.03 s at 2.20×, 1.29 s at 3.50×, 1.49 s at 5.00×), so a speed region scales the timeline it covers by its speed: longer above 1×, shorter below. getCurrentDocument gives each zoom's zoomInFromSec and zoomOutUntilSec, in virtual seconds like the zoom. A trim inside either window cuts that move and the export jumps at the cut: leave the windows untrimmed. Two zooms at most 1.5 s apart on screen, on the same clip with no trim between them, are chained: the camera pans from one to the next over 1 s of screen time from the first one's end (panUntilSec), with no zoom-out or zoom-in between them.",
+			"inputSchema": {
+				"type": "object",
+				"properties": {
+					"regions": {
+						"minItems": 1,
+						"type": "array",
+						"items": {
+							"anyOf": [
+								{
+									"type": "object",
+									"properties": {
+										"startSec": {
+											"type": "number",
+											"minimum": 0
+										},
+										"endSec": {
+											"type": "number",
+											"minimum": 0
+										},
+										"depth": {
+											"description": "Defaults to 3 when neither depth nor customScale is given.",
+											"type": "integer",
+											"minimum": 1,
+											"maximum": 6
+										},
+										"focus": {
+											"default": {
+												"cx": 0.5,
+												"cy": 0.5
+											},
+											"type": "object",
+											"properties": {
+												"cx": {
+													"type": "number",
+													"minimum": 0,
+													"maximum": 1
+												},
+												"cy": {
+													"type": "number",
+													"minimum": 0,
+													"maximum": 1
+												}
+											},
+											"required": ["cx", "cy"]
+										},
+										"rotationPreset": {
+											"default": "none",
+											"type": "string",
+											"enum": ["none", "left", "right", "orbit"]
+										},
+										"focusMode": {
+											"default": "manual",
+											"type": "string",
+											"enum": ["manual", "auto"]
+										},
+										"hideCursor": {
+											"default": false,
+											"type": "boolean"
+										},
+										"customScale": {
+											"type": "number",
+											"minimum": 1,
+											"maximum": 5,
+											"description": "A free zoom level, as a factor (1–5, e.g. 2 for 2×), in place of depth. Refused past the clip's own limit, the deepest its recording takes before it blurs; the refusal names it."
+										}
+									},
+									"required": ["startSec", "endSec"]
+								},
+								{}
+							]
+						}
+					},
+					"projectId": {
+						"description": "The project to act on, from listProjects. Omit it only for the project open in the OpenScreen editor, which works only while the app runs.",
+						"type": "string"
+					}
+				},
+				"required": ["regions"]
+			}
+		},
+		{
+			"name": "createCheckpoint",
+			"description": "Save the current state of the project and return its checkpointId. Changes nothing. Call it before a series of edits so restoreCheckpoint can revert all of them in one step.",
+			"inputSchema": {
+				"type": "object",
+				"properties": {
+					"projectId": {
+						"type": "string",
+						"description": "The project to act on, from listProjects. Omit it only for the project open in the OpenScreen editor, which works only while the app runs."
+					}
+				}
+			}
+		},
+		{
+			"name": "createProject",
+			"description": "Create a new project, in the look new projects start with in OpenScreen (the style preset marked for them, else the last edited project's), as the editor's New does. Empty, or from a video file laid out as one clip, as the editor lays out an opened video, with zooms planned from the clicks when the video is an OpenScreen recording with its pointer track; autoZooms says how many.\nReturns the projectId to edit and a checkpointId that restores the project as it was created. Fill an empty one with importMedia. It is in the OpenScreen app's project list, so the user can open it in its editor.",
+			"inputSchema": {
+				"type": "object",
+				"properties": {
+					"title": {
+						"type": "string",
+						"description": "The project's title in OpenScreen. Default: the video's file name, or Untitled Project."
+					},
+					"videoPath": {
+						"type": "string",
+						"description": "Absolute path of a video (.mp4, .mov, .m4v, .webm, .mkv, .avi, .wmv) to start from. Omit it for an empty project."
+					}
+				}
+			}
+		},
+		{
+			"name": "exportVideo",
+			"description": "Render a project to an MP4 (H.264) or a GIF with OpenScreen's compositor: the background, cursor, zooms, cuts, speed changes and annotations as edited. Returns the file's path; call getFrames with the projectId to check it at the ruler seconds you edited with. The video's shape follows the project's format (setAspectRatio). The options are the Export dialog's: quality and fps for an MP4; gifFrameRate, gifSize and gifLoop for a GIF.",
+			"inputSchema": {
+				"type": "object",
+				"properties": {
+					"projectId": {
+						"type": "string"
+					},
+					"path": {
+						"type": "string",
+						"description": "Where to write the video: an absolute path, or one relative to this server's working directory, ending in .mp4 or .gif."
+					},
+					"quality": {
+						"type": "string",
+						"enum": ["medium", "good", "source"],
+						"description": "MP4 only. The height: medium is 720 pixels, good is 1080 (default), source keeps the recording's. The width follows the format."
+					},
+					"fps": {
+						"type": "number",
+						"enum": [24, 30, 60],
+						"description": "MP4 only. Frames per second. Default 60."
+					},
+					"gifFrameRate": {
+						"type": "number",
+						"enum": [15, 20, 25, 30],
+						"description": "GIF only. Frames per second. Default 15."
+					},
+					"gifSize": {
+						"type": "string",
+						"enum": ["small", "medium", "large", "original"],
+						"description": "GIF only. The largest height in pixels, never upscaled: small 480, medium 720, large 1080, original keeps the recording's. Default medium."
+					},
+					"gifLoop": {
+						"type": "boolean",
+						"description": "GIF only. Loop forever (default) or play once."
+					}
+				},
+				"required": ["projectId", "path"]
+			}
+		},
+		{
+			"name": "getAudioReport",
+			"description": "Measure a project's sound, exactly as exportVideo's MP4 mixes it: you cannot hear a film, so check its mix with these numbers. Returns integratedLufs, the loudness of the whole film (null when it is silent; video platforms play at about -14 LUFS); truePeakDbtp, its highest peak; durationSec, the exported film's length; and silences, every stretch of half a second or more with no sound at all, in the ruler seconds the document tools use.\nWith audioId (addAudio's, or an audioTracks entry's trackId, its id when it has no trackId), that imported track alone: a music bed and a voice measured apart say how far one sits under the other. It renders the project as an export does, so it takes about as long as exportVideo. Call it again after an edit that moves time (a trim, a speed region, a track's offset).",
+			"inputSchema": {
+				"type": "object",
+				"properties": {
+					"projectId": {
+						"type": "string"
+					},
+					"audioId": {
+						"type": "string",
+						"description": "Measure this imported track alone. Default: the whole programme audio."
+					}
+				},
+				"required": ["projectId"]
+			}
+		},
+		{
+			"name": "getContactSheet",
+			"description": "Look at many moments of a video as one image: a grid of up to 36 small frames, each with its time printed in its corner, read left to right then top to bottom. It costs what a single frame of getFrames does.\nOver the whole film (the default) it shows the rhythm: where the zooms, the callouts and the cuts fall. Over a short span, startSec to endSec, it shows a zoom's move, an effect or a cut frame by frame: 12 frames over one second, say. The frames are too small to read text: use getFrames, with region if need be, for that.\nprojectId, path and the times mean what they mean for getFrames: ruler seconds with projectId, rendered from the project when it has no current export; the file's own seconds with path.",
+			"inputSchema": {
+				"type": "object",
+				"properties": {
+					"projectId": {
+						"type": "string",
+						"description": "Look at this project: its last export, or the frames an export would show."
+					},
+					"path": {
+						"type": "string",
+						"description": "Or look at this video file."
+					},
+					"atSec": {
+						"type": "array",
+						"items": {
+							"type": "number",
+							"minimum": 0
+						},
+						"maxItems": 36,
+						"description": "Times in seconds: ruler seconds with projectId, the file's own with path."
+					},
+					"count": {
+						"type": "integer",
+						"minimum": 1,
+						"maximum": 36,
+						"description": "How many frames, when atSec is not given. Default 12. Spread evenly over the whole video, or from startSec to endSec when either is given."
+					},
+					"startSec": {
+						"type": "number",
+						"minimum": 0,
+						"description": "With count: the first frame's time. Default: the start of the video."
+					},
+					"endSec": {
+						"type": "number",
+						"minimum": 0,
+						"description": "With count: the last frame's time. Default: the end of the video."
+					},
+					"region": {
+						"type": "object",
+						"properties": {
+							"x": {
+								"type": "number",
+								"minimum": 0,
+								"maximum": 1
+							},
+							"y": {
+								"type": "number",
+								"minimum": 0,
+								"maximum": 1
+							},
+							"width": {
+								"type": "number",
+								"exclusiveMinimum": 0,
+								"maximum": 1
+							},
+							"height": {
+								"type": "number",
+								"exclusiveMinimum": 0,
+								"maximum": 1
+							}
+						},
+						"required": ["x", "y", "width", "height"],
+						"description": "Only this part of each frame, as fractions of the frame from its top-left corner: x 0.5, y 0, width 0.5, height 0.5 is the top-right quarter."
+					},
+					"columns": {
+						"type": "integer",
+						"minimum": 2,
+						"maximum": 6,
+						"description": "Frames per row. Fewer make each frame larger. Default 4."
+					}
+				}
+			}
+		},
+		{
+			"name": "getCurrentDocument",
+			"description": "Read a compact snapshot of the current project: assets (with durations), timeline clips and trim ranges (source-time), and the zoom / speed / annotation / layout change / audio / effect regions (virtual, edited-timeline time), each with the settings its writes take: a zoom's level, focus mode and hidden cursor, an annotation's type, box, look and arrow or blur data, an audio track's level and fades. It also gives the project's look under `settings`, in the shape setEditorSettings takes, with `settingsContext`: the formats, wallpapers and cursor themes on offer, and under `inactive` each setting the editor hides in the current state and why. Call this before editing if the snapshot in the system prompt may be stale. The AxcutDocument is the single source of truth — your edits should preserve the user's placed clips and any timeline state they have already set up.",
+			"inputSchema": {
+				"type": "object",
+				"properties": {
+					"projectId": {
+						"description": "The project to act on, from listProjects. Omit it only for the project open in the OpenScreen editor, which works only while the app runs.",
+						"type": "string"
+					}
+				}
+			}
+		},
+		{
+			"name": "getCursorTrack",
+			"description": "Read the recorded pointer track for an asset: where the cursor was over time, downsampled to a readable rate. Each point carries atSec (the asset's own source clock), virtualSec (the same instant on the edited timeline — the coordinate addZoom takes, null when no clip carries it), cx/cy as 0–1 fractions of the frame, and `shape`, an index into the pointer bitmaps the recording used (equal values are the same pointer; a change means the pointer changed, e.g. arrow to text caret). Points that are not plain moves carry `kind`; points a trim cuts out of playback carry `trimmed`; points where the pointer was hidden carry `visible:false`. These are real samples, not a summary — reading what the pointer was doing is yours. Omit assetId for the primary asset. It answers `available:false` in two DIFFERENT ways you must not confuse: reason 'no-sidecar' means this asset was checked and genuinely has no telemetry, while reason 'unavailable' means it could not be read from here.",
+			"inputSchema": {
+				"type": "object",
+				"properties": {
+					"assetId": {
+						"type": "string",
+						"minLength": 1
+					},
+					"projectId": {
+						"description": "The project to act on, from listProjects. Omit it only for the project open in the OpenScreen editor, which works only while the app runs.",
+						"type": "string"
+					}
+				}
+			}
+		},
+		{
+			"name": "getFrames",
+			"description": "Look at a video as still images, at most 12 per call. Ask for the moments you need to check, such as each zoom and each callout.\nTo check an edit, pass projectId: atSec are the ruler seconds the document tools use, mapped through the trims and speed regions to the moment the export plays them. You get the project's last export, or, when it has none or has changed since, the frames its export would show, rendered from the project without exporting it. With path instead, you get any video file (a take's videoPath, say) and atSec are that file's own seconds.\nWith region, each frame is only that part of the picture, at the video's own resolution: the way to read small text, or to check an edge or a corner. To see many moments at once, such as the rhythm of the whole film or a transition frame by frame, use getContactSheet.",
+			"inputSchema": {
+				"type": "object",
+				"properties": {
+					"projectId": {
+						"type": "string",
+						"description": "Look at this project: its last export, or the frames an export would show."
+					},
+					"path": {
+						"type": "string",
+						"description": "Or look at this video file."
+					},
+					"atSec": {
+						"type": "array",
+						"items": {
+							"type": "number",
+							"minimum": 0
+						},
+						"maxItems": 12,
+						"description": "Times in seconds: ruler seconds with projectId, the file's own with path."
+					},
+					"count": {
+						"type": "integer",
+						"minimum": 1,
+						"maximum": 12,
+						"description": "How many frames, when atSec is not given. Default 6. Spread evenly over the whole video, or from startSec to endSec when either is given."
+					},
+					"startSec": {
+						"type": "number",
+						"minimum": 0,
+						"description": "With count: the first frame's time. Default: the start of the video."
+					},
+					"endSec": {
+						"type": "number",
+						"minimum": 0,
+						"description": "With count: the last frame's time. Default: the end of the video."
+					},
+					"region": {
+						"type": "object",
+						"properties": {
+							"x": {
+								"type": "number",
+								"minimum": 0,
+								"maximum": 1
+							},
+							"y": {
+								"type": "number",
+								"minimum": 0,
+								"maximum": 1
+							},
+							"width": {
+								"type": "number",
+								"exclusiveMinimum": 0,
+								"maximum": 1
+							},
+							"height": {
+								"type": "number",
+								"exclusiveMinimum": 0,
+								"maximum": 1
+							}
+						},
+						"required": ["x", "y", "width", "height"],
+						"description": "Only this part of each frame, as fractions of the frame from its top-left corner: x 0.5, y 0, width 0.5, height 0.5 is the top-right quarter."
+					}
+				}
+			}
+		},
+		{
+			"name": "importMedia",
+			"description": "Add a video or audio file from disk to the project's media, as the editor's Import does. It does not place it on the timeline. An audio file is then played by a track you lay with addAudio. A video becomes the project's footage when it has none yet (a project createProject made without a video): replaceTimeline then lays it out. Returns the new assetId and the file's durationSec, null when OpenScreen could not read it (the editor reads it again when it opens the project).",
+			"inputSchema": {
+				"type": "object",
+				"properties": {
+					"path": {
+						"type": "string",
+						"description": "Absolute path of the file. Video: .mp4, .mov, .m4v, .webm, .mkv, .avi, .wmv. Audio: .mp3, .wav, .m4a, .aac, .flac, .ogg, .oga, .opus, .webm."
+					},
+					"kind": {
+						"description": "What the file is. Default: audio for an audio-only extension, video otherwise, so pass audio for a .webm that holds only sound.",
+						"type": "string",
+						"enum": ["video", "audio"]
+					},
+					"label": {
+						"description": "Its name in the project's media. Default: the file name.",
+						"type": "string"
+					},
+					"projectId": {
+						"description": "The project to act on, from listProjects. Omit it only for the project open in the OpenScreen editor, which works only while the app runs.",
+						"type": "string"
+					}
+				},
+				"required": ["path"]
+			}
+		},
+		{
+			"name": "listProjects",
+			"description": "List every OpenScreen project: id, title, last update, asset count, and `open`: whether the OpenScreen editor has it open, in which case an edit to it goes through the editor, shows there live and the user can undo it with Ctrl/Cmd+Z. Pass a project's id as `projectId` to any other tool to read or edit that project.",
+			"inputSchema": {
+				"type": "object",
+				"properties": {}
+			}
+		},
+		{
+			"name": "listSources",
+			"description": "List the displays and windows OpenScreen can record, the microphones and the cameras. Pass startRecording a display's index or part of a window's title, and part of a microphone's or a camera's name. microphoneLabelsUnavailable or cameraLabelsUnavailable true means their names need a permission the user has not granted, so the list is empty: ask the user to allow it. Windows that are minimized, hidden, on another desktop or Space, or behind a full-screen app are not listed: bring a window on screen to record it.",
+			"inputSchema": {
+				"type": "object",
+				"properties": {}
+			}
+		},
+		{
+			"name": "removeModifier",
+			"description": "Delete a modifier (zoom / speed / annotation / layout change / audio / effect) by id; the kind is resolved from the id. Touching rows with the same styling render as one pill and are deleted together, so read removedIds in the result for the complete set that disappeared. This is how you 'remove'/'delete' one — never neutralise it (span 0, speed 1×), which leaves it in the document. Removing a layout change extends its predecessor; the first passage cannot be removed. For a trim use removeTrim; for a clip use removeClip.",
+			"inputSchema": {
+				"type": "object",
+				"properties": {
+					"id": {
+						"type": "string",
+						"minLength": 1
+					},
+					"projectId": {
+						"description": "The project to act on, from listProjects. Omit it only for the project open in the OpenScreen editor, which works only while the app runs.",
+						"type": "string"
+					}
+				},
+				"required": ["id"]
+			}
+		},
+		{
+			"name": "restoreCheckpoint",
+			"description": "Put the project back exactly as it was when createCheckpoint returned this checkpointId, discarding every edit made since, including the user's. Pass the same projectId as to createCheckpoint.",
+			"inputSchema": {
+				"type": "object",
+				"properties": {
+					"checkpointId": {
+						"type": "string"
+					},
+					"projectId": {
+						"type": "string",
+						"description": "The project to act on, from listProjects. Omit it only for the project open in the OpenScreen editor, which works only while the app runs."
+					}
+				},
+				"required": ["checkpointId"]
+			}
+		},
+		{
+			"name": "setAnnotation",
+			"description": "Change an existing annotation by id: its span (virtual-timeline seconds), its type, its centre (x/y, percent of its box), its size (width/height, arrow and blur only), its text and look (text only: fontSize, fontFamily, color, background, bold, animation), or its figureData / blurData, of which only the keys you pass change. Only the fields you pass are changed. A type change converts it as the editor's type switch does: it stays where it is on screen, a text turned into an arrow or a blur takes the default box, and the text is kept to come back to. A text box is refitted to its text around its centre. Arguments that belong to another kind (width on a text, blurData on an arrow) are refused. A new span that would run into another annotation is refused, naming it.",
+			"inputSchema": {
+				"type": "object",
+				"properties": {
+					"annotationId": {
+						"type": "string",
+						"minLength": 1
+					},
+					"startSec": {
+						"type": "number",
+						"minimum": 0
+					},
+					"endSec": {
+						"type": "number",
+						"minimum": 0
+					},
+					"type": {
+						"type": "string",
+						"enum": ["text", "figure", "blur"],
+						"description": "text: words on the frame. figure: an arrow. blur: a privacy mask that blurs or pixelates what is under it, such as an email address or a token on screen."
+					},
+					"text": {
+						"type": "string"
+					},
+					"x": {
+						"type": "number",
+						"minimum": 0,
+						"maximum": 100
+					},
+					"y": {
+						"type": "number",
+						"minimum": 0,
+						"maximum": 100
+					},
+					"fontSize": {
+						"description": "Text size; 32 is the editor's default, a title reads well at 56 to 80.",
+						"type": "number",
+						"minimum": 8,
+						"maximum": 200
+					},
+					"fontFamily": {
+						"description": "Typeface: one of the families the app ships and draws. Inter by default.",
+						"type": "string",
+						"enum": ["Inter", "Lora", "Oswald", "Caveat", "IBM Plex Mono"]
+					},
+					"color": {
+						"description": "Text colour, a CSS colour such as #ffffff.",
+						"type": "string"
+					},
+					"background": {
+						"description": "Colour of the plate behind the text, or \"none\" for no plate.",
+						"type": "string"
+					},
+					"bold": {
+						"type": "boolean"
+					},
+					"animation": {
+						"description": "How the text enters: typewriter types it out, pop springs it in, and so on.",
+						"type": "string",
+						"enum": ["none", "fade", "rise", "pop", "slide-left", "typewriter", "pulse"]
+					},
+					"width": {
+						"description": "Box width, in percent of the annotation's box: the output frame for an arrow, the recording's picture for a blur. Not for text, whose box is its words.",
+						"type": "number",
+						"exclusiveMinimum": 0,
+						"maximum": 100
+					},
+					"height": {
+						"description": "Box height, in percent of the same box as width.",
+						"type": "number",
+						"exclusiveMinimum": 0,
+						"maximum": 100
+					},
+					"figureData": {
+						"description": "An arrow's direction, colour and stroke width.",
+						"type": "object",
+						"properties": {
+							"arrowDirection": {
+								"default": "right",
+								"type": "string",
+								"enum": [
+									"up",
+									"down",
+									"left",
+									"right",
+									"up-right",
+									"up-left",
+									"down-right",
+									"down-left"
+								]
+							},
+							"color": {
+								"default": "#34B27B",
+								"type": "string"
+							},
+							"strokeWidth": {
+								"default": 4,
+								"type": "number",
+								"minimum": 0
+							}
+						}
+					},
+					"blurData": {
+						"description": "A blur's look: type blur or mosaic, shape rectangle or oval, color of the mosaic grid, intensity, blockSize.",
+						"type": "object",
+						"properties": {
+							"type": {
+								"default": "mosaic",
+								"type": "string",
+								"enum": ["blur", "mosaic"]
+							},
+							"shape": {
+								"default": "rectangle",
+								"type": "string",
+								"enum": ["rectangle", "oval", "freehand"]
+							},
+							"color": {
+								"default": "white",
+								"type": "string",
+								"enum": ["white", "black"]
+							},
+							"intensity": {
+								"default": 12,
+								"type": "number",
+								"minimum": 0
+							},
+							"blockSize": {
+								"default": 12,
+								"type": "number",
+								"minimum": 0
+							},
+							"freehandPoints": {
+								"type": "array",
+								"items": {
+									"type": "object",
+									"properties": {
+										"x": {
+											"type": "number",
+											"minimum": 0
+										},
+										"y": {
+											"type": "number",
+											"minimum": 0
+										}
+									},
+									"required": ["x", "y"]
+								}
+							}
+						}
+					},
+					"projectId": {
+						"description": "The project to act on, from listProjects. Omit it only for the project open in the OpenScreen editor, which works only while the app runs.",
+						"type": "string"
+					}
+				},
+				"required": ["annotationId"]
+			}
+		},
+		{
+			"name": "setAspectRatio",
+			"description": "Set the shape of the exported video: 16:9 for X, YouTube or a slide, 9:16 for a vertical story or short, 1:1 or 4:5 for a square feed, auto to follow the recording, or one of the clips' own shapes (getCurrentDocument's settingsContext.originalAspectRatios). Annotations on the frame keep their place and shape. The same as setEditorSettings with aspectRatio alone.",
+			"inputSchema": {
+				"type": "object",
+				"properties": {
+					"aspectRatio": {
+						"type": "string",
+						"description": "\"auto\", one of 16:9, 9:16, 1:1, 4:3, 4:5, 16:10, 10:16, or a token from getCurrentDocument's settingsContext.originalAspectRatios."
+					},
+					"projectId": {
+						"description": "The project to act on, from listProjects. Omit it only for the project open in the OpenScreen editor, which works only while the app runs.",
+						"type": "string"
+					}
+				},
+				"required": ["aspectRatio"]
+			}
+		},
+		{
+			"name": "setAudio",
+			"description": "Move, resize, re-level, re-lane, mute, loop, fade or re-point an existing audio track by id (virtual-timeline seconds). Only the fields you pass are changed. Use it to duck a bed under narration (gainDb), to fade it in or out (fadeInMs / fadeOutMs, 0 to 5000 ms), to shift what part of the file plays (offsetSec), or to move it between the voiceover and music lanes (kind). The whole track is edited, not one fragment of it, so a track split across a cut stays one thing.",
+			"inputSchema": {
+				"type": "object",
+				"properties": {
+					"audioId": {
+						"type": "string",
+						"minLength": 1
+					},
+					"startSec": {
+						"type": "number",
+						"minimum": 0
+					},
+					"endSec": {
+						"type": "number",
+						"minimum": 0
+					},
+					"kind": {
+						"type": "string",
+						"enum": ["voiceover", "music"]
+					},
+					"offsetSec": {
+						"type": "number",
+						"minimum": 0
+					},
+					"gainDb": {
+						"type": "number",
+						"minimum": -60,
+						"maximum": 12
+					},
+					"muted": {
+						"type": "boolean"
+					},
+					"loop": {
+						"type": "boolean"
+					},
+					"fadeInMs": {
+						"type": "integer",
+						"minimum": 0,
+						"maximum": 5000
+					},
+					"fadeOutMs": {
+						"type": "integer",
+						"minimum": 0,
+						"maximum": 5000
+					},
+					"projectId": {
+						"description": "The project to act on, from listProjects. Omit it only for the project open in the OpenScreen editor, which works only while the app runs.",
+						"type": "string"
+					}
+				},
+				"required": ["audioId"]
+			}
+		},
+		{
+			"name": "setClipRange",
+			"description": "Set a clip's in/out points (source-time seconds) to shorten its head or tail — distinct from a trim (which cuts a span inside the clip) — and/or its crop and rotation. Only the fields you pass are changed. All clips are re-laid back-to-back afterwards, so downstream clips shift automatically. Change the range ONLY when the user explicitly asks to shorten or extend a clip. Do NOT use this for 'remove silences' or 'cut pauses' — for those, use addTrim. cropRegion is the part of the source frame the clip shows, {x, y, width, height} in 0–1 fractions of it, per clip as in the editor's Edit clip; null shows the whole frame again. getCurrentDocument reports it on the clip, absent when the clip shows the whole frame. rotation 180 turns the clip's picture upside down (a camera mounted the wrong way up), 0 turns it upright again, as the Edit clip dialog's rotation does: the clip's zoom focus and its privacy blurs follow the turned picture, text and arrows on the frame do not move, and cropRegion stays in the recording's own unturned coordinates. getCurrentDocument reports rotation on the clip, absent when upright. Two neighbouring clips of the same asset whose source ranges meet and whose crops and rotations match are one clip: the result says joinedIntoNeighbour when an edit made them so.",
+			"inputSchema": {
+				"type": "object",
+				"properties": {
+					"clipId": {
+						"type": "string",
+						"minLength": 1
+					},
+					"sourceStartSec": {
+						"type": "number",
+						"minimum": 0
+					},
+					"sourceEndSec": {
+						"type": "number",
+						"minimum": 0
+					},
+					"cropRegion": {
+						"description": "The part of the source frame this clip shows, as 0–1 fractions of it ({x, y, width, height}); null shows the whole frame again.",
+						"anyOf": [
+							{
+								"type": "object",
+								"properties": {
+									"x": {
+										"type": "number",
+										"minimum": 0,
+										"maximum": 1
+									},
+									"y": {
+										"type": "number",
+										"minimum": 0,
+										"maximum": 1
+									},
+									"width": {
+										"type": "number",
+										"minimum": 0,
+										"maximum": 1
+									},
+									"height": {
+										"type": "number",
+										"minimum": 0,
+										"maximum": 1
+									}
+								},
+								"required": ["x", "y", "width", "height"]
+							},
+							{
+								"type": "null"
+							}
+						]
+					},
+					"rotation": {
+						"description": "Turns the clip's picture: 180 shows it upside down (a camera mounted the wrong way up), 0 upright again.",
+						"anyOf": [
+							{
+								"type": "number",
+								"const": 0
+							},
+							{
+								"type": "number",
+								"const": 180
+							}
+						]
+					},
+					"projectId": {
+						"description": "The project to act on, from listProjects. Omit it only for the project open in the OpenScreen editor, which works only while the app runs.",
+						"type": "string"
+					}
+				},
+				"required": ["clipId"]
+			}
+		},
+		{
+			"name": "setEditorSettings",
+			"description": "Change the project's look: pass only the settings to change, named as getCurrentDocument returns them under `settings`. Background: wallpaper (a bundled path from settingsContext.bundledWallpapers, a CSS colour or gradient, or a base64 PNG/JPEG data URL; never a file path or web URL; an embedded image reads back as a marker, leave the key out to keep it), wallpaperMotion (moves a gradient or image only), backgroundBlur 0–1. Frame: aspectRatio (\"auto\", a preset, or an originalAspectRatios token; a fixed format picked for the first time fills the frame with a window that follows the cursor, which formatFollowCursor turns off when settingsContext.formatFill is \"available\"), padding 0–100 %, borderRadius 0–64 px, shadowIntensity 0–1, frame (none, window, laptop, phone, monitor) and frameTheme (light, dark), motionBlurAmount 0–1, depthOfField (blurs 3D-tilted zooms only). Camera: webcamLayoutPreset, webcamMirrored, webcamReactiveZoom (shrinks on zoom), webcamMaskShape (square or rectangle, the camera's own proportions; an untouched roundness follows it), webcamRoundness 0–1, webcamSizePreset 15–60, webcamAnchor (a corner or an edge middle), webcamCropRegion (the framing: a square share of the picture, width = height ≥ 1/3) and webcamCropPan (where that window sits, 0–1 per axis, 0.5 centred), webcamBackgroundMode (none, transparent, blur, custom: needs settingsContext.cameraSegmentation ready), webcamBlurIntensity 0–1, webcamWallpaper (as wallpaper). Cursor, under `cursor`: show, autoHide, theme (settingsContext.cursorThemes), asArrow (the recorded cursor kinds drawn as the arrow instead), size 1.5–6, smoothing 0–1, motionBlur 0–1, clickBounce 0–2, clickImpact, clickSound (only heard when the take recorded clicks) and clickSoundGainDb −24–0, model3d. Also autoFocusAll (every zoom follows the cursor), audioGainDb −12–12 dB, the master volume, and recordingMuted (silences the recording's own sound in the preview and the export; added audio tracks still play). A value out of range or a key not listed is refused with the reason, and nothing changes. The result lists what was applied, including what the editor changes with it, and `inactive` for any of those the current state leaves without effect.",
+			"inputSchema": {
+				"type": "object",
+				"properties": {
+					"wallpaper": {
+						"type": "string",
+						"description": "A bundled wallpaper path (settingsContext.bundledWallpapers), a CSS colour (#1e1e2e, rgb(…)), a CSS gradient, or a base64 PNG/JPEG data URL. No file paths, no web URLs."
+					},
+					"wallpaperMotion": {
+						"type": "string",
+						"enum": ["none", "drift", "aurora", "waves"]
+					},
+					"frame": {
+						"type": "string",
+						"enum": ["none", "window", "laptop", "phone", "monitor"]
+					},
+					"frameTheme": {
+						"type": "string",
+						"enum": ["light", "dark"]
+					},
+					"aspectRatio": {
+						"type": "string",
+						"description": "\"auto\", one of the presets, or a token from settingsContext.originalAspectRatios."
+					},
+					"formatFollowCursor": {
+						"type": "boolean"
+					},
+					"shadowIntensity": {
+						"type": "number",
+						"minimum": 0,
+						"maximum": 1
+					},
+					"backgroundBlur": {
+						"type": "number",
+						"minimum": 0,
+						"maximum": 1
+					},
+					"motionBlurAmount": {
+						"type": "number",
+						"minimum": 0,
+						"maximum": 1
+					},
+					"depthOfField": {
+						"type": "boolean"
+					},
+					"borderRadius": {
+						"type": "number",
+						"minimum": 0,
+						"maximum": 64,
+						"description": "Corner radius in px at 1080p."
+					},
+					"padding": {
+						"type": "number",
+						"minimum": 0,
+						"maximum": 100,
+						"description": "Percent."
+					},
+					"webcamLayoutPreset": {
+						"type": "string",
+						"enum": [
+							"picture-in-picture",
+							"dual-frame",
+							"vertical-stack",
+							"camera-only",
+							"no-webcam"
+						]
+					},
+					"webcamMaskShape": {
+						"type": "string",
+						"enum": ["rectangle", "square"]
+					},
+					"webcamRoundness": {
+						"type": "number",
+						"minimum": 0,
+						"maximum": 1
+					},
+					"webcamMirrored": {
+						"type": "boolean"
+					},
+					"webcamReactiveZoom": {
+						"type": "boolean"
+					},
+					"webcamSizePreset": {
+						"type": "number",
+						"minimum": 15,
+						"maximum": 60,
+						"description": "The camera's long side, in percent of the frame's short side."
+					},
+					"webcamAnchor": {
+						"type": "string",
+						"enum": [
+							"top-left",
+							"top",
+							"top-right",
+							"left",
+							"right",
+							"bottom-left",
+							"bottom",
+							"bottom-right"
+						]
+					},
+					"webcamCropRegion": {
+						"type": "object",
+						"properties": {
+							"x": {
+								"type": "number",
+								"minimum": 0,
+								"maximum": 1
+							},
+							"y": {
+								"type": "number",
+								"minimum": 0,
+								"maximum": 1
+							},
+							"width": {
+								"type": "number",
+								"minimum": 0.3333333333333333,
+								"maximum": 1
+							},
+							"height": {
+								"type": "number",
+								"minimum": 0.3333333333333333,
+								"maximum": 1
+							}
+						},
+						"required": ["x", "y", "width", "height"],
+						"additionalProperties": false
+					},
+					"webcamCropPan": {
+						"type": "object",
+						"properties": {
+							"x": {
+								"type": "number",
+								"minimum": 0,
+								"maximum": 1
+							},
+							"y": {
+								"type": "number",
+								"minimum": 0,
+								"maximum": 1
+							}
+						},
+						"required": ["x", "y"],
+						"additionalProperties": false
+					},
+					"webcamBackgroundMode": {
+						"type": "string",
+						"enum": ["none", "transparent", "blur", "custom"]
+					},
+					"webcamWallpaper": {
+						"type": "string"
+					},
+					"webcamBlurIntensity": {
+						"type": "number",
+						"minimum": 0,
+						"maximum": 1
+					},
+					"audioGainDb": {
+						"type": "number",
+						"minimum": -12,
+						"maximum": 12
+					},
+					"recordingMuted": {
+						"type": "boolean"
+					},
+					"autoFocusAll": {
+						"type": "boolean"
+					},
+					"cursor": {
+						"type": "object",
+						"properties": {
+							"show": {
+								"type": "boolean"
+							},
+							"autoHide": {
+								"type": "boolean"
+							},
+							"theme": {
+								"type": "string",
+								"enum": [
+									"default",
+									"studio-ink",
+									"prism-glow",
+									"pop-coral",
+									"pixel-candy",
+									"star-sprout",
+									"glass-lens"
+								]
+							},
+							"asArrow": {
+								"type": "array",
+								"items": {
+									"type": "string",
+									"enum": [
+										"pointer",
+										"text",
+										"grab",
+										"resize",
+										"busy",
+										"crosshair",
+										"not-allowed",
+										"help",
+										"up-arrow"
+									]
+								}
+							},
+							"size": {
+								"type": "number",
+								"minimum": 1.5,
+								"maximum": 6
+							},
+							"smoothing": {
+								"type": "number",
+								"minimum": 0,
+								"maximum": 1
+							},
+							"motionBlur": {
+								"type": "number",
+								"minimum": 0,
+								"maximum": 1
+							},
+							"clickBounce": {
+								"type": "number",
+								"minimum": 0,
+								"maximum": 2
+							},
+							"clickImpact": {
+								"type": "boolean"
+							},
+							"clickSound": {
+								"type": "boolean"
+							},
+							"clickSoundGainDb": {
+								"type": "number",
+								"minimum": -24,
+								"maximum": 0
+							},
+							"model3d": {
+								"type": "boolean"
+							}
+						},
+						"additionalProperties": false
+					},
+					"projectId": {
+						"description": "The project to act on, from listProjects. Omit it only for the project open in the OpenScreen editor, which works only while the app runs.",
+						"type": "string"
+					}
+				},
+				"additionalProperties": false
+			}
+		},
+		{
+			"name": "setEffect",
+			"description": "Move, resize or re-tune an effect region by id (virtual seconds): its span, its parameter `values`, or its `target`. Only the fields you pass change; a value equal to the default is dropped. Refused if the new span runs into another effect: one runs at a time.",
+			"inputSchema": {
+				"type": "object",
+				"properties": {
+					"effectRegionId": {
+						"type": "string",
+						"minLength": 1
+					},
+					"startSec": {
+						"type": "number",
+						"minimum": 0
+					},
+					"endSec": {
+						"type": "number",
+						"minimum": 0
+					},
+					"values": {
+						"type": "object",
+						"propertyNames": {
+							"type": "string"
+						},
+						"additionalProperties": {
+							"anyOf": [
+								{
+									"type": "number"
+								},
+								{
+									"type": "boolean"
+								},
+								{
+									"type": "string",
+									"pattern": "^#(?:[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$"
+								},
+								{
+									"type": "object",
+									"properties": {
+										"x": {
+											"type": "number",
+											"minimum": 0,
+											"maximum": 1
+										},
+										"y": {
+											"type": "number",
+											"minimum": 0,
+											"maximum": 1
+										}
+									},
+									"required": ["x", "y"]
+								}
+							]
+						}
+					},
+					"target": {
+						"type": "string",
+						"enum": ["image", "text", "both"]
+					},
+					"projectId": {
+						"description": "The project to act on, from listProjects. Omit it only for the project open in the OpenScreen editor, which works only while the app runs.",
+						"type": "string"
+					}
+				},
+				"required": ["effectRegionId"]
+			}
+		},
+		{
+			"name": "setEffectDefinition",
+			"description": "Change an effect itself by effectId — its name, description, WGSL `code` or `params` — and with it every region that uses it. New code is compiled first and refused with the compiler's error if it does not compile. A removed parameter's values drop; the bounds re-clamp the others. Read the current code with getEffect before rewriting it.",
+			"inputSchema": {
+				"type": "object",
+				"properties": {
+					"effectId": {
+						"type": "string",
+						"minLength": 1
+					},
+					"name": {
+						"type": "string",
+						"minLength": 1,
+						"maxLength": 60
+					},
+					"description": {
+						"type": "string",
+						"maxLength": 500
+					},
+					"code": {
+						"type": "string",
+						"minLength": 1,
+						"maxLength": 65536
+					},
+					"params": {
+						"maxItems": 32,
+						"type": "array",
+						"items": {
+							"oneOf": [
+								{
+									"type": "object",
+									"properties": {
+										"type": {
+											"type": "string",
+											"const": "number"
+										},
+										"name": {
+											"type": "string",
+											"pattern": "^[a-z][a-z0-9_]{0,31}$"
+										},
+										"label": {
+											"default": "",
+											"type": "string",
+											"maxLength": 40
+										},
+										"default": {
+											"type": "number"
+										},
+										"min": {
+											"type": "number"
+										},
+										"max": {
+											"type": "number"
+										}
+									},
+									"required": ["type", "name", "default", "min", "max"]
+								},
+								{
+									"type": "object",
+									"properties": {
+										"type": {
+											"type": "string",
+											"const": "toggle"
+										},
+										"name": {
+											"type": "string",
+											"pattern": "^[a-z][a-z0-9_]{0,31}$"
+										},
+										"label": {
+											"default": "",
+											"type": "string",
+											"maxLength": 40
+										},
+										"default": {
+											"type": "boolean"
+										}
+									},
+									"required": ["type", "name", "default"]
+								},
+								{
+									"type": "object",
+									"properties": {
+										"type": {
+											"type": "string",
+											"const": "color"
+										},
+										"name": {
+											"type": "string",
+											"pattern": "^[a-z][a-z0-9_]{0,31}$"
+										},
+										"label": {
+											"default": "",
+											"type": "string",
+											"maxLength": 40
+										},
+										"default": {
+											"type": "string",
+											"pattern": "^#(?:[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$"
+										}
+									},
+									"required": ["type", "name", "default"]
+								},
+								{
+									"type": "object",
+									"properties": {
+										"type": {
+											"type": "string",
+											"const": "point"
+										},
+										"name": {
+											"type": "string",
+											"pattern": "^[a-z][a-z0-9_]{0,31}$"
+										},
+										"label": {
+											"default": "",
+											"type": "string",
+											"maxLength": 40
+										},
+										"default": {
+											"type": "object",
+											"properties": {
+												"x": {
+													"type": "number",
+													"minimum": 0,
+													"maximum": 1
+												},
+												"y": {
+													"type": "number",
+													"minimum": 0,
+													"maximum": 1
+												}
+											},
+											"required": ["x", "y"]
+										}
+									},
+									"required": ["type", "name", "default"]
+								}
+							]
+						}
+					},
+					"projectId": {
+						"description": "The project to act on, from listProjects. Omit it only for the project open in the OpenScreen editor, which works only while the app runs.",
+						"type": "string"
+					}
+				},
+				"required": ["effectId"]
+			}
+		},
+		{
+			"name": "setPointerTrack",
+			"description": "For a video driven by a script (Playwright, CDP, a browser extension) rather than the real mouse: the screen pointer never moved, so the video has no cursor and no zoom. Give the pointer's path here and OpenScreen draws it, gliding between your actions, and zooms on its clicks as for a real mouse. It replaces the pointer recorded with the video, saved beside it as <video>.cursor.json, then plans zooms on the new clicks as stopRecording does, clear of the zooms already there; autoZoomsAdded says how many. A take from stopRecording knows when it started; a video given to createProject needs recordingStartedAt. It is an edit like any other: on a project that is not open in the editor it needs a checkpoint (stopRecording and createProject make one), and restoreCheckpoint undoes it, the pointer track included.\nevents, one per action: `at` is Date.now() when your script did it (log it as it runs; the take's recordingStartedAt is on the same clock). `x` and `y` are fractions (0 to 1) of the recorded window. For a point (clientX, clientY) of a page shown in that window, from inside the page: border = (outerWidth - innerWidth) / 2; x = (border + clientX) / outerWidth; y = (outerHeight - innerHeight - border + clientY) / outerHeight.",
+			"inputSchema": {
+				"type": "object",
+				"properties": {
+					"projectId": {
+						"type": "string"
+					},
+					"events": {
+						"type": "array",
+						"minItems": 1,
+						"items": {
+							"type": "object",
+							"properties": {
+								"at": {
+									"type": "number",
+									"description": "Milliseconds, from Date.now(): the clock recordingStartedAt is on."
+								},
+								"x": {
+									"type": "number",
+									"minimum": 0,
+									"maximum": 1
+								},
+								"y": {
+									"type": "number",
+									"minimum": 0,
+									"maximum": 1
+								},
+								"click": {
+									"type": "boolean",
+									"description": "The action clicked here."
+								}
+							},
+							"required": ["at", "x", "y"]
+						}
+					},
+					"recordingStartedAt": {
+						"type": "number",
+						"description": "When the video's first frame was captured, on the clock of the events' `at`: needed for a video this server did not record, such as one given to createProject. A take from stopRecording defaults to its own. For a video captured frame by frame, pass 0 and give each `at` as milliseconds into the video."
+					}
+				},
+				"required": ["projectId", "events"]
+			}
+		},
+		{
+			"name": "setZoom",
+			"description": "Move, resize, or restyle an existing zoom by id (virtual-timeline seconds). Only the fields you pass are changed. depth selects from the same table (1=1.25×, 2=1.50×, 3=1.80×, 4=2.20×, 5=3.50×, 6=5.00×); if the zoom carries a customScale (getCurrentDocument shows it as depthIsOverridden), that custom value is what renders, and passing depth clears it so the depth takes effect — the result says so. The result reports the resulting renderedScale, and — when the footage under the span has readable pointer telemetry — the same `cursorAnchor` addZoom reports, measured against the zoom's EFFECTIVE focus, so a call that moved only the span still learns what its unchanged focus is now looking at. The zoom pane's other settings: focusMode \"manual\" holds focus, \"auto\" follows the recorded pointer instead (getCurrentDocument reports the effective mode, auto everywhere while autoFocusAll is on); hideCursor hides the pointer while the zoom is on screen; customScale is a free level in place of depth, a factor from 1 to 5 rounded to the hundredth. A level the depth table has is stored as that depth, and one deeper than the clip takes before its recording blurs is refused with the limit, as the editor refuses it. Pass depth or customScale, not both. rotationPreset is the zoom's 3D camera: `left` or `right` turns the screen in 3D to that side, `orbit` moves the camera around the screen while the zoom holds, `none` (the default) keeps it flat. It is a strong effect: keep it for a reveal or a key moment, not every zoom. getCurrentDocument reports it as rotationPreset, absent when flat. A zoom HOLDS over its span: it animates in during the window just before startSec and out during the window just after endSec. Each move lasts 0.6 s + 0.55 s × ln(renderedScale) of SCREEN time (0.72 s at 1.25×, 0.82 s at 1.50×, 0.92 s at 1.80×, 1.03 s at 2.20×, 1.29 s at 3.50×, 1.49 s at 5.00×), so a speed region scales the timeline it covers by its speed: longer above 1×, shorter below. getCurrentDocument gives each zoom's zoomInFromSec and zoomOutUntilSec, in virtual seconds like the zoom. A trim inside either window cuts that move and the export jumps at the cut: leave the windows untrimmed. Two zooms at most 1.5 s apart on screen, on the same clip with no trim between them, are chained: the camera pans from one to the next over 1 s of screen time from the first one's end (panUntilSec), with no zoom-out or zoom-in between them. When the result cuts a zoom's move in or out, it carries `cutTransitions`: which zoom, which side, cutSec, the timeline seconds of the move lost, and by: trim, or junction when the move runs past its clip's edge into the next clip. It is a warning, nothing is refused: move the cut or the zoom unless a hard cut is what you want.",
+			"inputSchema": {
+				"type": "object",
+				"properties": {
+					"zoomId": {
+						"type": "string",
+						"minLength": 1
+					},
+					"startSec": {
+						"type": "number",
+						"minimum": 0
+					},
+					"endSec": {
+						"type": "number",
+						"minimum": 0
+					},
+					"depth": {
+						"type": "integer",
+						"minimum": 1,
+						"maximum": 6
+					},
+					"focus": {
+						"type": "object",
+						"properties": {
+							"cx": {
+								"type": "number",
+								"minimum": 0,
+								"maximum": 1
+							},
+							"cy": {
+								"type": "number",
+								"minimum": 0,
+								"maximum": 1
+							}
+						},
+						"required": ["cx", "cy"]
+					},
+					"rotationPreset": {
+						"type": "string",
+						"enum": ["none", "left", "right", "orbit"]
+					},
+					"focusMode": {
+						"type": "string",
+						"enum": ["manual", "auto"]
+					},
+					"hideCursor": {
+						"type": "boolean"
+					},
+					"customScale": {
+						"type": "number",
+						"minimum": 1,
+						"maximum": 5,
+						"description": "A free zoom level, as a factor (1–5, e.g. 2 for 2×), in place of depth. Refused past the clip's own limit, the deepest its recording takes before it blurs; the refusal names it."
+					},
+					"projectId": {
+						"description": "The project to act on, from listProjects. Omit it only for the project open in the OpenScreen editor, which works only while the app runs.",
+						"type": "string"
+					}
+				},
+				"required": ["zoomId"]
+			}
+		},
+		{
+			"name": "startRecording",
+			"description": "Start recording one window (preferred: nothing else on the desktop is captured) or one display. Returns once capture has started; then drive the app and call stopRecording. By default the pointer is recorded as data, so the export draws a clean cursor and the zooms planned from the clicks. A webcam recorded with it shows as a picture-in-picture in the project. Hiding the desktop icons follows the user's own Record mode setting. On Linux the desktop's own picker asks the user which window to record.",
+			"inputSchema": {
+				"type": "object",
+				"properties": {
+					"window": {
+						"type": "string",
+						"description": "Part of the title of the window to record, ignoring case. Wins over display."
+					},
+					"display": {
+						"type": "integer",
+						"minimum": 0,
+						"description": "Index of the display to record, from listSources. Default 0."
+					},
+					"systemAudio": {
+						"type": "boolean",
+						"description": "Also record the computer's sound."
+					},
+					"microphone": {
+						"anyOf": [
+							{
+								"type": "boolean"
+							},
+							{
+								"type": "string"
+							}
+						],
+						"description": "true for the default microphone, or part of a microphone's name."
+					},
+					"camera": {
+						"anyOf": [
+							{
+								"type": "boolean"
+							},
+							{
+								"type": "string"
+							}
+						],
+						"description": "Also record the webcam: true for the camera the user picked in OpenScreen, or part of a camera's name."
+					},
+					"cursor": {
+						"type": "string",
+						"enum": ["editable-overlay", "system"],
+						"description": "editable-overlay (default): the pointer is recorded as data, drawn clean by the export, with zooms on its clicks. system: the system's own pointer is burned into the video, with no zooms on clicks and no setPointerTrack."
+					}
+				}
+			}
+		},
+		{
+			"name": "stopRecording",
+			"description": "Stop the recording and turn the take into a new project, laid out as the editor lays out a fresh recording: one clip, plus the zooms planned from the recorded clicks. Not one per click: clicks close in time and on screen share one zoom, a click in the first seconds or the one that stopped the take gets none, and autoZooms says how many there are. Returns the projectId to edit, a checkpointId that restores the raw take, and the take's videoPath.",
+			"inputSchema": {
+				"type": "object",
+				"properties": {
+					"title": {
+						"type": "string",
+						"description": "The project's title in OpenScreen."
+					}
+				}
+			}
+		}
+	]
+}

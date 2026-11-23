@@ -3170,6 +3170,98 @@ describe("buildSceneDescription.shaderEffects", () => {
 		}
 	});
 
+	const oneRegion = (extra: Record<string, unknown>) =>
+		makeDoc({
+			assets: [makeAsset({ id: "a", originalPath: "/a.mp4" })],
+			clips: [
+				makeClip({
+					id: "c1",
+					assetId: "a",
+					sourceStartSec: 0,
+					sourceEndSec: 10,
+					timelineStartSec: 0,
+					timelineEndSec: 10,
+				}),
+			],
+			shaderEffects: [effect],
+			shaderEffectRanges: [
+				{
+					id: "fxr1",
+					startMs: 1000,
+					endMs: 6000,
+					effectId: "fx1",
+					values: { level: 2 },
+					target: "image",
+					...extra,
+				},
+			],
+		});
+
+	// What keeps a project without animation on today's scene, byte for byte: no `animate` key.
+	it("leaves animate out of a fragment that animates nothing", () => {
+		const [fragment] = buildSceneDescription(oneRegion({})).shaderEffects ?? [];
+		expect(fragment).toBeDefined();
+		expect("animate" in fragment).toBe(false);
+		expect(Object.keys(fragment)).toEqual([
+			"startSec",
+			"endSec",
+			"clipIndex",
+			"programmeStartSec",
+			"programmeEndSec",
+			"target",
+			"contract",
+			"code",
+			"params",
+			"values",
+		]);
+	});
+
+	it("names the image an effect reads, and only for an effect that has one", () => {
+		const doc = oneRegion({});
+		const image = {
+			path: "/recordings/effect-images/0123456789abcdef.png",
+			width: 400,
+			height: 100,
+		};
+		const withImage = { ...doc, shaderEffects: [{ ...effect, image }] };
+		const [fragment] = buildSceneDescription(withImage).shaderEffects ?? [];
+		// The file alone: the compositor loads it and tells the shader its size itself.
+		expect(fragment.image).toBe(image.path);
+		expect("image" in (buildSceneDescription(doc).shaderEffects ?? [])[0]).toBe(false);
+	});
+
+	it("carries each animated parameter's keyframes, easings normalised for the compositor", () => {
+		const [fragment] =
+			buildSceneDescription(
+				oneRegion({
+					animate: {
+						level: [
+							{ atSec: 0, value: 0, ease: "ease-out" },
+							{ atSec: 1, value: 2, ease: { spring: { bounce: 0.2 } } },
+							{ atSec: 2, value: 1 },
+						],
+						tint: [{ atSec: 0, value: "#ff0000", ease: "ease-in-out" }],
+						on: [
+							{ atSec: 0, value: false },
+							{ atSec: 1, value: true },
+						],
+					},
+				}),
+			).shaderEffects ?? [];
+		expect(fragment.animate).toEqual({
+			level: [
+				{ atSec: 0, value: 0, bezier: [0, 0, 0.58, 1] },
+				{ atSec: 1, value: 2, spring: 0.2 },
+				{ atSec: 2, value: 1 },
+			],
+			tint: [{ atSec: 0, value: [1, 0, 0, 1], bezier: [0.42, 0, 0.58, 1] }],
+			on: [
+				{ atSec: 0, value: 0, hold: true },
+				{ atSec: 1, value: 1, hold: true },
+			],
+		});
+	});
+
 	it("drops a region whose definition is gone", () => {
 		const doc = makeDoc({
 			shaderEffectRanges: [

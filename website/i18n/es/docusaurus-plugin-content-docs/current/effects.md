@@ -18,7 +18,7 @@ Los efectos vienen de un agente: el chat integrado o un cliente MCP como Claude 
 
 ## Pedir un efecto {#asking-for-an-effect}
 
-Describe lo que quieres ver, y cuándo: «una onda en cada clic», «fundido a negro en los dos últimos segundos, subtítulos incluidos». El agente escribe el efecto, lo coloca en la línea de tiempo y puede ver el resultado con `getFrames` sin exportar el vídeo.
+Describe lo que quieres ver, y cuándo: «una onda en cada clic», «fundido a negro en los dos últimos segundos, subtítulos incluidos». El agente escribe el efecto, lo coloca en la línea de tiempo y puede ver el resultado con `getFrames` sin exportar el vídeo. La skill `openscreen-effects` del plugin de OpenScreen le da a un agente ejemplos completos para empezar.
 
 Un efecto sabe dónde está el cursor y dónde cayó cada clic, dónde están la grabación y la cámara web en el vídeo tras los zooms y la disposición, y en qué momento está. Así, un halo puede seguir al ratón, y una onda puede salir de cada clic, allí donde el zoom lo haya llevado.
 

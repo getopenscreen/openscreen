@@ -17,7 +17,11 @@ import {
 	createEmptyDocument,
 	documentSchema,
 } from "../../src/lib/ai-edition/schema";
-import type { ShaderEffectChecker } from "../../src/lib/ai-edition/shaderEffects";
+import type {
+	ShaderEffectChecker,
+	ShaderEffectImageStore,
+} from "../../src/lib/ai-edition/shaderEffects";
+import type { StylePreset } from "../../src/lib/ai-edition/stylePresets";
 import type {
 	AgentTurnUsage,
 	AiEditionChatMessage,
@@ -327,6 +331,10 @@ export interface ChatRunEnv {
 	cameraSegmentation?: () => SegmentationSupport;
 	/** The compositor's check of an agent-written effect's WGSL. */
 	checkShaderEffect?: ShaderEffectChecker;
+	/** The copy kept of the image an agent-written effect reads. */
+	storeEffectImage?: ShaderEffectImageStore;
+	/** The user's saved style presets (`StylePresetService.list`). */
+	stylePresets?: () => Promise<StylePreset[]>;
 	/** Runtime-only model retry override used by bounded measurement harnesses. */
 	maxRetries?: number;
 }
@@ -518,6 +526,8 @@ export async function runChat(
 		cursor: env.cursor,
 		cameraSegmentation: env.cameraSegmentation,
 		checkShaderEffect: env.checkShaderEffect,
+		storeEffectImage: env.storeEffectImage,
+		stylePresets: env.stylePresets,
 	});
 
 	const executionSteps = execution.finish(Boolean(result.cancelled));

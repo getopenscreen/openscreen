@@ -12,6 +12,7 @@ import {
 	type AgentToolOptions,
 	addZoomArgs,
 	documentSnapshotForModel,
+	effectImageToStore,
 	executeAgentTool,
 	isMutatingTool,
 	MUTATING_TOOL_NAMES,
@@ -221,6 +222,7 @@ describe("the mutating-tool table", () => {
 				"setEffect",
 				"setEffectDefinition",
 				"setEditorSettings",
+				"applyStylePreset",
 				"setLayoutPreset",
 				"setSpeed",
 				"setTrim",
@@ -3505,6 +3507,56 @@ describe("region tools reach the inspector's settings (#1180)", () => {
 		expect(added.payload).toMatchObject({ type: "text", fontSize: 48 });
 	});
 
+	it("sets a text's font family from the shipped list, refits its box, and refuses another", () => {
+		const added = run(fixtureDocument(), "addAnnotation", {
+			startSec: 1,
+			endSec: 3,
+			text: "Shipped fonts",
+			fontFamily: "Oswald",
+		});
+		expect(added.ok).toBe(true);
+		expect(added.document?.annotations[0].style.fontFamily).toBe("Oswald");
+		expect(added.payload).toMatchObject({ fontFamily: "Oswald" });
+		expect(snapshot(added.document).annotations[0]).toMatchObject({ fontFamily: "Oswald" });
+
+		// The box is the size of its words, measured in the face it is drawn in: a new face
+		// refits it.
+		vi.stubEnv("OPENSCREEN_FONTS_DIR", path.resolve(__dirname, "../../public/fonts"));
+		try {
+			const inShippedFonts = run(fixtureDocument(), "addAnnotation", {
+				startSec: 1,
+				endSec: 3,
+				text: "Shipped fonts",
+				fontFamily: "Oswald",
+			});
+			const mono = run(inShippedFonts.document as AxcutDocument, "setAnnotation", {
+				annotationId: inShippedFonts.payload.annotationId,
+				fontFamily: "IBM Plex Mono",
+			});
+			expect(mono.ok).toBe(true);
+			const stored = mono.document?.annotations[0];
+			expect(stored?.style.fontFamily).toBe("IBM Plex Mono");
+			expect(stored?.size.width).toBeGreaterThan(
+				inShippedFonts.document?.annotations[0].size.width ?? Number.POSITIVE_INFINITY,
+			);
+		} finally {
+			vi.unstubAllEnvs();
+		}
+
+		// The default text reads back the family the renderer draws it in.
+		const plain = run(fixtureDocument(), "addAnnotation", { startSec: 1, endSec: 3, text: "Hi" });
+		expect(plain.payload).toMatchObject({ fontFamily: "Inter" });
+
+		const comic = run(fixtureDocument(), "addAnnotation", {
+			startSec: 1,
+			endSec: 3,
+			text: "Hi",
+			fontFamily: "Comic Sans MS",
+		});
+		expect(comic.ok).toBe(false);
+		expect(comic.document).toBeUndefined();
+	});
+
 	it("adds a privacy blur on the recording's picture, sized and placed as asked", () => {
 		const added = run(fixtureDocument(), "addAnnotation", {
 			startSec: 1,
@@ -3741,6 +3793,53 @@ describe("clip structure (#1180)", () => {
 		expect(run(twoTakes(), "insertClip", { assetId: "asset_2", sourceStartSec: 9 }).ok).toBe(false);
 	});
 
+	/** An imported image: a video asset whose file is the hold generated from it. */
+	function withStill(): AxcutDocument {
+		const document = twoTakes();
+		return {
+			...document,
+			assets: [
+				...document.assets,
+				{
+					id: "still_1",
+					kind: "video",
+					label: "logo.png",
+					originalPath: "C:/rec/stills/logo_1a2b3c4d_5000.still.mp4",
+					durationSec: 5,
+					video: { codec: "h264", width: 802, height: 602, fps: 30 },
+				} as AxcutDocument["assets"][number],
+			],
+		};
+	}
+
+	it("insertClip shows a still for its whole hold by default", () => {
+		const result = run(withStill(), "insertClip", { assetId: "still_1" });
+		expect(result.ok).toBe(true);
+		expect((result.document as AxcutDocument).timeline.clips.at(-1)).toMatchObject({
+			assetId: "still_1",
+			sourceStartSec: 0,
+			sourceEndSec: 5,
+		});
+	});
+
+	it("setClipRange shortens a still and never takes it past its hold", () => {
+		const placed = run(withStill(), "insertClip", { assetId: "still_1" });
+		const { clipId } = JSON.parse(placed.resultJson);
+		const document = placed.document as AxcutDocument;
+		const shorter = run(document, "setClipRange", { clipId, sourceEndSec: 2 });
+		expect(
+			(shorter.document as AxcutDocument).timeline.clips.find((c) => c.id === clipId),
+		).toMatchObject({ sourceStartSec: 0, sourceEndSec: 2 });
+		// Clamped to the hold, as any video of known length is.
+		const longer = run(shorter.document as AxcutDocument, "setClipRange", {
+			clipId,
+			sourceEndSec: 9,
+		});
+		expect(JSON.parse(longer.resultJson).sourceEndSec).toBe(5);
+		const past = run(document, "setClipRange", { clipId, sourceStartSec: 6, sourceEndSec: 8 });
+		expect(past.ok).toBe(false);
+	});
+
 	it("duplicateClip puts the copy right after the original, with its own copy of the cuts", () => {
 		const result = run(twoTakes(), "duplicateClip", { clipId: "clip_1" });
 		const payload = JSON.parse(result.resultJson);
@@ -3820,6 +3919,106 @@ describe("clip structure (#1180)", () => {
 			{ id: "clip_1", sourceEndSec: 10 },
 			{ id: clipId, sourceStartSec: 10, sourceEndSec: 16, cropRegion: crop },
 		]);
+	});
+
+	it("setClipRange turns a clip upside down and back, and the snapshot reads it back", () => {
+		const crop = { x: 0.1, y: 0.2, width: 0.5, height: 0.6 };
+		const cropped = run(twoTakes(), "setClipRange", { clipId: "clip_1", cropRegion: crop })
+			.document as AxcutDocument;
+		const turned = run(cropped, "setClipRange", { clipId: "clip_1", rotation: 180 });
+		expect(turned.ok).toBe(true);
+		const document = turned.document as AxcutDocument;
+		// The range, the crop (in the recording's own coordinates) and the cut stay as they were.
+		expect(document.timeline.clips[0]).toMatchObject({
+			sourceStartSec: 0,
+			sourceEndSec: 10,
+			cropRegion: crop,
+			rotation: 180,
+		});
+		expect(document.timeline.trimRanges).toHaveLength(1);
+		expect(JSON.parse(turned.resultJson)).toMatchObject({ rotation: 180, cropRegion: crop });
+		expect(() => documentSchema.parse(document)).not.toThrow();
+		const snapshot = JSON.parse(run(document, "getCurrentDocument", {}).resultJson);
+		expect(snapshot.clips[0].rotation).toBe(180);
+
+		const upright = run(document, "setClipRange", { clipId: "clip_1", rotation: 0 });
+		expect((upright.document as AxcutDocument).timeline.clips[0]).not.toHaveProperty("rotation");
+		const plain = JSON.parse(
+			run(upright.document as AxcutDocument, "getCurrentDocument", {}).resultJson,
+		);
+		expect(plain.clips[0]).not.toHaveProperty("rotation");
+	});
+
+	it("setClipRange turns the clip's zoom focus with its picture", () => {
+		const zoomed = run(twoTakes(), "addZoom", {
+			startSec: 5,
+			endSec: 7,
+			focus: { cx: 0.2, cy: 0.3 },
+		});
+		const turned = run(zoomed.document as AxcutDocument, "setClipRange", {
+			clipId: "clip_1",
+			rotation: 180,
+		});
+		expect((turned.document as AxcutDocument).zoomRanges[0].focus).toEqual({
+			cx: 0.8,
+			cy: 0.7,
+		});
+	});
+
+	it("setClipRange says how the clip ended when turning it folds it into its neighbour", () => {
+		// clip_1 is upside down. A second clip continues its media upright, so the two stay apart
+		// until the second is turned too: then they are one clip again, and it is gone.
+		const turned = run(twoTakes(), "setClipRange", { clipId: "clip_1", rotation: 180 })
+			.document as AxcutDocument;
+		const placed = run(turned, "insertClip", {
+			assetId: "asset_1",
+			sourceStartSec: 10,
+			sourceEndSec: 16,
+		});
+		const { clipId } = JSON.parse(placed.resultJson);
+		expect((placed.document as AxcutDocument).timeline.clips.map((c) => c.id)).toContain(clipId);
+
+		const folded = run(placed.document as AxcutDocument, "setClipRange", { clipId, rotation: 180 });
+		expect(folded.ok).toBe(true);
+		expect((folded.document as AxcutDocument).timeline.clips.map((c) => c.id)).not.toContain(
+			clipId,
+		);
+		expect(JSON.parse(folded.resultJson)).toMatchObject({
+			joinedIntoNeighbour: true,
+			rotation: 180,
+		});
+	});
+
+	it("setClipRange reports the crop a clip folded into its neighbour ended with", () => {
+		const crop = { x: 0.1, y: 0.1, width: 0.5, height: 0.5 };
+		// Both clips framed alike, the first upside down: turning the second joins them.
+		const framed = run(twoTakes(), "setClipRange", {
+			clipId: "clip_1",
+			cropRegion: crop,
+			rotation: 180,
+		}).document as AxcutDocument;
+		const placed = run(framed, "insertClip", {
+			assetId: "asset_1",
+			sourceStartSec: 10,
+			sourceEndSec: 16,
+		});
+		const { clipId } = JSON.parse(placed.resultJson);
+		const cropped = run(placed.document as AxcutDocument, "setClipRange", {
+			clipId,
+			cropRegion: crop,
+		}).document as AxcutDocument;
+		const folded = run(cropped, "setClipRange", { clipId, rotation: 180 });
+		expect(JSON.parse(folded.resultJson)).toMatchObject({
+			joinedIntoNeighbour: true,
+			cropRegion: crop,
+			rotation: 180,
+		});
+	});
+
+	it("setClipRange accepts only the rotations the Edit clip dialog offers", () => {
+		const sideways = run(twoTakes(), "setClipRange", { clipId: "clip_1", rotation: 90 });
+		expect(sideways.ok).toBe(false);
+		expect(sideways.document).toBeUndefined();
 	});
 
 	it("setClipRange moves one edge and keeps the other", () => {
@@ -4080,21 +4279,146 @@ describe("shader effects", () => {
 		);
 		expect(JSON.parse(added.resultJson)).toMatchObject({ validated: false, cost: null });
 	});
+
+	describe("animate", () => {
+		const fadeIn = [
+			{ atSec: 1, value: 3 },
+			{ atSec: 0, value: 0, ease: "ease-out" },
+		];
+
+		it("poses keyframes sorted and clamped, and shows them in the snapshot and getEffect", () => {
+			const added = add(fixtureDocument(), { animate: { level: fadeIn } });
+			expect(added.ok).toBe(true);
+			const doc = added.document as AxcutDocument;
+			const stored = [
+				{ atSec: 0, value: 0, ease: "ease-out" },
+				{ atSec: 1, value: 2 },
+			];
+			expect(doc.shaderEffectRanges?.[0].animate).toEqual({ level: stored });
+			expect(() => documentSchema.parse(doc)).not.toThrow();
+			const snapshot = JSON.parse(run(doc, "getCurrentDocument", {}).resultJson);
+			expect(snapshot.effects[0].animate).toEqual({ level: stored });
+			const effectId = doc.shaderEffects?.[0].id;
+			const read = JSON.parse(run(doc, "getEffect", { effectId }).resultJson);
+			expect(read.regions[0].animate).toEqual({ level: stored });
+		});
+
+		it("adds no animate key to a region without keyframes", () => {
+			const doc = add(fixtureDocument(), { animate: { level: [] } }).document as AxcutDocument;
+			expect("animate" in (doc.shaderEffectRanges?.[0] ?? {})).toBe(false);
+			const snapshot = JSON.parse(run(doc, "getCurrentDocument", {}).resultJson);
+			expect("animate" in snapshot.effects[0]).toBe(false);
+		});
+
+		it("refuses an unknown parameter, listing the declared ones, and changes nothing", () => {
+			const refused = add(fixtureDocument(), { animate: { strength: fadeIn } });
+			expect(refused.ok).toBe(false);
+			expect(refused.document).toBeUndefined();
+			expect(JSON.parse(refused.resultJson).error).toMatch(/"strength"[\s\S]*level, tint/);
+		});
+
+		it("refuses a keyframe value of the wrong type, naming the keyframe and the type", () => {
+			const refused = add(fixtureDocument(), {
+				animate: {
+					tint: [
+						{ atSec: 0, value: "#ff0000" },
+						{ atSec: 1, value: 0.5 },
+					],
+				},
+			});
+			expect(refused.ok).toBe(false);
+			expect(JSON.parse(refused.resultJson).error).toMatch(/animate\.tint\[1\][\s\S]*color/);
+		});
+
+		it("replaces a parameter's whole list in setEffect, removes it with an empty one", () => {
+			const doc = add(fixtureDocument(), { animate: { level: fadeIn } }).document as AxcutDocument;
+			const effectRegionId = doc.shaderEffectRanges?.[0].id;
+			const tinted = run(doc, "setEffect", {
+				effectRegionId,
+				animate: { tint: [{ atSec: 0.5, value: "#ffffff", ease: "hold" }] },
+			});
+			expect(tinted.ok).toBe(true);
+			expect(Object.keys(tinted.document?.shaderEffectRanges?.[0].animate ?? {})).toEqual([
+				"level",
+				"tint",
+			]);
+			const replaced = run(tinted.document as AxcutDocument, "setEffect", {
+				effectRegionId,
+				animate: { level: [{ atSec: 2, value: 1 }] },
+			});
+			expect(replaced.document?.shaderEffectRanges?.[0].animate?.level).toEqual([
+				{ atSec: 2, value: 1 },
+			]);
+			const cleared = run(replaced.document as AxcutDocument, "setEffect", {
+				effectRegionId,
+				animate: { level: [], tint: [] },
+			});
+			expect(cleared.ok).toBe(true);
+			expect("animate" in (cleared.document?.shaderEffectRanges?.[0] ?? {})).toBe(false);
+			// A re-tune that does not pass animate keeps the keyframes.
+			const retuned = run(tinted.document as AxcutDocument, "setEffect", {
+				effectRegionId,
+				target: "both",
+			});
+			expect(retuned.document?.shaderEffectRanges?.[0].animate).toEqual(
+				tinted.document?.shaderEffectRanges?.[0].animate,
+			);
+		});
+
+		it("refuses an unknown parameter in setEffect", () => {
+			const doc = add(fixtureDocument()).document as AxcutDocument;
+			const refused = run(doc, "setEffect", {
+				effectRegionId: doc.shaderEffectRanges?.[0].id,
+				animate: { nope: [{ atSec: 0, value: 1 }] },
+			});
+			expect(refused.ok).toBe(false);
+			expect(JSON.parse(refused.resultJson).error).toMatch(/"nope"[\s\S]*level, tint/);
+		});
+
+		it("drops the keyframes of a parameter setEffectDefinition removes or re-types", () => {
+			const doc = add(fixtureDocument(), {
+				animate: {
+					level: [{ atSec: 0, value: 1.5 }],
+					tint: [{ atSec: 0, value: "#ff0000" }],
+				},
+			}).document as AxcutDocument;
+			const effectId = doc.shaderEffects?.[0].id;
+			const changed = run(doc, "setEffectDefinition", {
+				effectId,
+				params: [
+					{ type: "number", name: "level", label: "Level", default: 0.5, min: 0, max: 1 },
+					{ type: "number", name: "tint", label: "Tint", default: 0, min: 0, max: 1 },
+				],
+			});
+			expect(changed.ok).toBe(true);
+			expect(changed.document?.shaderEffectRanges?.[0].animate).toEqual({
+				level: [{ atSec: 0, value: 1 }],
+			});
+			const removed = run(changed.document as AxcutDocument, "setEffectDefinition", {
+				effectId,
+				params: [{ type: "number", name: "tint", label: "Tint", default: 0, min: 0, max: 1 }],
+			});
+			expect("animate" in (removed.document?.shaderEffectRanges?.[0] ?? {})).toBe(false);
+		});
+	});
 });
 
 describe("the executor's view of a check asked beforehand", () => {
 	const source = {
 		code: "fn effect(uv: vec2<f32>) -> vec4<f32> { return frame(uv); }",
 		params: [{ name: "level", type: "number" as const }],
+		image: false,
 	};
 	const check = { tier: "light" as const, frameReads: 1, iterations: 0 };
 
 	it("is the answer for the same code and layout, and nothing for any other", () => {
 		const lookup = shaderEffectCheckLookup(source, check);
-		expect(lookup(source.code, [{ name: "level", type: "number" }])).toBe(check);
-		expect(lookup(`${source.code}\n`, source.params)).toBeNull();
-		expect(lookup(source.code, [{ name: "level", type: "color" }])).toBeNull();
-		expect(lookup(source.code, [])).toBeNull();
+		expect(lookup(source.code, [{ name: "level", type: "number" }], false)).toBe(check);
+		expect(lookup(`${source.code}\n`, source.params, false)).toBeNull();
+		expect(lookup(source.code, [{ name: "level", type: "color" }], false)).toBeNull();
+		expect(lookup(source.code, [], false)).toBeNull();
+		// With an image the module is another one: `image()` exists only then.
+		expect(lookup(source.code, source.params, true)).toBeNull();
 	});
 
 	it("is asked only by the two tools that compile", () => {
@@ -4109,9 +4433,141 @@ describe("the executor's view of a check asked beforehand", () => {
 				endSec: 1,
 				effect: { name: "A", description: "", code: source.code },
 			}),
-		).toEqual({ code: source.code, params: [] });
+		).toEqual({ code: source.code, params: [], image: false });
 		expect(
 			shaderEffectToCheck(document, "setEffectDefinition", { effectId: "fx_missing", code: "x" }),
 		).toBeNull();
+	});
+});
+
+describe("an effect's image", () => {
+	const LOGO =
+		"fn effect(uv: vec2<f32>) -> vec4<f32> { let i = image(uv); return vec4<f32>(mix(frame(uv).rgb, i.rgb, i.a), 1.0); }";
+	const PLAIN = "fn effect(uv: vec2<f32>) -> vec4<f32> { return frame(uv); }";
+	const stored = (source: string, name = "0123456789abcdef") => ({
+		source,
+		image: { path: `/recordings/effect-images/${name}.png`, width: 400, height: 100 },
+	});
+	/** The compositor's word, asked for a module with or without `image()`. */
+	const checkedAs = (image: boolean, calls: boolean[] = []) => ({
+		calls,
+		lookup: (_code: string, _params: unknown, withImage: boolean) => {
+			calls.push(withImage);
+			return withImage === image ? { tier: "light" as const, frameReads: 2, iterations: 0 } : null;
+		},
+	});
+	const add = (document: AxcutDocument, effect: Record<string, unknown>, options = {}) =>
+		executeAgentTool(
+			document,
+			"addEffect",
+			JSON.stringify({
+				startSec: 1,
+				endSec: 3,
+				effect: { name: "Logo", description: "", ...effect },
+			}),
+			{ editsAllowed: true, ...options },
+		);
+
+	it("is stored on the definition, checked as a module that has image(), and read back", () => {
+		const check = checkedAs(true);
+		const added = add(
+			fixtureDocument(),
+			{ code: LOGO, image: "/home/me/logo.png" },
+			{ effectImage: stored("/home/me/logo.png"), checkShaderEffect: check.lookup },
+		);
+		expect(added.ok).toBe(true);
+		expect(check.calls).toEqual([true]);
+		const { effectId } = JSON.parse(added.resultJson);
+		const definition = added.document?.shaderEffects?.[0];
+		expect(definition?.image).toEqual(stored("x").image);
+		// The scene the compositor gets names the copy OpenScreen keeps, never the user's file.
+		expect(JSON.stringify(added.document)).not.toContain("/home/me/logo.png");
+
+		const read = executeAgentTool(
+			added.document as AxcutDocument,
+			"getEffect",
+			JSON.stringify({ effectId }),
+		);
+		expect(JSON.parse(read.resultJson).image).toEqual(stored("x").image);
+		const listed = documentSnapshotForModel(added.document as AxcutDocument)
+			.effectDefinitions as Array<{ image?: unknown }>;
+		expect(listed[0].image).toEqual({ width: 400, height: 100 });
+	});
+
+	it("refuses the effect when the file is no image, and where nothing can keep one", () => {
+		const document = fixtureDocument();
+		const noImage = add(
+			document,
+			{ code: LOGO, image: "/home/me/notes.txt" },
+			{
+				effectImage: {
+					source: "/home/me/notes.txt",
+					error: '"/home/me/notes.txt" is not a PNG or a JPEG.',
+				},
+			},
+		);
+		expect(noImage.ok).toBe(false);
+		expect(noImage.resultJson).toContain("NOT placed");
+		expect(noImage.resultJson).toContain("is not a PNG or a JPEG");
+		expect(noImage.document).toBeUndefined();
+
+		const nowhere = add(document, { code: LOGO, image: "/home/me/logo.png" });
+		expect(nowhere.ok).toBe(false);
+		expect(nowhere.resultJson).toContain("cannot give an effect an image");
+		// The answer for another file is not this call's.
+		const other = add(
+			document,
+			{ code: LOGO, image: "/home/me/logo.png" },
+			{ effectImage: stored("/home/me/other.png") },
+		);
+		expect(other.ok).toBe(false);
+	});
+
+	it("is replaced, kept or taken away by setEffectDefinition, and recompiles when it changes", () => {
+		const base = add(
+			fixtureDocument(),
+			{ code: LOGO, image: "/home/me/logo.png" },
+			{ effectImage: stored("/home/me/logo.png") },
+		).document as AxcutDocument;
+		const effectId = base.shaderEffects?.[0].id as string;
+		const set = (args: Record<string, unknown>, options = {}) =>
+			executeAgentTool(base, "setEffectDefinition", JSON.stringify({ effectId, ...args }), {
+				editsAllowed: true,
+				...options,
+			});
+
+		// Nothing said of the image: it stays, and nothing recompiles.
+		const renamed = set({ name: "Brand" });
+		expect(renamed.document?.shaderEffects?.[0].image).toEqual(stored("x").image);
+		expect(JSON.parse(renamed.resultJson)).not.toHaveProperty("validated");
+
+		const swapped = set(
+			{ image: "/home/me/new.png" },
+			{ effectImage: stored("/home/me/new.png", "fedcba9876543210") },
+		);
+		expect(swapped.document?.shaderEffects?.[0].image?.path).toContain("fedcba9876543210");
+		expect(JSON.parse(swapped.resultJson)).toHaveProperty("validated");
+
+		// Taken away with the code that read it: the module without image() is asked about.
+		const without = checkedAs(false);
+		const removed = set({ image: null, code: PLAIN }, { checkShaderEffect: without.lookup });
+		expect(removed.ok).toBe(true);
+		expect(without.calls).toEqual([false]);
+		expect(removed.document?.shaderEffects?.[0].image).toBeUndefined();
+		expect(JSON.stringify(removed.document)).not.toContain("effect-images");
+	});
+
+	it("tells the async wrapper which file to keep, and which module to compile", () => {
+		const document = fixtureDocument();
+		const addArgs = { startSec: 0, endSec: 1, effect: { name: "A", description: "", code: LOGO } };
+		expect(effectImageToStore("addEffect", addArgs)).toBeNull();
+		const withImage = { ...addArgs, effect: { ...addArgs.effect, image: "/a/logo.png" } };
+		expect(effectImageToStore("addEffect", withImage)).toBe("/a/logo.png");
+		expect(shaderEffectToCheck(document, "addEffect", withImage)?.image).toBe(true);
+		expect(effectImageToStore("setEffectDefinition", { effectId: "fx", image: "/a/b.jpg" })).toBe(
+			"/a/b.jpg",
+		);
+		expect(effectImageToStore("setEffectDefinition", { effectId: "fx", image: null })).toBeNull();
+		expect(effectImageToStore("addTrim", { startSec: 0, endSec: 1 })).toBeNull();
 	});
 });

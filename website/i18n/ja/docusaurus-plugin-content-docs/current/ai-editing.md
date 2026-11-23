@@ -67,7 +67,7 @@ Claude Code や Codex などの AI コーディングエージェントをすで
 2. そこに表示される **Claude Code** または **Codex** のコマンドをコピーし、ターミナルで実行します。Claude Code のコマンドにはアクセストークンが含まれています。Codex は代わりに環境変数 `OPENSCREEN_MCP_TOKEN` からトークンを読み取るため、Codex を起動するシェルでこの変数を設定してください。
 3. OpenScreen のエディターで開いているプロジェクト、または一覧にあるほかのプロジェクトについて、エージェントに編集を依頼します。
 
-ツールは組み込みのエージェントが使うものと同じで、さらに動画を録画、エクスポートし、確認するツールがあります（[後述](#letting-an-agent-make-the-whole-video)）。さらに `transcribe` もあり、エディターがプロジェクトを開くときと同じように、プロジェクトのメディアに対して端末上の Whisper を実行します。クライアントは自分のモデルで字幕を翻訳するため、字幕の翻訳に OpenScreen 側のプロバイダーは不要です。クライアントが別のプロジェクトを指定しない限り、ツールはエディターで開いているプロジェクトに作用します。クライアントはすべてのプロジェクトを一覧でき、どれでも読み取りや編集ができます。プロジェクトの作成（空のもの、または動画ファイルから）、名前の変更、プロジェクトのメディアへの動画・音声ファイルの追加や削除もできます。プロジェクトの削除はツールにありません。それはアプリであなたが行います。MCP サーバーのセクションで**MCP による編集**もオンにするまで、MCP クライアントは**読み取る**ことしかできず、編集、録画、エクスポート、新しいプロジェクトの作成はすべて拒否されます。このスイッチは組み込みのエージェントの**エージェントによる編集**とは別で、最初はオフです。オンにすると、各編集は反映された時点で保存されます。
+ツールは組み込みのエージェントが使うものと同じで、さらに動画を録画、エクスポートし、確認するツールがあります（[後述](#letting-an-agent-make-the-whole-video)）。さらに `transcribe` もあり、エディターがプロジェクトを開くときと同じように、プロジェクトのメディアに対して端末上の Whisper を実行します。クライアントは自分のモデルで字幕を翻訳するため、字幕の翻訳に OpenScreen 側のプロバイダーは不要です。クライアントが別のプロジェクトを指定しない限り、ツールはエディターで開いているプロジェクトに作用します。クライアントはすべてのプロジェクトを一覧でき、どれでも読み取りや編集ができます。プロジェクトの作成（空のもの、または動画ファイルから）、名前の変更、プロジェクトのメディアへの動画・音声・画像ファイルの追加や削除もできます。画像は、その画像を映す数秒の無音クリップとして追加されます。プロジェクトの削除はツールにありません。それはアプリであなたが行います。MCP サーバーのセクションで**MCP による編集**もオンにするまで、MCP クライアントは**読み取る**ことしかできず、編集、録画、エクスポート、新しいプロジェクトの作成はすべて拒否されます。このスイッチは組み込みのエージェントの**エージェントによる編集**とは別で、最初はオフです。オンにすると、各編集は反映された時点で保存されます。
 
 - **エディターで開いているプロジェクト**では、編集は `Ctrl/Cmd + Z` で元に戻せます。クライアントには一連の編集の前にチェックポイントを保存するよう指示されているため、プロジェクトを 1 回の操作で元の状態に戻すよう頼むことができ、その操作自体も `Ctrl/Cmd + Z` で取り消せます。
 - **それ以外のプロジェクト**では、編集はそのファイルに保存され、`Ctrl/Cmd + Z` では元に戻せません。クライアントは最初の編集の前にそのプロジェクトのチェックポイントを保存する必要があり、そこへ戻すことが唯一の取り消し方法です。
@@ -76,7 +76,9 @@ Claude Code や Codex などの AI コーディングエージェントをすで
 
 ## エージェントに動画全体を作らせる {#letting-an-agent-make-the-whole-video}
 
-エージェントは、録画からエクスポートまで、動画全体を自力で作れます。どちらの方法で OpenScreen を追加しても、編集ツールに加えて `listSources`、`startRecording`、`stopRecording`、`setPointerTrack`、`exportVideo`、`getFrames`、`createProject` を使えます。アプリ内のサーバーでは、`waitForRecording` で、あなた自身が録画バーから録画するテイクの完了を待ち、`stopRecording` と同じ形で受け取ることもできます。録画バーと同じく、テイクには Web カメラやシステム自身のカーソルも録画でき、エクスポートでは書き出しダイアログのオプションを使えます。MP4 なら画質とフレームレート、GIF ならフレームレート、サイズ、ループです。
+エージェントは、録画からエクスポートまで、動画全体を自力で作れます。どちらの方法で OpenScreen を追加しても、編集ツールに加えて `listSources`、`startRecording`、`stopRecording`、`setPointerTrack`、`exportVideo`、`exportAudio`、`exportCaptions`、`getFrames`、`getContactSheet`、`getBeforeAfter`、`getAudioReport`、`createProject` を使えます。アプリ内のサーバーでは、`waitForRecording` で、あなた自身が録画バーから録画するテイクの完了を待ち、`stopRecording` と同じ形で受け取ることもできます。録画バーと同じく、テイクには Web カメラやシステム自身のカーソルも録画でき、エクスポートでは書き出しダイアログのオプションを使えます。MP4 なら画質とフレームレート、GIF ならフレームレート、サイズ、ループです。`exportAudio` は、プロジェクトの音声、またはインポートした 1 本のトラック（`importMedia` と `addAudio` で追加したナレーションなど）を、MP4 のミックスとまったく同じように WAV または M4A に書き出します。`exportCaptions` は、字幕を書き出した動画のタイミングに合わせて SRT または WebVTT の字幕ファイルに書き出します。
+
+エージェントは自分の作業を確認することもできます。`getFrames` は、動画の指定した瞬間や、`startSec` から `endSec` までの区間を見せます。`region` を指定すると、画像のその部分だけを動画本来の解像度で返すので、小さな文字も読めます。`getContactSheet` は、多くの瞬間をそれぞれの時刻付きで 1 枚の画像に並べます。動画全体のリズムや、ズームをフレームごとに確認するのに使います。`getBeforeAfter` は、一連の編集の前と後の同じ瞬間を並べて見せ、画像のどこが変わったかを示します。`getAudioReport` は、プロジェクトの音声のラウドネス、トゥルーピーク、無音区間を測定します。編集ツールのうち `listStylePresets` と `applyStylePreset` は、**プリセット**のいずれかの見た目を 1 回の編集でプロジェクトに適用します。
 
 **上のサーバーを使う場合**、録画は OpenScreen 自身が、録画ボタンを押したときと同じように行います。エディターが閉じ、録画バーがカウントダウンして録画し、録画は新しいプロジェクトとしてエディターで開きます。そこで各編集が反映されるのを確認できます。**MCP による編集**をオンにする必要があり、録画が終わると録画バーの設定はあなた自身のものに戻ります。
 
@@ -85,10 +87,10 @@ Claude Code や Codex などの AI コーディングエージェントをすで
 いちばん手早いのは、次の内容をAI エージェント（Claude Code、Codex、Cursor など）に貼り付けることです。
 
 ```text
-Install the OpenScreen demo skill with `npx skills add getopenscreen/openscreen --skill openscreen-demo -y`, then follow it to make a demo video of this feature.
+Install the OpenScreen skills with `npx skills add getopenscreen/openscreen -y`, then follow openscreen-demo to make a demo video of this feature.
 ```
 
-このスキルは、OpenScreen がなければ、同意を得たうえでインストールし、その MCP サーバーを追加します。続いて、新しいセッションを開いて *continue the OpenScreen demo* と伝えるよう求めます。エージェントが新しいツールを得られるのは、新しいセッションの中だけです。代わりに手動で設定するには、次のようにします。
+これらのスキルは、OpenScreen がなければ、同意を得たうえでインストールします。下のプラグインを使わずにこの方法でインストールした場合、`openscreen-demo` スキルが OpenScreen の MCP サーバーを追加し、続いて、新しいセッションを開いて *continue the OpenScreen demo* と伝えるよう求めます。エージェントが新しいツールを得られるのは、新しいセッションの中だけです。代わりに手動で設定するには、次のようにします。
 
 ```bash
 claude mcp add openscreen -- "<executable>" mcp
@@ -97,12 +99,14 @@ codex mcp add openscreen -- "<executable>" mcp
 
 `<executable>` はアプリの実行ファイルです。各システムでのパスは [CLI の実行](./cli.md#running-the-cli)に記載しています。Cursor などほかのクライアントでは、実行ファイルを `command`、`["mcp"]` を `args` とした stdio サーバーとして追加します。
 
-このスキルは、リポジトリ自身のマーケットプレイスからプラグインとしても入手できます。Claude Code では次のとおりです。
+これらのスキルは、リポジトリ自身のマーケットプレイスからプラグインとしても入手できます。Claude Code では次のとおりです。
 
 ```text
 /plugin marketplace add getopenscreen/openscreen
 /plugin install openscreen@openscreen
 ```
+
+プラグインには OpenScreen の MCP サーバーが含まれています。小さな Node スクリプトがインストール済みのアプリを見つけて `mcp` 付きで起動するため、`claude mcp add` なしで、`/reload-plugins` のあとや新しいセッションでツールが使えます。使えるアプリが見つからない場合は、`openscreenSetup` というツールを 1 つだけ提供し、何を確認したかと OpenScreen の準備方法を伝えます。
 
 プラグインを共有する Codex と ChatGPT デスクトップアプリでは、次のとおりです。
 
@@ -111,11 +115,11 @@ codex plugin marketplace add getopenscreen/openscreen
 codex plugin add openscreen@openscreen
 ```
 
-これで、アプリのインストール済みプラグインに OpenScreen がスキルとともに表示されます。
+これで、アプリのインストール済みプラグインに OpenScreen がそのスキルとともに表示されます。こちらでは、MCP サーバーは上の `codex mcp add` コマンドで追加します。
 
 - **ポートも、トークンも、設定も不要。** エージェントは、`openscreen record` を実行するときと同じように、あなたの権限でプロセスを自分で起動します。そのため、**MCP による編集**スイッチなしで、画面を録画し、編集できます。
 - **テイクはそれぞれ新しいプロジェクトになり**、プロジェクト一覧に表示されます。アプリで作った録画と同じく、記録されたクリックにズームが付きます。時間的にも画面上でも近いクリックは1つのズームにまとめられ、最初の数秒と最後は画面全体のままです。エージェントによる編集はすべてプロジェクトのファイルに保存されます。元に戻すには、エージェントが作成するチェックポイントを使います。チェックポイントはエージェントのセッションが終わるまで有効です。保持されるのは直近 20 個のチェックポイントだけなので、古いものはそれより前に消えることがあります。
 - **OpenScreen の起動中は、エージェントはアプリを通して作業します。** エディターで開いているプロジェクトへの編集はすぐにそこに反映され、`Ctrl/Cmd + Z` で元に戻せます。このときエージェントのチェックポイントは OpenScreen を終了するまで有効です。アプリが応答しない場合、そのプロジェクトへの編集は拒否されます。エディターが自分のコピーで上書きしてしまうためです。
 - **テイクには、エージェントが求めるまで文字起こしがありません。** エージェントは、単語をカットしたり字幕をオンにしたりする前に `transcribe` を呼び出します。Whisper はあなたのマシン上で実行され、OpenScreen が開いていれば OpenScreen の中で実行されます。
 - **スクリプトで操作するテイク**（たとえば Playwright）では、画面のポインターはまったく動きません。エージェントが `setPointerTrack` で自分の操作ログを OpenScreen に渡せば、動画には同じようにカーソルとそのズームが付きます。
-- **`openscreen-demo` スキル**は、絵コンテから完成した動画まで、作業全体をエージェントに教えます。そのあとエージェントは、レビュアーがその場で変更を確認できるよう動画をプルリクエストに添付するか、X への投稿を下書きします。投稿は、あなたが了承してはじめて公開されます。`npx skills add getopenscreen/openscreen --skill openscreen-demo` で追加します。手順は [`plugin/skills/openscreen-demo/SKILL.md`](https://github.com/getopenscreen/openscreen/blob/main/plugin/skills/openscreen-demo/SKILL.md) にあります。
+- **スキル**は、作業のやり方をエージェントに教えます。`openscreen-demo` は、絵コンテから完成した動画まで作業を進め、そのあと、レビュアーがその場で変更を確認できるよう動画をプルリクエストに添付するか、X への投稿を下書きします。投稿は、あなたが了承してはじめて公開されます。ほかの 6 つは、それぞれ 1 つの工程をさらに掘り下げます。`openscreen-capture`（ウィンドウを開かずに録画する Web ページを含む、きれいで再現できるテイク）、`openscreen-motion`（ズーム、注釈、テンポ）、`openscreen-effects`（カスタムエフェクト）、`openscreen-sound`（ナレーション、音楽、ラウドネス）、`openscreen-review`（動画を出す前の確認）、`openscreen-deliver`（形式、サイズ、動画の受け渡し）です。`npx skills add getopenscreen/openscreen` ですべて追加できます。スキルは [`plugin/skills/`](https://github.com/getopenscreen/openscreen/tree/main/plugin/skills) にあります。

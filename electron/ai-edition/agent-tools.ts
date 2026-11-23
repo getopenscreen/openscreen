@@ -22,6 +22,7 @@ import {
 	DEFAULT_ANNOTATION_BOX,
 	fitTextInFrame,
 } from "../../src/lib/ai-edition/annotations/placement";
+import { clipRotation } from "../../src/lib/ai-edition/clipRotation";
 import {
 	AUDIO_FADE_MAX_MS,
 	collapseTracksToPills,
@@ -49,6 +50,7 @@ import {
 	removeRegion,
 	replaceTimeline,
 	setClipCrop,
+	setClipRotation,
 	setClipSourceRange,
 } from "../../src/lib/ai-edition/document/timeline";
 import { setDocumentWordText } from "../../src/lib/ai-edition/document/transcript";
@@ -60,6 +62,7 @@ import {
 	blurDataSchema,
 	clipCropRegionSchema,
 	figureDataSchema,
+	shaderEffectKeyframeSchema,
 	shaderEffectParamSchema,
 	shaderEffectSchema,
 	shaderEffectValueSchema,
@@ -69,10 +72,15 @@ import {
 	SHADER_EFFECT_CONTRACT,
 	type ShaderEffectCheck,
 	type ShaderEffectCheckLookup,
+	type ShaderEffectImage,
+	type ShaderEffectImageStored,
 	shaderEffectCostAdvice,
+	storedShaderEffectAnimate,
 	storedShaderEffectValues,
+	withShaderEffectAnimate,
 } from "../../src/lib/ai-edition/shaderEffects";
 import { getEditorSettings } from "../../src/lib/ai-edition/store/editorSettings";
+import type { StylePreset } from "../../src/lib/ai-edition/stylePresets";
 import { appendAutoZoomSuggestions } from "../../src/lib/ai-edition/timeline/apply-auto-zooms";
 import { hasAnyClipWithCamera } from "../../src/lib/ai-edition/timeline/camera";
 import { isGeneratedAssetId } from "../../src/lib/ai-edition/timeline/clip-parts";
@@ -106,11 +114,21 @@ import {
 } from "../../src/lib/ai-edition/timeline/zoom-transitions";
 import { LAYOUT_PRESETS } from "../../src/lib/layoutTypes";
 import { SETTING_BOUNDS } from "../../src/lib/projectDefaults";
+import {
+	resolveTextFontFamily,
+	TEXT_FONT_FAMILIES,
+	type TextFontFamily,
+} from "../../src/lib/textFonts";
 import type { SegmentationSupport } from "../../src/native/contracts";
 import { annotationFootageRect, zoomScaleLimit } from "../../src/native/sceneDescription";
 import { ASPECT_RATIO_PRESETS } from "../../src/utils/aspectRatioUtils";
 import { CAPTION_TOOL_NAMES, executeCaptionTool, MUTATING_CAPTION_TOOLS } from "./caption-tools";
-import { editorSettingsSnapshot, executeSetEditorSettings } from "./editor-settings-tool";
+import {
+	editorSettingsSnapshot,
+	executeApplyStylePreset,
+	executeListStylePresets,
+	executeSetEditorSettings,
+} from "./editor-settings-tool";
 import { measureTextInShippedFonts } from "./text-measure";
 
 export interface AgentToolExecution {
@@ -218,6 +236,7 @@ function refuseIfBlocked<T extends { id: string; startMs: number; endMs: number 
 
 type AnnotationLook = {
 	fontSize?: number;
+	fontFamily?: TextFontFamily;
 	color?: string;
 	background?: string;
 	bold?: boolean;
@@ -231,6 +250,7 @@ function applyAnnotationLook(
 ): AxcutAnnotationRegion["style"] {
 	const next = { ...style };
 	if (look.fontSize !== undefined) next.fontSize = look.fontSize;
+	if (look.fontFamily !== undefined) next.fontFamily = look.fontFamily;
 	if (look.color !== undefined) next.color = look.color;
 	if (look.bold !== undefined) next.fontWeight = look.bold ? "bold" : "normal";
 	if (look.animation !== undefined) next.textAnimation = look.animation;
@@ -269,6 +289,7 @@ function annotationForAgent(a: AxcutAnnotationRegion): Record<string, unknown> {
 				text: a.content || a.textContent || "",
 				...geometry,
 				fontSize: a.style.fontSize,
+				fontFamily: resolveTextFontFamily(a.style.fontFamily),
 				color: a.style.color,
 				background: a.style.backgroundColor === "transparent" ? "none" : a.style.backgroundColor,
 				bold: a.style.fontWeight === "bold",
@@ -716,6 +737,12 @@ export const setClipRangeArgs = z.object({
 		.describe(
 			"The part of the source frame this clip shows, as 0–1 fractions of it ({x, y, width, height}); null shows the whole frame again.",
 		),
+	rotation: z
+		.union([z.literal(0), z.literal(180)])
+		.optional()
+		.describe(
+			"Turns the clip's picture: 180 shows it upside down (a camera mounted the wrong way up), 0 upright again.",
+		),
 });
 
 /** `beforeClipId`, never an index, for the reason `moveClipArgs` gives. */
@@ -925,6 +952,10 @@ const annotationLookArgs = {
 		.max(200)
 		.optional()
 		.describe("Text size; 32 is the editor's default, a title reads well at 56 to 80."),
+	fontFamily: z
+		.enum(TEXT_FONT_FAMILIES)
+		.optional()
+		.describe("Typeface: one of the families the app ships and draws. Inter by default."),
 	color: z.string().optional().describe("Text colour, a CSS colour such as #ffffff."),
 	background: z
 		.string()
@@ -1023,6 +1054,10 @@ export const addCameraFullscreenArgs = z.object({
 
 const effectTargetSchema = z.enum(["image", "text", "both"]);
 const effectValuesSchema = z.record(z.string(), shaderEffectValueSchema);
+// Per parameter, its whole keyframe list; an empty list removes that parameter's animation.
+const effectAnimateSchema = z.record(z.string(), z.array(shaderEffectKeyframeSchema).max(64));
+// The file of the image an effect reads: OpenScreen keeps its own copy of it.
+const effectImagePathSchema = z.string().min(1).max(4096);
 
 export const addEffectArgs = z.object({
 	startSec: secondsSchema,
@@ -1034,9 +1069,11 @@ export const addEffectArgs = z.object({
 			description: z.string().max(500),
 			code: z.string().min(1).max(65_536),
 			params: z.array(shaderEffectParamSchema).max(32).optional(),
+			image: effectImagePathSchema.optional(),
 		})
 		.optional(),
 	values: effectValuesSchema.optional(),
+	animate: effectAnimateSchema.optional(),
 	target: effectTargetSchema.optional(),
 });
 
@@ -1045,6 +1082,7 @@ export const setEffectArgs = z.object({
 	startSec: secondsSchema.optional(),
 	endSec: secondsSchema.optional(),
 	values: effectValuesSchema.optional(),
+	animate: effectAnimateSchema.optional(),
 	target: effectTargetSchema.optional(),
 });
 
@@ -1054,6 +1092,8 @@ export const setEffectDefinitionArgs = z.object({
 	description: z.string().max(500).optional(),
 	code: z.string().min(1).max(65_536).optional(),
 	params: z.array(shaderEffectParamSchema).max(32).optional(),
+	// A file to read from now on, or `null` to take the image away.
+	image: effectImagePathSchema.nullable().optional(),
 });
 
 export const getEffectArgs = z.object({
@@ -1160,6 +1200,8 @@ export const OPENSCREEN_TOOL_NAMES = [
 	"removeClip",
 	"setAspectRatio",
 	"setEditorSettings",
+	"listStylePresets",
+	"applyStylePreset",
 	...CAPTION_TOOL_NAMES,
 ] as const;
 
@@ -1244,6 +1286,7 @@ export const MUTATING_TOOL_NAMES: ReadonlySet<string> = new Set([
 	"removeClip",
 	"setAspectRatio",
 	"setEditorSettings",
+	"applyStylePreset",
 	...MUTATING_CAPTION_TOOLS,
 ]);
 
@@ -1460,6 +1503,8 @@ export function documentSnapshotForModel(
 			timelineEndSec: c.timelineEndSec,
 			// Only when set: absent is the whole frame.
 			...(c.cropRegion ? { cropRegion: c.cropRegion } : {}),
+			// Only when turned: absent is upright.
+			...(c.rotation === 180 ? { rotation: 180 } : {}),
 		})),
 		trimRanges: document.timeline.trimRanges.map((s) => ({
 			id: s.id,
@@ -1522,6 +1567,7 @@ export function documentSnapshotForModel(
 			endSec: roundSec(r.endMs),
 			target: r.target,
 			values: r.values,
+			...(r.animate ? { animate: r.animate } : {}),
 		})),
 		effectDefinitions: (document.shaderEffects ?? []).map((e) => ({
 			effectId: e.id,
@@ -1534,6 +1580,8 @@ export function documentSnapshotForModel(
 			).length,
 			cost: e.cost ?? null,
 			params: e.params,
+			// The size of the image the code reads with image(), when the effect has one.
+			...(e.image ? { image: { width: e.image.width, height: e.image.height } } : {}),
 		})),
 		// Imported audio, collapsed to the pills the ruler draws — a track ventilated
 		// across a clip boundary is several fragments the user sees as one thing, and
@@ -1574,7 +1622,8 @@ function checkedEffectDefinition(
 		};
 	}
 	const definition = parsed.data;
-	const check = checker?.(definition.code, definition.params) ?? null;
+	const check =
+		checker?.(definition.code, definition.params, definition.image !== undefined) ?? null;
 	if (check?.error) return { error: `The effect does not compile:\n${check.error}` };
 	const cost =
 		check?.tier && typeof check.frameReads === "number"
@@ -1586,7 +1635,34 @@ function checkedEffectDefinition(
 type ShaderEffectSource = {
 	code: string;
 	params: Array<{ name: string; type: AxcutShaderEffect["params"][number]["type"] }>;
+	/** The effect carries an image: its code may call `image()`. */
+	image: boolean;
 };
+
+/** The image file `addEffect` or `setEffectDefinition` attaches, for `runDocumentTool` to store
+ *  before the synchronous executor runs; `null` for a call that attaches none. */
+export function effectImageToStore(name: string, args: unknown): string | null {
+	if (name === "addEffect") {
+		const parsed = addEffectArgs.safeParse(args);
+		return parsed.success ? (parsed.data.effect?.image ?? null) : null;
+	}
+	if (name === "setEffectDefinition") {
+		const parsed = setEffectDefinitionArgs.safeParse(args);
+		return parsed.success ? (parsed.data.image ?? null) : null;
+	}
+	return null;
+}
+
+/** The stored image for the file a call attaches, or why the call cannot go on. */
+function attachedEffectImage(
+	source: string,
+	stored: ShaderEffectImageStored | undefined,
+): { image: ShaderEffectImage } | { error: string } {
+	if (stored?.source !== source) {
+		return { error: "This OpenScreen cannot give an effect an image: leave `image` out." };
+	}
+	return stored;
+}
 
 /** The code and parameter layout `addEffect` or `setEffectDefinition` will have the compositor
  *  check, read from the same arguments the executor reads; `null` for a call that compiles nothing.
@@ -1603,15 +1679,23 @@ export function shaderEffectToCheck(
 	if (name === "addEffect") {
 		const parsed = addEffectArgs.safeParse(args);
 		if (!parsed.success || !parsed.data.effect) return null;
-		return { code: parsed.data.effect.code, params: layout(parsed.data.effect.params ?? []) };
+		const { code, params, image } = parsed.data.effect;
+		return { code, params: layout(params ?? []), image: image !== undefined };
 	}
 	if (name === "setEffectDefinition") {
 		const parsed = setEffectDefinitionArgs.safeParse(args);
 		if (!parsed.success) return null;
-		const { effectId, code, params } = parsed.data;
+		const { effectId, code, params, image } = parsed.data;
 		const existing = findShaderEffect(document, effectId);
-		if (!existing || (code === undefined && params === undefined)) return null;
-		return { code: code ?? existing.code, params: layout(params ?? existing.params) };
+		// With or without an image is another module: `image()` exists only with one.
+		if (!existing || (code === undefined && params === undefined && image === undefined)) {
+			return null;
+		}
+		return {
+			code: code ?? existing.code,
+			params: layout(params ?? existing.params),
+			image: image === undefined ? existing.image !== undefined : image !== null,
+		};
 	}
 	return null;
 }
@@ -1622,8 +1706,9 @@ export function shaderEffectCheckLookup(
 	source: ShaderEffectSource,
 	check: ShaderEffectCheck | null,
 ): ShaderEffectCheckLookup {
-	return (code, params) =>
+	return (code, params, image) =>
 		code === source.code &&
+		image === source.image &&
 		params.length === source.params.length &&
 		params.every((p, i) => p.name === source.params[i].name && p.type === source.params[i].type)
 			? check
@@ -1812,9 +1897,16 @@ export interface AgentToolOptions {
 	 *  by the async wrapper (`shaderEffectToCheck`). Absent where nothing can: the effect is stored
 	 *  unchecked, and the result says `validated: false`. */
 	checkShaderEffect?: ShaderEffectCheckLookup;
+	/** OpenScreen's copy of the image file this call attaches to an effect, stored beforehand by
+	 *  the async wrapper (`effectImageToStore`), or why it could not be. Absent where nothing can
+	 *  store one: a call that attaches an image is then refused. */
+	effectImage?: ShaderEffectImageStored;
 	/** `addAutoZooms`' plan, made by the async wrapper from the recorded clicks. Absent means
 	 *  no cursor reader is wired here, which the tool reports as "could not look". */
 	autoZooms?: AutoZoomPlan;
+	/** The user's saved style presets, read by the async wrapper for the two preset tools.
+	 *  Absent where nothing can read them: only the built-in one is offered, and that is said. */
+	stylePresets?: StylePreset[];
 }
 
 /** What the timeline wand would add, and what each recording's cursor read gave. */
@@ -2058,6 +2150,16 @@ export function executeAgentTool(
 				summary: `set the format to ${parsed.data.aspectRatio}`,
 			};
 		}
+
+		case "listStylePresets":
+			return executeListStylePresets(document, options?.stylePresets);
+		case "applyStylePreset":
+			return executeApplyStylePreset(
+				document,
+				args,
+				options?.stylePresets,
+				options?.cameraSegmentation?.() ?? null,
+			);
 
 		case "setEditorSettings":
 			return executeSetEditorSettings(document, args, options?.cameraSegmentation?.() ?? null);
@@ -2592,26 +2694,31 @@ export function executeAgentTool(
 		case "setClipRange": {
 			const parsed = setClipRangeArgs.safeParse(args);
 			if (!parsed.success) return failure(parsed.error.message);
-			const { clipId, cropRegion } = parsed.data;
+			const { clipId, cropRegion, rotation } = parsed.data;
 			const clip = document.timeline.clips.find((c) => c.id === clipId);
 			if (!clip) return failure(`Unknown clip: ${clipId}. ${clipRoster(document)}`);
 			const ranged =
 				parsed.data.sourceStartSec !== undefined || parsed.data.sourceEndSec !== undefined;
-			if (!ranged && cropRegion === undefined) {
+			if (!ranged && cropRegion === undefined && rotation === undefined) {
 				return failure(
-					"Pass sourceStartSec / sourceEndSec, cropRegion, or both: nothing to change.",
+					"Pass sourceStartSec / sourceEndSec, cropRegion, rotation, or any of them together: nothing to change.",
 				);
 			}
 			const start = parsed.data.sourceStartSec ?? clip.sourceStartSec;
-			const end =
-				parsed.data.sourceEndSec ??
-				clip.sourceEndSec ??
-				document.assets.find((a) => a.id === clip.assetId)?.durationSec;
+			const mediaSec = document.assets.find((a) => a.id === clip.assetId)?.durationSec;
+			const end = parsed.data.sourceEndSec ?? clip.sourceEndSec ?? mediaSec;
 			if (end === undefined) {
 				return failure(`Clip ${clipId} has no known end yet: pass sourceEndSec too.`);
 			}
-			const sourceStartSec = Math.min(start, end);
-			const sourceEndSec = Math.max(start, end);
+			// Never past the media's known end, as insertClip bounds it: there is no picture there.
+			const bound = (sec: number) => (mediaSec === undefined ? sec : Math.min(sec, mediaSec));
+			const sourceStartSec = bound(Math.min(start, end));
+			const sourceEndSec = bound(Math.max(start, end));
+			if (ranged && mediaSec !== undefined && sourceStartSec >= mediaSec) {
+				return failure(
+					`That range starts at or past the end of ${clip.assetId}, which lasts ${formatSec(mediaSec)}.`,
+				);
+			}
 			// The clip's Edit modal, as one document: the range through the one shared mutator
 			// (which recomputes the clip's width and clamps / drops the anchored pills the new
 			// window no longer covers), then the crop. `null` clears it, and so does the whole
@@ -2622,10 +2729,14 @@ export function executeAgentTool(
 				cropRegion.width === 1 &&
 				cropRegion.height === 1;
 			const crop = cropRegion === undefined ? undefined : wholeFrame ? null : cropRegion;
-			// One pass for both, as the dialog's Apply: the fold weighs range and crop together.
+			// The rotation first, as the dialog's Apply does it, then one pass for range and crop: the
+			// fold weighs range, crop and rotation together. Without a range or a new crop, the clip's
+			// own crop goes back through `setClipCrop`, which is what folds or splits the neighbours.
+			const turned =
+				rotation === undefined ? document : setClipRotation(document, clipId, rotation);
 			const next = ranged
-				? setClipSourceRange(document, clipId, sourceStartSec, sourceEndSec, crop)
-				: setClipCrop(document, clipId, crop ?? null);
+				? setClipSourceRange(turned, clipId, sourceStartSec, sourceEndSec, crop)
+				: setClipCrop(turned, clipId, crop === undefined ? (clip.cropRegion ?? null) : crop);
 			const dropped = droppedByEdit(document, next);
 			const casualties = dropped.droppedModifierIds.length + dropped.droppedTrimIds.length;
 			const after = next.timeline.clips.find((c) => c.id === clipId);
@@ -2636,7 +2747,14 @@ export function executeAgentTool(
 					clipId,
 					sourceStartSec,
 					sourceEndSec,
-					cropRegion: after?.cropRegion ?? null,
+					// Folded into its neighbour, the clip is gone: it ended as the call framed and turned
+					// it, which is how the neighbour it joined is framed and turned.
+					cropRegion: after
+						? (after.cropRegion ?? null)
+						: crop === undefined
+							? (clip.cropRegion ?? null)
+							: crop,
+					rotation: after ? clipRotation(after) : (rotation ?? clipRotation(clip)),
 					// Its media now continues the clip before it, with the same framing: one clip.
 					...(after
 						? {}
@@ -2644,10 +2762,17 @@ export function executeAgentTool(
 					...dropped,
 				}),
 				summary:
-					(ranged
-						? `trimmed clip to ${formatSec(sourceStartSec)} – ${formatSec(sourceEndSec)}`
-						: `cropped clip ${clipId}`) +
-					(ranged && cropRegion !== undefined ? ", cropped" : "") +
+					[
+						ranged
+							? `trimmed clip to ${formatSec(sourceStartSec)} – ${formatSec(sourceEndSec)}`
+							: null,
+						cropRegion !== undefined ? `cropped clip ${clipId}` : null,
+						rotation !== undefined
+							? `turned clip ${clipId} ${rotation === 180 ? "upside down" : "upright"}`
+							: null,
+					]
+						.filter(Boolean)
+						.join(", ") +
 					(casualties > 0
 						? ` — dropped ${[...dropped.droppedModifierIds, ...dropped.droppedTrimIds].join(", ")}`
 						: ""),
@@ -3307,12 +3432,13 @@ export function executeAgentTool(
 				};
 				const moved = x !== undefined || y !== undefined;
 				if (a.type === "text") {
-					// A text box is the size of its text: refit it whenever the text, its size or its
-					// weight changes, around its centre or the new one. One saved before frame placement
+					// A text box is the size of its text: refit it whenever the text, its size, its font
+					// or its weight changes, around its centre or the new one. One saved before frame placement
 					// moves onto the frame the first time it is moved, as the editor does.
 					const resized =
 						text !== undefined ||
 						parsed.data.fontSize !== undefined ||
+						parsed.data.fontFamily !== undefined ||
 						parsed.data.bold !== undefined;
 					return moved || (resized && a.space === "frame")
 						? placeTextOnFrame(next, centre, document)
@@ -3473,10 +3599,17 @@ export function executeAgentTool(
 			let check: ShaderEffectCheck | null = null;
 			const created = effect !== undefined;
 			if (effect) {
+				const { image: imageFile, ...written } = effect;
+				const attached =
+					imageFile === undefined ? null : attachedEffectImage(imageFile, options?.effectImage);
+				if (attached && "error" in attached) {
+					return failure(`The effect was NOT placed: ${attached.error}`);
+				}
 				const checked = checkedEffectDefinition(
 					{
 						id: createId("fx"),
-						...effect,
+						...written,
+						...(attached ? { image: attached.image } : {}),
 						contract: SHADER_EFFECT_CONTRACT,
 						params: effect.params ?? [],
 						origin: "agent",
@@ -3494,12 +3627,15 @@ export function executeAgentTool(
 			const endMs = toMs(Math.max(parsed.data.startSec, parsed.data.endSec));
 			const blocked = effectBlocked(document.shaderEffectRanges ?? [], startMs, endMs);
 			if (blocked) return failure(`The effect was NOT placed: ${blocked}`);
+			const animated = storedShaderEffectAnimate(definition, parsed.data.animate ?? {});
+			if ("error" in animated) return failure(`The effect was NOT placed: ${animated.error}`);
 			const region = {
 				id: createId("fxr"),
 				startMs,
 				endMs,
 				effectId: definition.id,
 				values: storedShaderEffectValues(definition, values),
+				...(animated.animate ? { animate: animated.animate } : {}),
 				target,
 			};
 			const placed = anchorForAgent(region, document, "fxr");
@@ -3538,7 +3674,13 @@ export function executeAgentTool(
 			if (!definition) return failure(`Effect ${existing.effectId} is missing from the project.`);
 			const pillIds = new Set(resolvePillIds(prev, existing.id));
 			const pill = coalesceRegionsForRuler(prev).find((p) => p.ids.includes(existing.id));
-			const { values, target } = parsed.data;
+			const { values, animate, target } = parsed.data;
+			// Each parameter passed replaces its whole keyframe list; an empty list removes it.
+			const animated = storedShaderEffectAnimate(definition, {
+				...existing.animate,
+				...animate,
+			});
+			if ("error" in animated) return failure(`The effect was NOT changed: ${animated.error}`);
 			const { startMs, endMs } = resolveSpanMs(
 				pill
 					? { startMs: Math.round(pill.start * 1000), endMs: Math.round(pill.end * 1000) }
@@ -3557,18 +3699,18 @@ export function executeAgentTool(
 					)
 				: prev;
 			const others = new Set(prev.filter((r) => !pillIds.has(r.id)).map((r) => r.id));
-			const rebuilt = spanned.map((r) =>
-				others.has(r.id)
-					? r
-					: {
-							...r,
-							values:
-								values === undefined
-									? r.values
-									: storedShaderEffectValues(definition, { ...r.values, ...values }),
-							target: target ?? r.target,
-						},
-			);
+			const rebuilt = spanned.map((r) => {
+				if (others.has(r.id)) return r;
+				const patched = {
+					...r,
+					values:
+						values === undefined
+							? r.values
+							: storedShaderEffectValues(definition, { ...r.values, ...values }),
+					target: target ?? r.target,
+				};
+				return animate === undefined ? patched : withShaderEffectAnimate(patched, animated.animate);
+			});
 			const landing = landingAfterPillEdit(prev, rebuilt, pillIds, document);
 			if (!landing.anchored) return coversNoClip("effect", startMs / 1000, endMs / 1000, document);
 			const next: AxcutDocument = { ...document, shaderEffectRanges: rebuilt };
@@ -3590,13 +3732,22 @@ export function executeAgentTool(
 		case "setEffectDefinition": {
 			const parsed = setEffectDefinitionArgs.safeParse(args);
 			if (!parsed.success) return failure(parsed.error.message);
-			const { effectId, ...patch } = parsed.data;
+			const { effectId, image: imageFile, ...patch } = parsed.data;
 			const existing = findShaderEffect(document, effectId);
 			if (!existing) return failure(`Unknown effect: ${effectId}.`);
-			const recompile = patch.code !== undefined || patch.params !== undefined;
+			const attached =
+				typeof imageFile === "string" ? attachedEffectImage(imageFile, options?.effectImage) : null;
+			if (attached && "error" in attached) {
+				return failure(`The effect was NOT changed: ${attached.error}`);
+			}
+			// An image given or taken away recompiles too: `image()` exists only with one.
+			const recompile =
+				patch.code !== undefined || patch.params !== undefined || imageFile !== undefined;
 			const candidate = {
 				...existing,
 				...Object.fromEntries(Object.entries(patch).filter(([, v]) => v !== undefined)),
+				// A file replaces the image, `null` removes it, and nothing said keeps it.
+				image: imageFile === undefined ? existing.image : attached?.image,
 				cost: recompile ? undefined : existing.cost,
 			};
 			let definition: AxcutShaderEffect;
@@ -3610,7 +3761,17 @@ export function executeAgentTool(
 				if (!checked.success) return failure(checked.error.message);
 				definition = checked.data;
 			}
-			// The regions follow the new parameters: a removed one's value drops, bounds re-clamp.
+			// The regions follow the new parameters: a removed one's value drops, bounds re-clamp. The
+			// keyframes of a parameter removed or re-typed drop too; the others re-clamp.
+			const typeOf = (params: AxcutShaderEffect["params"], name: string) =>
+				params.find((p) => p.name === name)?.type;
+			const keptAnimate = (animate: AxcutShaderEffectRange["animate"]) => {
+				const kept = Object.entries(animate ?? {}).filter(
+					([name]) => typeOf(definition.params, name) === typeOf(existing.params, name),
+				);
+				const stored = storedShaderEffectAnimate(definition, Object.fromEntries(kept));
+				return "error" in stored ? undefined : stored.animate;
+			};
 			const next: AxcutDocument = {
 				...document,
 				shaderEffects: (document.shaderEffects ?? []).map((e) =>
@@ -3618,7 +3779,10 @@ export function executeAgentTool(
 				),
 				shaderEffectRanges: (document.shaderEffectRanges ?? []).map((r) =>
 					r.effectId === effectId
-						? { ...r, values: storedShaderEffectValues(definition, r.values) }
+						? withShaderEffectAnimate(
+								{ ...r, values: storedShaderEffectValues(definition, r.values) },
+								keptAnimate(r.animate),
+							)
 						: r,
 				),
 			};
@@ -3651,6 +3815,7 @@ export function executeAgentTool(
 				endSec: roundSec(r.endMs),
 				target: r.target,
 				values: r.values,
+				...(r.animate ? { animate: r.animate } : {}),
 			}));
 			return {
 				ok: true,

@@ -408,6 +408,18 @@ describe("transcriptRelevantAssetIds", () => {
 	it("has nothing to say about a missing document", () => {
 		expect(transcriptRelevantAssetIds(null)).toEqual([]);
 	});
+
+	it("leaves out a still image, on the timeline or in the media bin", () => {
+		// `/tmp/logo.still.mp4`: the video an imported image is made into.
+		expect(transcriptRelevantAssetIds(doc(["a", "logo.still"], ["logo.still", "a"]))).toEqual([
+			"a",
+		]);
+		expect(transcriptRelevantAssetIds(doc(["a", "logo.still"], []))).toEqual(["a"]);
+	});
+
+	it("names nothing when only stills play, even with an unused video in the bin", () => {
+		expect(transcriptRelevantAssetIds(doc(["a", "logo.still"], ["logo.still"]))).toEqual([]);
+	});
 });
 
 describe("firstTimelineBusyView", () => {
@@ -555,5 +567,13 @@ describe("assetCanCarrySpeech", () => {
 
 	it("says no to an asset that is not in the document", () => {
 		expect(assetCanCarrySpeech(doc([]), "ghost")).toBe(false);
+	});
+
+	it("says no to a still image, which has no sound", () => {
+		const withStill = {
+			assets: [{ id: "still", kind: "video", originalPath: "C:/rec/stills/logo_1_5000.still.mp4" }],
+			audioTracks: [],
+		} as unknown as Parameters<typeof assetCanCarrySpeech>[0];
+		expect(assetCanCarrySpeech(withStill, "still")).toBe(false);
 	});
 });

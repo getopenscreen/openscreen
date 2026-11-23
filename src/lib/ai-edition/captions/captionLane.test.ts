@@ -222,4 +222,22 @@ describe("voiceover captions under a cut and a speed region (#1657)", () => {
 		// Speech straddling that stop keeps only what is heard.
 		expect(heard(film(said(1.5, 2.5), speed, 10000))).toEqual([{ startMs: 1500, endMs: 2000 }]);
 	});
+
+	it("never stops a take at the head of another take of the same file", () => {
+		// Take A plays source 0–4 from 0 s, take B source 3–5 from 3 s: same file, same shift.
+		// Nothing stops A at B's head, so A's word at source 2 s is heard at output 2 s.
+		const d = film(said(2, 2.4), [{ id: "sp", startMs: 0, endMs: 4000, speed: 2 }], 4000);
+		d.audioTracks = [
+			...d.audioTracks,
+			{
+				...d.audioTracks[0],
+				id: "vo2",
+				trackId: "vo2",
+				startMs: 3000,
+				endMs: 5000,
+				offsetMs: 3000,
+			},
+		];
+		expect(heard(d)).toEqual([{ startMs: 2000, endMs: 2400 }]);
+	});
 });

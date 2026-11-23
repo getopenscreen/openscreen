@@ -1,6 +1,7 @@
 {
 	"actions": {
 		"cancel": "취소",
+		"tryAgain": "다시 시도",
 		"save": "저장",
 		"delete": "삭제",
 		"close": "닫기",
@@ -58,6 +59,9 @@
 		"blockedLocation": "업데이트하기 전에 OpenScreen을 응용 프로그램 폴더로 옮기세요.",
 		"failed": "업데이트를 확인할 수 없습니다.",
 		"downloadFailed": "업데이트를 다운로드하지 못했습니다."
+	},
+	"usagePing": {
+		"notSaved": "OpenScreen이 이 선택을 저장하지 못해 변경되지 않았습니다."
 	},
 	"units": {
 		"pixelsPerSecond": "{{value}} px/초",

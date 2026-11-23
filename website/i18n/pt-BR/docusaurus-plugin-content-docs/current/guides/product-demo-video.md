@@ -98,7 +98,7 @@ Na aba **Transcrição**, clique em **Legendas** e ative **Mostrar legendas**. E
 
 O Whisper detecta o idioma falado, ou você pode forçar um dos 100 idiomas com **Regenerar em** na área Mídia. Para publicar em outro idioma, use **Traduzir** para um dos 15 idiomas de destino e selecione esse idioma em **Exibição** antes de exportar. A tradução passa pelo seu próprio provedor de LLM, então precisa de uma chave.
 
-As legendas são embutidas no vídeo. O OpenScreen não grava nenhum arquivo `.srt` ou `.vtt`, então um player não consegue desativá-las. Detalhes: [Legendas e transcrição](../captions.md) e [como funciona o recurso de legendas](/features/captions/).
+As legendas são embutidas no vídeo. O editor e a CLI não gravam nenhum arquivo `.srt` ou `.vtt`, então um player não consegue desativá-las. Um agente pode gravar um com `exportCaptions`. Detalhes: [Legendas e transcrição](../captions.md) e [como funciona o recurso de legendas](/features/captions/).
 
 ## 8. Exporte {#8-export}
 
@@ -121,7 +121,7 @@ O OpenScreen não hospeda o seu vídeo, não cria links de compartilhamento nem 
 
 - **Você quer um link hospedado com estatísticas de quem assistiu ou comentários.** Um gravador hospedado atende melhor. O Loom, por exemplo, compartilha cada gravação como um link em loom.com, e a página de preços dele lista informações sobre os espectadores e comentários em vídeo em todos os planos (em setembro de 2026). Veja [OpenScreen como alternativa ao Loom](/alternatives/loom/) para o caso mais restrito em que o OpenScreen serve.
 - **Você quer uma demo interativa**, em que o espectador vai clicando. O OpenScreen exporta apenas vídeo e GIF.
-- **Seu player de vídeo precisa de um arquivo de legenda separado.** O OpenScreen só embute as legendas.
+- **Seu player de vídeo precisa de um arquivo de legenda separado, gerado pelo editor ou pela CLI.** Os dois só embutem as legendas; um agente pode gravar um com `exportCaptions`.
 - **Você grava em um celular ou tablet.** O OpenScreen é um app para desktop, para Windows, macOS 13 ou posterior e Linux.
 
 ## Fontes {#sources}

@@ -421,6 +421,9 @@ pub struct Compositor {
     // --- Effets shader de l'agent (`shader_fx`, `docs/shader-effects.md`) ---
     /// Compilés une fois par source, les moins récents évincés au-delà de `SHADER_FX_CACHE`.
     shader_fx: RefCell<std::collections::HashMap<u64, ShaderFxEntry>>,
+    /// Les images des effets (`image()`), par chemin : chargées au premier usage. `None` : le
+    /// fichier ne se charge pas, et on ne le redemande pas à chaque frame.
+    fx_images: RefCell<std::collections::HashMap<String, Option<(metal::Texture, u32, u32)>>>,
     shader_fx_tick: std::cell::Cell<u64>,
     /// Le calque transparent des textes, pour les effets qui ne visent qu'eux. Alloué à la
     /// première frame qui porte un effet `text`, à la taille de rendu.
@@ -905,6 +908,7 @@ impl Compositor {
             text_cache: RefCell::new(std::collections::HashMap::new()),
             text_raster: crate::text::TextRasterizer::new().ok(),
             shader_fx: RefCell::new(std::collections::HashMap::new()),
+            fx_images: RefCell::new(std::collections::HashMap::new()),
             shader_fx_tick: std::cell::Cell::new(0),
             text_layer: RefCell::new(None),
             shader_fx_blocking: std::cell::Cell::new(true),
@@ -1092,15 +1096,27 @@ impl Compositor {
         footage: Option<&metal::Texture>,
     ) -> Result<()> {
         let Some(pipeline) = self.shader_fx_ready(effect) else { return Ok(()) };
+        // `image()`, liée pour un effet qui porte une image : les autres ne la déclarent pas.
+        // Illisible, une texture transparente en tient lieu, et `ctx.image` reste à zéro.
+        let image = effect.image.as_deref().map(|path| {
+            self.fx_image(path).map_or_else(
+                || (self.rgba_texture(&[0; 4], 1, 1), *ctx),
+                |(tex, w, h)| (tex, ctx.with_image(w, h)),
+            )
+        });
+        let ctx = image.as_ref().map_or(ctx, |(_, with_image)| with_image);
         // On ne lit pas la cible sur laquelle on dessine : copie dans `ann_copy` (les flous
         // d'annotation et le cristal de Prism Glow l'ont déjà lue).
         self.snapshot(cmd, dst, false);
-        let params = crate::shader_fx::pack_params(effect);
+        let params = crate::shader_fx::pack_params(effect, ctx.region[2]);
         let e = self.begin_pass(cmd, dst, None, &pipeline)?;
         e.set_fragment_texture(0, Some(&self.ann_copy));
         // `footage()`, liée seulement pour un effet qui la lit : les autres ne la déclarent pas.
         if let Some(footage) = footage {
             e.set_fragment_texture(crate::shader_fx::MSL_FOOTAGE_TEXTURE, Some(footage));
+        }
+        if let Some((tex, _)) = &image {
+            e.set_fragment_texture(crate::shader_fx::MSL_IMAGE_TEXTURE, Some(tex));
         }
         e.set_fragment_bytes(
             crate::shader_fx::MSL_CTX_BUFFER,
@@ -1353,7 +1369,11 @@ impl Compositor {
                 .to_rgba8()
         };
         let (w, h) = (img.width(), img.height());
-        let pixels = img.into_raw();
+        Ok((self.rgba_texture(&img.into_raw(), w, h), w, h))
+    }
+
+    /// Des pixels RGBA8 → `MTLTexture`.
+    fn rgba_texture(&self, pixels: &[u8], w: u32, h: u32) -> metal::Texture {
         let tex = make_texture(
             &self.gpu.device,
             metal::MTLPixelFormat::RGBA8Unorm,
@@ -1371,7 +1391,28 @@ impl Compositor {
             pixels.as_ptr() as *const std::ffi::c_void,
             (w * 4) as u64,
         );
-        Ok((tex, w, h))
+        tex
+    }
+
+    /// L'image d'un effet (`image()`), chargée au premier usage et gardée par chemin : l'app
+    /// nomme le fichier d'après son contenu, un chemin ne change donc jamais d'image. `None` si
+    /// elle ne se charge pas : l'effet lit alors du transparent.
+    // ponytail: décodée sur le thread de rendu à la première frame qui la montre ; à déplacer
+    // vers le thread de compilation si une grande image fait sauter la preview.
+    fn fx_image(&self, path: &str) -> Option<(metal::Texture, u32, u32)> {
+        if let Some(hit) = self.fx_images.borrow().get(path) {
+            return hit.clone();
+        }
+        let loaded = crate::shader_fx::load_image(path)
+            .map_err(|e| eprintln!("[shader-fx] {e}"))
+            .ok()
+            .map(|img| (self.rgba_texture(&img.rgba, img.width, img.height), img.width, img.height));
+        let mut images = self.fx_images.borrow_mut();
+        if images.len() >= crate::shader_fx::IMAGE_CACHE {
+            images.clear();
+        }
+        images.insert(path.to_string(), loaded.clone());
+        loaded
     }
 
     /// Champ de distance du sprite `path` (texture(4) du mode 15) et sa forme, calculés au
@@ -5266,6 +5307,44 @@ mod tests {
         assert_eq!(corner, [0, 255, 0]);
     }
 
+    /// Une piste d'images clés remplace la valeur fixe : `tint` est vert dans `values`, sa piste le
+    /// tient bleu jusqu'à 1,5 s. À 2 s de programme, soit 1 s dans la région, le shader lit bleu.
+    #[test]
+    fn an_animated_parameter_reaches_the_shader_at_its_keyframe_value() {
+        let mut effect = fx(TINT, "image");
+        effect["animate"] = serde_json::json!({"tint": [
+            {"atSec": 0.0, "value": [0.0, 0.0, 1.0, 1.0], "hold": true},
+            {"atSec": 1.5, "value": [0.0, 1.0, 0.0, 1.0]},
+        ]});
+        let Some(corner) = corner_under(serde_json::json!([effect])) else { return };
+        assert_eq!(corner, [0, 0, 255]);
+    }
+
+    /// L'image d'un effet arrive au shader : `image()` la rend en alpha droit, `ctx.image` dit sa
+    /// taille. Un fichier illisible ne casse rien : l'effet lit du transparent, et `ctx.image.w`
+    /// reste à 0.
+    #[test]
+    fn an_effect_reads_its_image() {
+        let dir = std::env::temp_dir().join(format!("fx-image-gpu-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let file = dir.join("half-red.png");
+        image::RgbaImage::from_pixel(4, 2, image::Rgba([255, 0, 0, 128])).save(&file).unwrap();
+        let corner = |code: &str, image: &std::path::Path| {
+            let mut effect = fx(code, "image");
+            effect["image"] = serde_json::json!(image.to_str().unwrap());
+            corner_under(serde_json::json!([effect]))
+        };
+        const COLOUR: &str =
+            "fn effect(uv: vec2<f32>) -> vec4<f32> { let i = image(uv); return vec4<f32>(i.rgb, 1.0); }";
+        const FACTS: &str = "fn effect(uv: vec2<f32>) -> vec4<f32> { return vec4<f32>(image(uv).a, ctx.image.z / 8.0, ctx.image.w, 1.0); }";
+        // Rouge à moitié transparent : du rouge plein, un alpha de moitié, 4 sur 2 de côté.
+        let Some(colour) = corner(COLOUR, &file) else { return };
+        assert_eq!(colour, [255, 0, 0]);
+        assert_eq!(corner(FACTS, &file), Some([128, 64, 255]));
+        assert_eq!(corner(FACTS, &dir.join("absent.png")), Some([0, 0, 0]));
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
     /// `fx_to_footage` retrouve le point du métrage que le compositeur a dessiné sous un pixel,
     /// à plat, sous un angle fixe (warp bilinéaire) et sous la caméra réelle (homographie), et
     /// `fx_from_footage` le ramène sur ce pixel. En 1080p, l'arrondi 8 bits et le demi-pixel
@@ -5435,7 +5514,7 @@ mod tests {
             eprintln!("{w}x{h} : sans effet {base:.3} ms/frame");
             for reads in [1u32, 8, 32, 128, 512] {
                 let code = reads_effect(reads);
-                let report = crate::shader_fx::analyze(&code, &[]).expect("analyse").report;
+                let report = crate::shader_fx::analyze(&code, &[], false).expect("analyse").report;
                 let with = (0..5)
                     .map(|_| per_frame(w, h, serde_json::json!([fx(&code, "image")])))
                     .fold(f64::MAX, f64::min);
@@ -5469,7 +5548,7 @@ mod tests {
             .map(|i| {
                 let code = format!("{ripple}\nfn fx_nonce_{nonce}_{i}() -> f32 {{ return {i}.0; }}\n");
                 let t0 = std::time::Instant::now();
-                crate::shader_fx::compile_metal(&gpu.device, &code, &params).expect("compile");
+                crate::shader_fx::compile_metal(&gpu.device, &code, &params, false).expect("compile");
                 t0.elapsed().as_secs_f64() * 1000.0
             })
             .collect();
@@ -5484,7 +5563,7 @@ mod tests {
         // Et la même source une seconde fois : ce que coûte un effet que Metal a déjà vu.
         let code = format!("{ripple}\nfn fx_nonce_{nonce}_0() -> f32 {{ return 0.0; }}\n");
         let t0 = std::time::Instant::now();
-        crate::shader_fx::compile_metal(&gpu.device, &code, &params).expect("compile");
+        crate::shader_fx::compile_metal(&gpu.device, &code, &params, false).expect("compile");
         eprintln!("recompilation d'une source déjà vue : {:.1} ms", t0.elapsed().as_secs_f64() * 1000.0);
     }
 

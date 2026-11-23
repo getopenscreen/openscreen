@@ -367,7 +367,11 @@ describe("CompositorViewService checks an effect's code off the main thread", ()
 		expect(checker).toHaveBeenCalledWith(
 			"code",
 			JSON.stringify([{ name: "level", type: "number" }]),
+			false,
 		);
+		// An effect that carries an image is checked as one: its code may call image().
+		await service(checker).checkShaderEffect("code", [], true);
+		expect(checker).toHaveBeenLastCalledWith("code", "[]", true);
 	});
 
 	it("reads an addon that fails, whether it throws or rejects, as not checked", async () => {

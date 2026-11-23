@@ -54,7 +54,11 @@ import {
 	withTranscript,
 } from "../../src/lib/ai-edition/document/transcript";
 import { type AxcutDocument, documentSchema } from "../../src/lib/ai-edition/schema";
-import type { ShaderEffectChecker } from "../../src/lib/ai-edition/shaderEffects";
+import type {
+	ShaderEffectChecker,
+	ShaderEffectImageStore,
+} from "../../src/lib/ai-edition/shaderEffects";
+import type { StylePreset } from "../../src/lib/ai-edition/stylePresets";
 import {
 	segmentsFromStt,
 	transcriptFromSegments,
@@ -174,16 +178,27 @@ export interface McpToolDeps extends ImportMediaDeps {
 	cameraSegmentation?: () => SegmentationSupport;
 	/** The compositor's check of an agent-written effect's WGSL; absent where nothing can ask. */
 	checkShaderEffect?: ShaderEffectChecker;
+	/** The copy kept of the image an agent-written effect reads; absent where none can be kept. */
+	storeEffectImage?: ShaderEffectImageStore;
+	/** The user's saved style presets (`StylePresetService.list`); absent where none can be read. */
+	stylePresets?: () => Promise<StylePreset[]>;
 	/** The main process's on-device Whisper (`SttManager.transcribe`). Absent: no transcribe tool. */
 	transcribe?(request: SttTranscribeRequest): Promise<SttTranscribeResponse>;
 	version: string;
 	/** `openscreen mcp` only: a newer OpenScreen to tell the user about, for the user who never
 	 *  opens the app and so never sees its update button. */
 	updateNotice?: string;
+	/** Told the name of each tool a client calls, and nothing of the call (usage-ping.ts).
+	 *  Absent on the app's channel: `openscreen mcp` counted the call where the client made it. */
+	onToolCall?(name: string): void;
 }
 
 export const LIST_PROJECTS_TOOL = "listProjects";
 export const TRANSCRIBE_TOOL = "transcribe";
+/** The runner's own: getBeforeAfter reads a checkpoint through it. No client is served it;
+ *  the app's channel is, so `openscreen mcp` reads the checkpoints the running app holds. */
+export const READ_CHECKPOINT_TOOL = "readCheckpoint";
+export const READ_CHECKPOINT_SCHEMA = z.object({ projectId: z.string(), checkpointId: z.string() });
 
 const transcribeArgs = z.object({
 	assetId: z
@@ -302,7 +317,7 @@ export function mcpInstructions(options: {
 		CHECKPOINT_LIFETIMES[transport],
 		...(media && !editsAllowed
 			? [
-					`startRecording, exportVideo, exportAudio and createProject are refused too while ${MCP_EDITS_SETTING} is off.`,
+					`startRecording, exportVideo, exportAudio, exportCaptions and createProject are refused too while ${MCP_EDITS_SETTING} is off.`,
 				]
 			: []),
 		...(options.transcribe ? [TRANSCRIBE_NOTE] : []),
@@ -463,6 +478,25 @@ export function createToolRunner(deps: McpToolDeps): McpToolRunner {
 		};
 	}
 
+	/** A checkpoint's document, as it was saved: read, never restored. */
+	function readCheckpoint(document: AxcutDocument, args: unknown): AgentToolExecution {
+		const id = (args as { checkpointId?: unknown } | null)?.checkpointId;
+		const checkpoint = typeof id === "string" ? checkpoints.get(id) : undefined;
+		if (!checkpoint) {
+			return {
+				ok: false,
+				resultJson: `Unknown checkpointId. ${CHECKPOINT_LIFETIMES[deps.transport]}`,
+			};
+		}
+		if (checkpoint.document.project.id !== document.project.id) {
+			return {
+				ok: false,
+				resultJson: `This checkpoint belongs to another project. Pass projectId "${checkpoint.document.project.id}".`,
+			};
+		}
+		return { ok: true, resultJson: JSON.stringify(checkpoint.document) };
+	}
+
 	function hasCheckpoint(projectId: string): boolean {
 		for (const checkpoint of checkpoints.values()) {
 			if (checkpoint.document.project.id === projectId) return true;
@@ -574,6 +608,7 @@ export function createToolRunner(deps: McpToolDeps): McpToolRunner {
 	): Promise<AgentToolExecution & { sidecars?: SidecarWrite[] }> {
 		if (name === "createCheckpoint") return createCheckpoint(document);
 		if (name === "restoreCheckpoint") return restoreCheckpoint(document, args, editsAllowed);
+		if (name === READ_CHECKPOINT_TOOL) return readCheckpoint(document, args);
 		// This server's own switch, so the refusal names it rather than the in-app agent's.
 		if ((edit || isMutatingTool(name) || PROJECT_EDIT_TOOLS.has(name)) && !editsAllowed) {
 			return consentRequired(name, args, MCP_EDITS_SETTING);
@@ -587,6 +622,8 @@ export function createToolRunner(deps: McpToolDeps): McpToolRunner {
 			availableByAssetId,
 			cameraSegmentation: deps.cameraSegmentation,
 			checkShaderEffect: deps.checkShaderEffect,
+			storeEffectImage: deps.storeEffectImage,
+			stylePresets: deps.stylePresets,
 		});
 	}
 
@@ -853,13 +890,37 @@ function keepTranscriptsMadeSince(
 	return restored;
 }
 
+/**
+ * `server`, with every tool registered through it telling `onToolCall` its name on each call.
+ * One place for the document tools and the media tools alike, whoever registers them.
+ */
+function countingToolCalls(server: McpServer, onToolCall: (name: string) => void): McpServer {
+	return new Proxy(server, {
+		get(target, key) {
+			if (key !== "registerTool") {
+				const value = Reflect.get(target, key, target);
+				return typeof value === "function" ? value.bind(target) : value;
+			}
+			return (name: string, config: unknown, handler: (...args: unknown[]) => unknown) =>
+				Reflect.apply(target.registerTool, target, [
+					name,
+					config,
+					(...args: unknown[]) => {
+						onToolCall(name);
+						return handler(...args);
+					},
+				]);
+		},
+	});
+}
+
 export function createOpenScreenMcpServer(
 	deps: McpToolDeps,
 	runTool: McpToolRunner,
 	/** The media tools (media-tools.ts), served by both servers but not the app's channel. */
 	media?: MediaTools,
 ): McpServer {
-	const server = new McpServer(
+	const mcpServer = new McpServer(
 		{ name: MCP_SERVER_NAME, version: deps.version },
 		{
 			instructions: mcpInstructions({
@@ -871,6 +932,7 @@ export function createOpenScreenMcpServer(
 			}),
 		},
 	);
+	const server = deps.onToolCall ? countingToolCalls(mcpServer, deps.onToolCall) : mcpServer;
 	const projectIdArg = z.string().optional().describe(PROJECT_ID_DESCRIPTIONS[deps.transport]);
 	server.registerTool(
 		LIST_PROJECTS_TOOL,
@@ -953,7 +1015,7 @@ export function createOpenScreenMcpServer(
 			contents: [{ uri: uri.href, mimeType: "text/markdown", text: EFFECTS_CONTRACT }],
 		}),
 	);
-	return server;
+	return mcpServer;
 }
 
 function isAllowedHost(hostHeader: string | undefined, port: number): boolean {

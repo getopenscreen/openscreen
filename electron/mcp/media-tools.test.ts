@@ -2,6 +2,7 @@
 // hand projects to: a real DocumentService on a temp directory, the real tool
 // runner, and stand-ins for the runner windows and the video decoder.
 
+import { writeFileSync } from "node:fs";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -42,6 +43,8 @@ class FakeRunners {
 	holdExport = false;
 	releaseExport: () => void = () => undefined;
 	private exportHeld: () => void = () => undefined;
+	/** What an audio render to a WAV writes, as the export runner would. */
+	wav: Buffer | null = null;
 	open = 0;
 
 	constructor(private readonly videoPath: string) {}
@@ -86,6 +89,10 @@ class FakeRunners {
 			},
 		};
 		const result = this.results[request.kind] ?? { success: true };
+		const rendersWav = request.kind === "export" && request.format === "wav";
+		if (rendersWav && request.outPath && this.wav && result.success) {
+			writeFileSync(request.outPath, this.wav);
+		}
 		if (request.kind === "export" && this.holdExport) {
 			this.releaseExport = () => finish(result);
 			this.exportHeld();
@@ -123,6 +130,8 @@ let videoPath = "";
 let documents: DocumentService;
 let runners: FakeRunners;
 let closed: number;
+/** The widths the video decoder was asked for its frames at, in order. */
+let capturedWidths: number[];
 let openVideoFails: boolean;
 let client: Client;
 let media: ReturnType<typeof createMediaTools>;
@@ -130,6 +139,8 @@ let media: ReturnType<typeof createMediaTools>;
 let stdioDeps: MediaToolDeps;
 /** The addon's frame renderer, when a test gives it one: none by default, as an older addon. */
 let renderFrames: MediaToolDeps["renderFrames"];
+/** The tool calls the server reported for the usage count: names, in order. */
+let countedCalls: string[];
 
 /** The pointer recorded with the take, as the sidecar beside the video. */
 async function readSidecar(video: string): Promise<CursorTelemetryPoint[]> {
@@ -149,8 +160,10 @@ beforeEach(async () => {
 	await fs.writeFile(`${videoPath}.cursor.json`, JSON.stringify({ samples: clickTrack() }));
 	runners = new FakeRunners(videoPath);
 	closed = 0;
+	capturedWidths = [];
 	openVideoFails = false;
 	renderFrames = undefined;
+	countedCalls = [];
 
 	const toolDeps: McpToolDeps = {
 		transport: "stdio",
@@ -158,6 +171,7 @@ beforeEach(async () => {
 		projects: documents,
 		editsAllowed: () => true,
 		version: "test",
+		onToolCall: (name) => countedCalls.push(name),
 	};
 	const runTool = createToolRunner(toolDeps);
 	stdioDeps = {
@@ -171,10 +185,13 @@ beforeEach(async () => {
 				durationSec: 12,
 				width: 1920,
 				height: 1080,
-				capture: async (timeSec) => ({
-					mimeType: "image/jpeg",
-					data: Buffer.from(`frame@${timeSec}`).toString("base64"),
-				}),
+				capture: async (timeSec, maxWidth) => {
+					capturedWidths.push(maxWidth);
+					return {
+						mimeType: "image/jpeg",
+						data: Buffer.from(`frame@${timeSec}`).toString("base64"),
+					};
+				},
 				close: () => {
 					closed++;
 				},
@@ -182,6 +199,30 @@ beforeEach(async () => {
 		},
 		readCursor: readSidecar,
 		renderFrames: async (...args) => (renderFrames ? renderFrames(...args) : null),
+		// The host's image codec: a frame decodes to a flat 16:9 picture as wide as asked, and
+		// a crop or a sheet says what it was made from.
+		images: {
+			decode: (jpeg, maxWidth) => {
+				// A frame marked tall decodes square: a file whose size changes midway.
+				const height = jpeg.includes("tall") ? maxWidth : Math.round((maxWidth * 9) / 16);
+				const pixels = Buffer.alloc(maxWidth * height * 4, 7);
+				// A frame that names a box holds one: two frames can then differ somewhere known.
+				const box = /box (\d+),(\d+) (\d+)x(\d+)/.exec(jpeg.toString());
+				if (box) {
+					const [left, top, boxWidth, boxHeight] = box.slice(1).map(Number);
+					for (let y = top; y < top + boxHeight; y++) {
+						const row = (y * maxWidth + left) * 4;
+						pixels.fill(200, row, row + boxWidth * 4);
+					}
+				}
+				return { width: maxWidth, height, pixels };
+			},
+			encode: (bitmap) => Buffer.from(`sheet ${bitmap.width}x${bitmap.height}`),
+			crop: (jpeg, region, maxWidth) =>
+				Buffer.from(
+					`${jpeg} cropped to ${region.x},${region.y} ${region.width}x${region.height} within ${maxWidth}`,
+				),
+		},
 		runTool,
 		now: () => 1_000,
 	};
@@ -214,6 +255,23 @@ async function recordTake(title = "Demo") {
 		recordingStartedAt: number;
 	};
 }
+
+describe("the usage count", () => {
+	it("is told the name of each tool a client calls, and nothing of the call", async () => {
+		const { projectId } = await recordTake();
+		// A media tool, a document tool, and a call that is refused: all three were calls.
+		await call("getFrames", { path: "take.mp4", atSec: [1] });
+		await call("addTrim", { projectId, startSec: 2, endSec: 4 });
+		await call("getFrames", {});
+		expect(countedCalls).toEqual([
+			"startRecording",
+			"stopRecording",
+			"getFrames",
+			"addTrim",
+			"getFrames",
+		]);
+	});
+});
 
 describe("what `openscreen mcp` tells its client", () => {
 	it("composes the media block with the checkpoint rule, and nothing true only in the app", () => {
@@ -889,6 +947,96 @@ describe("exportAudio", () => {
 	});
 });
 
+describe("exportCaptions", () => {
+	/** The take with two spoken lines in its transcript. */
+	async function spokenTake() {
+		const { projectId } = await recordTake();
+		const project = await documents.getProject(projectId);
+		const assetId = project.project.primaryAssetId as string;
+		const word = (
+			id: string,
+			segmentId: string,
+			startSec: number,
+			endSec: number,
+			text: string,
+		) => ({
+			id,
+			segmentId,
+			startSec,
+			endSec,
+			text,
+		});
+		await documents.saveProject({
+			...project,
+			transcripts: [
+				{
+					assetId,
+					language: "en",
+					segments: [
+						{
+							id: "s1",
+							kind: "speech",
+							startSec: 1,
+							endSec: 2,
+							text: "hello there",
+							wordIds: ["w1", "w2"],
+						},
+						{ id: "s2", kind: "speech", startSec: 4, endSec: 5, text: "goodbye", wordIds: ["w3"] },
+					],
+					words: [
+						word("w1", "s1", 1, 1.5, "hello"),
+						word("w2", "s1", 1.5, 2, "there"),
+						word("w3", "s2", 4, 5, "goodbye"),
+					],
+				},
+			],
+		});
+		return projectId;
+	}
+
+	it("writes the captions to the subtitle file the extension names", async () => {
+		const projectId = await spokenTake();
+		const srt = path.join(dir, "demo.srt");
+		const written = await call("exportCaptions", { projectId, path: srt });
+		expect(written.isError).toBeFalsy();
+		expect(JSON.parse(textOf(written))).toEqual({
+			path: srt,
+			format: "srt",
+			language: null,
+			entries: 2,
+		});
+		expect(await fs.readFile(srt, "utf8")).toBe(
+			"1\n00:00:01,000 --> 00:00:02,000\nhello there\n\n2\n00:00:04,000 --> 00:00:05,000\ngoodbye\n",
+		);
+		const vtt = path.join(dir, "demo.vtt");
+		await call("exportCaptions", { projectId, path: vtt });
+		expect((await fs.readFile(vtt, "utf8")).startsWith("WEBVTT\n\n00:00:01.000")).toBe(true);
+		// Nothing is rendered for it.
+		expect(runners.started.filter((request) => request.kind === "export")).toHaveLength(0);
+	});
+
+	it("refuses a project with no words, a layer it lacks, another extension or an unknown project", async () => {
+		const { projectId } = await recordTake();
+		const empty = await call("exportCaptions", { projectId, path: path.join(dir, "none.srt") });
+		expect(empty.isError).toBe(true);
+		expect(textOf(empty)).toContain("transcribe");
+		await expect(fs.access(path.join(dir, "none.srt"))).rejects.toThrow();
+
+		const spoken = await spokenTake();
+		const layer = await call("exportCaptions", {
+			projectId: spoken,
+			path: path.join(dir, "fr.srt"),
+			language: "fr",
+		});
+		expect(textOf(layer)).toContain('no "fr" caption translation');
+		expect((await call("exportCaptions", { projectId: spoken, path: "out.txt" })).isError).toBe(
+			true,
+		);
+		const unknown = await call("exportCaptions", { projectId: "proj_x", path: "out.srt" });
+		expect(textOf(unknown)).toContain('No project has the id "proj_x"');
+	});
+});
+
 describe("getFrames on a project", () => {
 	it("reads the last export at the ruler seconds the document tools use", async () => {
 		const { projectId } = await recordTake();
@@ -1061,6 +1209,551 @@ describe("getFrames", () => {
 	});
 });
 
+/** What a frame result says of each frame, without its opening line. */
+const captionsOf = (result: CallToolResult) =>
+	result.content.flatMap((part) => (part.type === "text" ? [part.text] : [])).slice(1);
+
+/** The picture of a result, as the stand-in codec wrote it. */
+const pictureOf = (result: CallToolResult) => {
+	const image = result.content.find((part) => part.type === "image");
+	return image?.type === "image" ? Buffer.from(image.data, "base64").toString() : null;
+};
+
+describe("frameTimes over a span", () => {
+	it("runs from one end of the span to the other, both shown", () => {
+		expect(frameTimes(12, null, 3, { startSec: 2, endSec: 4 })).toEqual([2, 3, 4]);
+		expect(frameTimes(12, null, 1, { startSec: 2, endSec: 4 })).toEqual([3]);
+		expect(frameTimes(12, null, 2, { endSec: 6 })).toEqual([0, 6]);
+		// An open end is the video's own, one frame short of it.
+		const toTheEnd = frameTimes(12, null, 2, { startSec: 10 });
+		expect(toTheEnd[0]).toBe(10);
+		expect(toTheEnd[1]).toBeGreaterThan(11.9);
+		expect(toTheEnd[1]).toBeLessThan(12);
+		// A span past the end shows the last frame, never a time the video does not have.
+		const past = frameTimes(12, null, 2, { startSec: 20, endSec: 30 });
+		expect(past).toHaveLength(2);
+		for (const t of past) expect(t).toBeCloseTo(12 - 1 / 60, 6);
+	});
+});
+
+describe("getFrames over a span and on a region", () => {
+	it("spreads the frames from startSec to endSec", async () => {
+		const result = await call("getFrames", {
+			path: "take.mp4",
+			startSec: 2,
+			endSec: 4,
+			count: 3,
+		});
+		expect(captionsOf(result)).toEqual(["2.00s", "3.00s", "4.00s"]);
+		expect(capturedWidths).toEqual([1280, 1280, 1280]);
+	});
+
+	it("takes times or a span, not both, and a span that runs forward", async () => {
+		const both = await call("getFrames", { path: "take.mp4", atSec: [1], startSec: 0 });
+		expect(both.isError).toBe(true);
+		expect(textOf(both)).toContain("not both");
+		const backwards = await call("getFrames", { path: "take.mp4", startSec: 4, endSec: 2 });
+		expect(backwards.isError).toBe(true);
+		expect(textOf(backwards)).toContain("endSec must be after startSec");
+	});
+
+	it("crops each frame to the region, out of the video at its own size", async () => {
+		const result = await call("getFrames", {
+			path: "take.mp4",
+			atSec: [1],
+			region: { x: 0.5, y: 0, width: 0.5, height: 0.5 },
+		});
+		expect(pictureOf(result)).toBe("frame@1 cropped to 0.5,0 0.5x0.5 within 1280");
+		// Asked wider than any video, so the crop is cut from every pixel the frame has.
+		expect(capturedWidths).toEqual([16_384]);
+	});
+
+	it("renders a project's frames at full size before it crops them", async () => {
+		const { projectId } = await recordTake();
+		const widths: number[] = [];
+		renderFrames = async (_clips, _scene, _fps, frames, maxWidth) => {
+			widths.push(maxWidth);
+			return frames.map((index) => ({
+				index,
+				width: 1920,
+				height: 1080,
+				jpeg: Buffer.from(`render@${index}`),
+			}));
+		};
+		const result = await call("getFrames", {
+			projectId,
+			atSec: [1],
+			region: { x: 0, y: 0, width: 0.25, height: 0.25 },
+		});
+		expect(pictureOf(result)).toBe("render@60 cropped to 0,0 0.25x0.25 within 1280");
+		expect(widths).toEqual([16_384]);
+	});
+});
+
+describe("getContactSheet", () => {
+	it("makes the rows as tall as the tallest frame, so none is cut", async () => {
+		const { projectId } = await recordTake();
+		renderFrames = async (_clips, _scene, _fps, frames, maxWidth) =>
+			frames.map((index, i) => ({
+				index,
+				width: maxWidth,
+				height: 359,
+				jpeg: Buffer.from(i === 1 ? `render@${index} tall` : `render@${index}`),
+			}));
+		const result = await call("getContactSheet", { projectId, atSec: [1, 2], columns: 2 });
+		// The second frame decodes 639 px square, taller than the first: the row takes its height.
+		expect(pictureOf(result)).toBe(`sheet ${2 * 639 + 2}x639`);
+	});
+
+	it("lays a video's frames out on one image, and says the times in reading order", async () => {
+		const result = await call("getContactSheet", {
+			path: "take.mp4",
+			startSec: 0,
+			endSec: 10,
+			count: 6,
+			columns: 3,
+		});
+		expect(result.isError).toBeFalsy();
+		expect(result.content).toHaveLength(2);
+		expect(textOf(result)).toContain(
+			"3 across, in reading order: 0.00s, 2.00s, 4.00s, 6.00s, 8.00s, 10.00s.",
+		);
+		// Three tiles of 425 px and two gaps wide; two rows of 239 px and one gap high.
+		expect(pictureOf(result)).toBe("sheet 1279x480");
+		// Each frame is asked for at the width of its tile, never larger.
+		expect(capturedWidths).toEqual(Array(6).fill(425));
+		expect(closed).toBe(1);
+	});
+
+	it("shows twelve moments of the whole film, four across, rendered from a project with no export", async () => {
+		const { projectId } = await recordTake();
+		const asked: Array<{ frames: number; maxWidth: number }> = [];
+		renderFrames = async (_clips, _scene, _fps, frames, maxWidth) => {
+			asked.push({ frames: frames.length, maxWidth });
+			return frames.map((index) => ({
+				index,
+				width: maxWidth,
+				height: 179,
+				jpeg: Buffer.from(`render@${index}`),
+			}));
+		};
+		const result = await call("getContactSheet", { projectId });
+		expect(asked).toEqual([{ frames: 12, maxWidth: 318 }]);
+		expect(textOf(result)).toContain("rendered from the project");
+		expect(textOf(result)).toContain("4 across");
+		// Three rows of four tiles, 318 by 179.
+		expect(pictureOf(result)).toBe(`sheet ${4 * 318 + 3 * 2}x${3 * 179 + 2 * 2}`);
+	});
+
+	it("keeps the place and the time of a frame the video does not have", async () => {
+		const { projectId } = await recordTake();
+		renderFrames = async (_clips, _scene, _fps, frames, maxWidth) =>
+			frames.slice(0, 1).map((index) => ({
+				index,
+				width: maxWidth,
+				height: 360,
+				jpeg: Buffer.from("the only frame"),
+			}));
+		const partial = await call("getContactSheet", { projectId, atSec: [1, 2], columns: 2 });
+		expect(textOf(partial)).toContain("in reading order: 1.00s, 2.00s.");
+		expect(pictureOf(partial)).toBe(`sheet ${2 * 639 + 2}x359`);
+
+		renderFrames = async () => [];
+		const none = await call("getContactSheet", { projectId, atSec: [1] });
+		expect(none.isError).toBe(true);
+		expect(textOf(none)).toContain("No frame to show");
+	});
+
+	it("cuts the region out of the full-size frame before it makes a tile of it", async () => {
+		const result = await call("getContactSheet", {
+			path: "take.mp4",
+			atSec: [1],
+			columns: 2,
+			region: { x: 0, y: 0, width: 0.5, height: 0.5 },
+		});
+		expect(result.isError).toBeFalsy();
+		expect(capturedWidths).toEqual([16_384]);
+	});
+
+	it("labels a file's frame with the time it was taken at, not a time past the end", async () => {
+		const result = await call("getContactSheet", { path: "take.mp4", atSec: [20], columns: 2 });
+		expect(textOf(result)).toContain("in reading order: 11.98s.");
+	});
+
+	it("puts more frames across as there are more of them, unless told how many", async () => {
+		const many = await call("getContactSheet", { path: "take.mp4", count: 30 });
+		expect(textOf(many)).toContain("6 across");
+		const some = await call("getContactSheet", { path: "take.mp4", count: 20 });
+		expect(textOf(some)).toContain("5 across");
+		const asked = await call("getContactSheet", { path: "take.mp4", count: 30, columns: 3 });
+		expect(textOf(asked)).toContain("3 across");
+	});
+
+	it("takes a project or a file like getFrames, and refuses the same mistakes", async () => {
+		expect((await call("getContactSheet", {})).isError).toBe(true);
+		const both = await call("getContactSheet", { path: "take.mp4", atSec: [1], endSec: 3 });
+		expect(textOf(both)).toContain("not both");
+	});
+});
+
+describe("getBeforeAfter", () => {
+	const momentsOf = (result: CallToolResult) => {
+		const report = result.content[1];
+		return report?.type === "text" ? JSON.parse(report.text).moments : null;
+	};
+	/** What each render was asked for: how many clips, which frames, how wide. */
+	let asked: Array<{ clips: number; frames: number[]; maxWidth: number }>;
+	// The project's frames hold a box once it is cut in two: somewhere known to differ.
+	beforeEach(() => {
+		asked = [];
+		renderFrames = async (clips, _scene, _fps, frames, maxWidth) => {
+			asked.push({ clips: clips.length, frames, maxWidth });
+			return frames.map((index) => ({
+				index,
+				width: maxWidth,
+				height: 359,
+				jpeg: Buffer.from(
+					clips.length > 1 ? `render@${index} box 64,36 128x72` : `render@${index}`,
+				),
+			}));
+		};
+	});
+
+	it("pairs each moment at the checkpoint with the same moment now, and says where they differ", async () => {
+		const { projectId, checkpointId } = await recordTake();
+		const untouched = await call("getBeforeAfter", { projectId, checkpointId, atSec: [1, 6] });
+		expect(momentsOf(untouched)).toEqual([
+			{ sec: 1, changed: false },
+			{ sec: 6, changed: false },
+		]);
+
+		// A cut of 2 s: ruler 6 s was frame 360 of the export, and is now frame 240.
+		await call("addTrim", { projectId, startSec: 2, endSec: 4 });
+		const edited = await documents.getProject(projectId);
+		asked = [];
+		const result = await call("getBeforeAfter", { projectId, checkpointId, atSec: [1, 6] });
+		expect(result.isError).toBeFalsy();
+		expect(textOf(result)).toContain("left, at the checkpoint; right, as it is now");
+		// The checkpoint first, then the project as it is, each at the width of its tile.
+		expect(asked).toEqual([
+			{ clips: 1, frames: [60, 360], maxWidth: 639 },
+			{ clips: 2, frames: [60, 240], maxWidth: 639 },
+		]);
+		// Two rows of two tiles, 639 by 359, and the gaps between them.
+		expect(pictureOf(result)).toBe(`sheet ${2 * 639 + 2}x${2 * 359 + 2}`);
+		const box = { x: 0.1002, y: 0.1003, width: 0.2003, height: 0.2006 };
+		expect(momentsOf(result)).toEqual([
+			{ sec: 1, changed: true, changedShare: 0.0402, region: box },
+			{ sec: 6, changed: true, changedShare: 0.0402, region: box },
+		]);
+		// Looking changed nothing: the edit is still there, and so is the checkpoint.
+		expect(await documents.getProject(projectId)).toEqual(edited);
+		const restored = await call("restoreCheckpoint", { projectId, checkpointId });
+		expect(restored.isError).toBeFalsy();
+	});
+
+	it("compares one part of the frame at full size, and places the change in the whole frame", async () => {
+		const { projectId, checkpointId } = await recordTake();
+		await call("addTrim", { projectId, startSec: 2, endSec: 4 });
+		asked = [];
+		const result = await call("getBeforeAfter", {
+			projectId,
+			checkpointId,
+			atSec: [1],
+			region: { x: 0.5, y: 0, width: 0.5, height: 1 },
+		});
+		expect(asked.map((render) => render.maxWidth)).toEqual([16_384, 16_384]);
+		// The box sits at a tenth of the right half: just past the middle of the frame.
+		expect(momentsOf(result)).toEqual([
+			{
+				sec: 1,
+				changed: true,
+				changedShare: 0.0402,
+				region: { x: 0.5501, y: 0.1003, width: 0.1002, height: 0.2006 },
+			},
+		]);
+	});
+
+	it("says a side that has no frame changed, without pointing anywhere", async () => {
+		const { projectId, checkpointId } = await recordTake();
+		await call("addTrim", { projectId, startSec: 2, endSec: 4 });
+		// The checkpoint renders nothing; the project as it is, its frame.
+		renderFrames = async (clips, _scene, _fps, frames, maxWidth) =>
+			clips.length > 1
+				? frames.map((index) => ({ index, width: maxWidth, height: 359, jpeg: Buffer.from("now") }))
+				: [];
+		const result = await call("getBeforeAfter", { projectId, checkpointId, atSec: [1] });
+		expect(momentsOf(result)).toEqual([{ sec: 1, changed: true, missing: "checkpoint" }]);
+		expect(pictureOf(result)).toBe(`sheet ${2 * 639 + 2}x359`);
+	});
+
+	it("keeps each moment where it was asked, and says which side's film ends before it", async () => {
+		const { projectId, checkpointId } = await recordTake();
+		// The take is 12 s; the project now plays its first 8 s only.
+		const [clip] = (await documents.getProject(projectId)).timeline.clips;
+		await call("setClipRange", { projectId, clipId: clip.id, sourceStartSec: 0, sourceEndSec: 8 });
+		asked = [];
+		const result = await call("getBeforeAfter", { projectId, checkpointId, atSec: [2, 10] });
+		// The checkpoint shows 10 s; the project, which ends at 8, is not asked for it at all.
+		expect(asked).toEqual([
+			{ clips: 1, frames: [120, 600], maxWidth: 639 },
+			{ clips: 1, frames: [120], maxWidth: 639 },
+		]);
+		expect(momentsOf(result)).toEqual([
+			{ sec: 2, changed: false },
+			{ sec: 10, changed: true, missing: "now" },
+		]);
+		// Spread over the longer film when no time is asked: 0 to 12 s, not 0 to 8.
+		asked = [];
+		await call("getBeforeAfter", { projectId, checkpointId, count: 2, startSec: 0 });
+		expect(asked[0].frames.at(-1)).toBeGreaterThan(700);
+	});
+
+	it("keeps a moment just before the end as asked through a slowed end, and has none at the end", async () => {
+		const { projectId, checkpointId } = await recordTake();
+		// The take's last second now plays at half speed: the film ends at 13 s of output.
+		await call("addSpeed", { projectId, startSec: 11, endSec: 12, speed: 0.5 });
+		asked = [];
+		const result = await call("getBeforeAfter", { projectId, checkpointId, atSec: [11.995, 12] });
+		// 11.995 s is output frame 719 at the checkpoint, and 779 now: the last of 13 s, not
+		// the one a clamp to a 60th of a ruler second before the end would give. 12 s is the end.
+		expect(asked).toEqual([
+			{ clips: 1, frames: [719], maxWidth: 639 },
+			{ clips: 1, frames: [779], maxWidth: 639 },
+		]);
+		expect(momentsOf(result)).toEqual([
+			{ sec: 11.99, changed: false },
+			{ sec: 12, changed: false, missing: "both" },
+		]);
+	});
+
+	it("shows a checkpoint taken before the first clip as missing, and still renders the project", async () => {
+		const empty = await documents.createProject("Empty");
+		const projectId = empty.project.id;
+		const checkpoint = await call("createCheckpoint", { projectId });
+		const { checkpointId } = JSON.parse(textOf(checkpoint));
+		// The take's clip laid into the project the checkpoint saw empty.
+		const take = await documents.getProject((await recordTake()).projectId);
+		await documents.saveProject({ ...take, project: { ...take.project, id: projectId } });
+		asked = [];
+		const result = await call("getBeforeAfter", { projectId, checkpointId, atSec: [1] });
+		expect(result.isError).toBeFalsy();
+		expect(asked).toHaveLength(1);
+		expect(momentsOf(result)).toEqual([{ sec: 1, changed: true, missing: "checkpoint" }]);
+	});
+
+	it("places a change found on a region cut at the frame's edge inside the frame", async () => {
+		const { projectId, checkpointId } = await recordTake();
+		await call("addTrim", { projectId, startSec: 2, endSec: 4 });
+		// A region that runs past the right edge: only the frame's last tenth is compared.
+		const result = await call("getBeforeAfter", {
+			projectId,
+			checkpointId,
+			atSec: [1],
+			region: { x: 0.9, y: 0, width: 0.5, height: 1 },
+		});
+		const [moment] = momentsOf(result);
+		expect(moment.changed).toBe(true);
+		expect(moment.region.x).toBeGreaterThanOrEqual(0.9);
+		expect(moment.region.x + moment.region.width).toBeLessThanOrEqual(1.0001);
+	});
+
+	it("refuses what it cannot compare, and says why", async () => {
+		const take = await recordTake();
+		const unknown = await call("getBeforeAfter", {
+			projectId: take.projectId,
+			checkpointId: "cp_nope",
+		});
+		expect(unknown.isError).toBe(true);
+		expect(textOf(unknown)).toContain("Unknown checkpointId");
+
+		const other = await documents.createProject("Other");
+		const foreign = await call("getBeforeAfter", {
+			projectId: other.project.id,
+			checkpointId: take.checkpointId,
+		});
+		expect(foreign.isError).toBe(true);
+		expect(textOf(foreign)).toContain("belongs to another project");
+
+		const nowhere = await call("getBeforeAfter", { projectId: "proj_nope", checkpointId: "cp" });
+		expect(textOf(nowhere)).toContain('No project has the id "proj_nope"');
+
+		const { projectId, checkpointId } = take;
+		const both = await call("getBeforeAfter", { projectId, checkpointId, atSec: [1], startSec: 0 });
+		expect(textOf(both)).toContain("not both");
+
+		renderFrames = async () => null;
+		const noAddon = await call("getBeforeAfter", { projectId, checkpointId, atSec: [1] });
+		expect(noAddon.isError).toBe(true);
+		expect(textOf(noAddon)).toContain("cannot render");
+	});
+});
+
+/** A 16-bit stereo WAV: each part is a 1 kHz tone at `db` dBFS, or silence when `db` is null. */
+function wavOf(parts: Array<[db: number | null, seconds: number]>): Buffer {
+	const sampleRate = 48_000;
+	const frames = parts.reduce((total, [, seconds]) => total + Math.round(seconds * sampleRate), 0);
+	const file = Buffer.alloc(44 + frames * 4);
+	file.write("RIFF", 0, "latin1");
+	file.writeUInt32LE(36 + frames * 4, 4);
+	file.write("WAVEfmt ", 8, "latin1");
+	file.writeUInt32LE(16, 16);
+	file.writeUInt16LE(1, 20);
+	file.writeUInt16LE(2, 22);
+	file.writeUInt32LE(sampleRate, 24);
+	file.writeUInt32LE(sampleRate * 4, 28);
+	file.writeUInt16LE(4, 32);
+	file.writeUInt16LE(16, 34);
+	file.write("data", 36, "latin1");
+	file.writeUInt32LE(frames * 4, 40);
+	let at = 44;
+	let n = 0;
+	for (const [db, seconds] of parts) {
+		const amplitude = db === null ? 0 : 10 ** (db / 20);
+		for (let i = 0; i < Math.round(seconds * sampleRate); i++, n++) {
+			const value = Math.round(
+				amplitude * Math.sin((2 * Math.PI * 1_000 * n) / sampleRate) * 32767,
+			);
+			file.writeInt16LE(value, at);
+			file.writeInt16LE(value, at + 2);
+			at += 4;
+		}
+	}
+	return file;
+}
+
+describe("getAudioReport", () => {
+	const reportOf = async (args: Record<string, unknown>) =>
+		JSON.parse(textOf(await call("getAudioReport", args))) as {
+			durationSec: number;
+			integratedLufs: number | null;
+			truePeakDbtp: number | null;
+			silences: Array<{ startSec: number; endSec: number }>;
+		};
+
+	it("measures the project's sound, and places its silences on the ruler", async () => {
+		const { projectId } = await recordTake();
+		// A cut of 2 s early in the take: what the export plays at 5 s is ruler second 7.
+		await call("addTrim", { projectId, startSec: 2, endSec: 4 });
+		runners.wav = wavOf([
+			[-20, 5],
+			[null, 1],
+			[-20, 4],
+		]);
+		const report = await reportOf({ projectId });
+		expect(report.durationSec).toBe(10);
+		expect(report.integratedLufs).toBeCloseTo(-20, 0);
+		expect(report.truePeakDbtp).toBeCloseTo(-20, 0);
+		expect(report.silences).toEqual([{ startSec: 7, endSec: 8 }]);
+
+		const request = runners.started.at(-1);
+		expect(request).toMatchObject({ kind: "export", format: "wav", audioTrackId: null });
+		// Rendered to a file of its own, gone once it is measured.
+		const rendered = (request?.kind === "export" && request.outPath) || "";
+		expect(path.dirname(rendered)).toBe(os.tmpdir());
+		await expect(fs.access(rendered)).rejects.toThrow();
+		expect(media.isBusy()).toBe(false);
+	});
+
+	it("keeps a silence that touches a cut clear of the cut, and follows a speed region", async () => {
+		const { projectId } = await recordTake();
+		// Ruler 2 to 4 is cut, and ruler 6 to 10 plays twice as fast: the export lasts 8 s.
+		await call("addTrim", { projectId, startSec: 2, endSec: 4 });
+		expect(
+			(await call("addSpeed", { projectId, startSec: 6, endSec: 10, speed: 2 })).isError,
+		).toBeFalsy();
+		// Quiet for the second right after the cut, then again from 5 s to 5.5 s of the export.
+		runners.wav = wavOf([
+			[-20, 2],
+			[null, 1],
+			[-20, 2],
+			[null, 0.5],
+			[-20, 2.5],
+		]);
+		const { silences } = await reportOf({ projectId });
+		expect(silences).toEqual([
+			// It starts after the cut, never inside it.
+			{ startSec: 4, endSec: 5 },
+			// One export second past ruler 6 is two ruler seconds.
+			{ startSec: 8, endSec: 9 },
+		]);
+	});
+
+	it("leaves a cut inside a silence out of it: the export never played the cut", async () => {
+		const { projectId } = await recordTake();
+		await call("addTrim", { projectId, startSec: 2, endSec: 4 });
+		// Quiet from 1 s to 3 s of the export: ruler 1 to 2, then ruler 4 to 5, the cut between.
+		runners.wav = wavOf([
+			[-20, 1],
+			[null, 2],
+			[-20, 5],
+		]);
+		const { silences } = await reportOf({ projectId });
+		expect(silences).toEqual([
+			{ startSec: 1, endSec: 2 },
+			{ startSec: 4, endSec: 5 },
+		]);
+	});
+
+	it("measures one imported track alone", async () => {
+		const { projectId } = await recordTake();
+		runners.wav = wavOf([[-30, 2]]);
+		const report = await reportOf({ projectId, audioId: "music" });
+		expect(report.integratedLufs).toBeCloseTo(-30, 0);
+		expect(runners.started.at(-1)).toMatchObject({ audioTrackId: "music" });
+	});
+
+	it("says a silent film is silent, rather than give it a loudness", async () => {
+		const { projectId } = await recordTake();
+		runners.wav = wavOf([[null, 2]]);
+		const report = await reportOf({ projectId });
+		expect(report).toMatchObject({ integratedLufs: null, truePeakDbtp: null });
+		expect(report.silences).toEqual([{ startSec: 0, endSec: 2 }]);
+	});
+
+	it("says why it has nothing to give: no such project, a failed render, a file it cannot read", async () => {
+		expect(textOf(await call("getAudioReport", { projectId: "nope" }))).toContain(
+			'No project has the id "nope"',
+		);
+		const { projectId } = await recordTake();
+		runners.results.export = { success: false, error: "no audio track" };
+		const failed = await call("getAudioReport", { projectId });
+		expect(failed.isError).toBe(true);
+		expect(textOf(failed)).toContain("could not be rendered: no audio track");
+
+		runners.results.export = { success: true };
+		runners.wav = Buffer.from("not a wav");
+		const unreadable = await call("getAudioReport", { projectId });
+		expect(unreadable.isError).toBe(true);
+		expect(textOf(unreadable)).toContain("could not be measured: Not a WAV file");
+		expect(media.isBusy()).toBe(false);
+	});
+
+	it("gives no silences when the project was saved while its sound was measured", async () => {
+		const { projectId } = await recordTake();
+		runners.wav = wavOf([[-20, 2]]);
+		const held = runners.holdExports();
+		const measuring = call("getAudioReport", { projectId });
+		await held;
+		// The runner may have rendered either version: the ruler seconds would be a guess.
+		await call("addTrim", { projectId, startSec: 2, endSec: 4 });
+		runners.releaseExport();
+		const answer = await measuring;
+		expect(answer.isError).toBe(true);
+		expect(textOf(answer)).toContain("changed while its sound was measured");
+		expect(media.isBusy()).toBe(false);
+	});
+
+	it("waits for a take to end", async () => {
+		const { projectId } = await recordTake();
+		await call("startRecording", { window: "My App" });
+		const during = await call("getAudioReport", { projectId });
+		expect(during.isError).toBe(true);
+		expect(textOf(during)).toContain("A recording is running");
+		await call("stopRecording", { title: "Second" });
+	});
+});
+
 describe("the media tools in the app", () => {
 	let allowed: boolean;
 	let asked: Parameters<TakeRecorder["start"]>[0][];
@@ -1159,7 +1852,7 @@ describe("the media tools in the app", () => {
 		allowed = false;
 		const app = await connectApp();
 		expect(app.getInstructions()).toContain(
-			"startRecording, exportVideo, exportAudio and createProject are refused too while 'MCP edits'",
+			"startRecording, exportVideo, exportAudio, exportCaptions and createProject are refused too while 'MCP edits'",
 		);
 		const started = await callOn(app, "startRecording", {});
 		expect(started.isError).toBe(true);
@@ -1257,6 +1950,31 @@ describe("waitForRecording through MCP", () => {
 		clients.push(observer);
 		return { observer, subscription };
 	}
+
+	it("renders no sound while the user records from the HUD, and does once the take is saved", async () => {
+		const { projectId } = await recordTake();
+		const completion = new RecordingCompletion();
+		completion.started(7, 1_000);
+		const { observer } = await observing(completion);
+		const during = (await observer.callTool({
+			name: "getAudioReport",
+			arguments: { projectId },
+		})) as CallToolResult;
+		expect(during.isError).toBe(true);
+		expect(textOf(during)).toContain("A recording is running");
+		expect(runners.started.filter((request) => request.kind === "export")).toEqual([]);
+
+		completion.saved(7, videoPath);
+		completion.completed(7, { projectId, videoPath, durationSec: 12, autoZooms: 0 });
+		runners.wav = wavOf([[-20, 2]]);
+		const after = (await observer.callTool({
+			name: "getAudioReport",
+			arguments: { projectId },
+		})) as CallToolResult;
+		expect(after.isError).toBeFalsy();
+		expect(JSON.parse(textOf(after))).toMatchObject({ durationSec: 2, silences: [] });
+		expect(runners.started.filter((request) => request.kind === "export")).toHaveLength(1);
+	});
 
 	it("returns the stopRecording fields for a user take while MCP edits is off, without recording commands", async () => {
 		const project = await documents.createProject("User take");

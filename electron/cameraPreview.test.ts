@@ -199,17 +199,15 @@ describe("floating camera preview lifecycle", () => {
 		expect(overlay.webContents.send).not.toHaveBeenCalled();
 	});
 
-	it("creates a hidden exclusion window even when the camera starts off", () => {
+	it("opens no window at launch while the camera is off (#1639)", () => {
 		const { preview, sender, owner, overlay, create } = setup();
 		preview.configure(sender, false, true);
-		overlay.emit("ready-to-show");
-		expect(create).toHaveBeenCalledOnce();
-		expect(overlay.hide).toHaveBeenCalledOnce();
-		expect(overlay.showInactive).not.toHaveBeenCalled();
+		expect(create).not.toHaveBeenCalled();
 		preview.frame(sender, jpeg);
 		expect(overlay.webContents.send).not.toHaveBeenCalled();
 		preview.configure(sender, true, true);
 		expect(create).toHaveBeenCalledOnce();
+		overlay.emit("ready-to-show");
 		expect(overlay.showInactive).toHaveBeenCalledOnce();
 		owner.emit("destroyed");
 		expect(overlay.destroy).toHaveBeenCalledOnce();

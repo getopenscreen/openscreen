@@ -738,9 +738,26 @@ function showUsagePingToggle(): boolean {
 	return getInstallChannel() !== "dev" && !doNotTrack(process.env);
 }
 
-function persistUsagePingEnabled(enabled: boolean) {
-	usagePingEnabled = enabled;
-	setUsagePingEnabled(app.getPath("userData"), enabled);
+/** The box shows a choice once it is stored: one the disk refused leaves it as it was. */
+async function persistUsagePingEnabled(enabled: boolean) {
+	const userData = app.getPath("userData");
+	while (!setUsagePingEnabled(userData, enabled)) {
+		const choice = await showMessageBox({
+			type: "warning",
+			title: PRODUCT_NAME,
+			message:
+				mainT("common", "usagePing.notSaved") ||
+				"OpenScreen could not save this choice, so it is unchanged.",
+			buttons: [
+				mainT("common", "actions.tryAgain") || "Try Again",
+				mainT("common", "actions.cancel") || "Cancel",
+			],
+			defaultId: 0,
+			cancelId: 1,
+		});
+		if (choice.response !== 0) break;
+	}
+	usagePingEnabled = loadUsagePingState(userData).enabled;
 	updateTrayMenu(isRecording);
 }
 
@@ -1047,7 +1064,12 @@ function updateTrayMenu(recording: boolean = false) {
 								label: mainT("common", "actions.usagePing") || "Send Anonymous Usage Count",
 								type: "checkbox" as const,
 								checked: usagePingEnabled,
-								click: () => persistUsagePingEnabled(!usagePingEnabled),
+								click: (item: Electron.MenuItem) => {
+									// Electron ticks the box before this runs: it shows the stored choice
+									// until the new one is stored.
+									item.checked = usagePingEnabled;
+									void persistUsagePingEnabled(!usagePingEnabled);
+								},
 							},
 						]
 					: []),

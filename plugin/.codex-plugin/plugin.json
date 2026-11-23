@@ -1,6 +1,6 @@
 {
 	"name": "openscreen",
-	"version": "2.1.1",
+	"version": "2.3.0",
 	"description": "Make a demo video from one sentence: record the screen, edit and export it with OpenScreen.",
 	"author": { "name": "Etienne Lescot", "url": "https://getopenscreen.com" },
 	"homepage": "https://getopenscreen.com/docs/ai-editing",
@@ -12,7 +12,7 @@
 	"interface": {
 		"displayName": "OpenScreen",
 		"shortDescription": "Demo videos from one sentence",
-		"longDescription": "Turns one sentence into a finished demo video of an app or a feature. The openscreen-demo skill plans a short storyboard, records the window you choose with OpenScreen, adds zooms, captions and on-screen callouts, exports an MP4 and checks its frames, then attaches the video to a pull request or drafts a post on X that it publishes only after your yes.\n\nOpenScreen is a free, open-source (MIT) screen recorder and video editor for Windows, macOS and Linux. The skill offers to install it if it is missing, and registers its MCP server, which runs locally and needs no account.",
+		"longDescription": "Turns one sentence into a finished demo video of an app or a feature. The openscreen-demo skill plans a short storyboard, records the window you choose with OpenScreen, adds zooms, captions and on-screen callouts, exports an MP4 and checks its frames, then attaches the video to a pull request or drafts a post on X that it publishes only after your yes. Six more skills each go further into one step: capture, motion, effects, sound, review and delivery.\n\nOpenScreen is a free, open-source (MIT) screen recorder and video editor for Windows, macOS and Linux. The openscreen-demo skill offers to install it if it is missing, and registers its MCP server, which runs locally and needs no account.",
 		"developerName": "Etienne Lescot",
 		"category": "Developer Tools",
 		"capabilities": [

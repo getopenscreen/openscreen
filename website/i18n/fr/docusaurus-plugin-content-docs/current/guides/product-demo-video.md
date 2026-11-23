@@ -98,7 +98,7 @@ Dans l'onglet **Transcription**, cliquez sur **Sous-titres** et activez **Affich
 
 Whisper détecte la langue parlée, mais vous pouvez aussi forcer l'une des 100 langues avec **Régénérer en** dans le mode Médias. Pour publier dans une autre langue, utilisez **Traduire** vers l'une des 15 langues cibles, puis sélectionnez cette langue sous **Affichage** avant d'exporter. La traduction passe par votre propre fournisseur de LLM : elle nécessite donc une clé.
 
-Les sous-titres sont incrustés dans la vidéo. OpenScreen n'écrit pas de fichier `.srt` ni `.vtt` : un lecteur ne peut donc pas les désactiver. Détails : [Sous-titres et transcription](../captions.md), et [fonctionnement des sous-titres](/features/captions/).
+Les sous-titres sont incrustés dans la vidéo. L'éditeur et la CLI n'écrivent pas de fichier `.srt` ni `.vtt` : un lecteur ne peut donc pas les désactiver. Un agent peut en écrire un avec `exportCaptions`. Détails : [Sous-titres et transcription](../captions.md), et [fonctionnement des sous-titres](/features/captions/).
 
 ## 8. Exporter {#8-export}
 
@@ -121,7 +121,7 @@ OpenScreen n'héberge pas votre vidéo, ne crée pas de liens de partage et ne c
 
 - **Vous voulez un lien hébergé avec des statistiques de visionnage ou des commentaires.** Un enregistreur hébergé convient mieux. Loom, par exemple, partage chaque enregistrement sous forme de lien sur loom.com, et sa page de tarifs indique des statistiques de visionnage et des commentaires vidéo dans toutes les formules (en septembre 2026). Voir [OpenScreen comme alternative à Loom](/alternatives/loom/) pour le cas, plus restreint, où OpenScreen convient.
 - **Vous voulez une démo interactive** que le spectateur parcourt en cliquant. OpenScreen n'exporte que de la vidéo et des GIF.
-- **Votre lecteur vidéo a besoin d'un fichier de sous-titres séparé.** OpenScreen ne fait qu'incruster les sous-titres.
+- **Votre lecteur vidéo a besoin d'un fichier de sous-titres séparé, issu de l'éditeur ou de la CLI.** Tous deux ne font qu'incruster les sous-titres ; un agent peut en écrire un avec `exportCaptions`.
 - **Vous enregistrez sur un téléphone ou une tablette.** OpenScreen est une application de bureau pour Windows, macOS 13 ou ultérieur, et Linux.
 
 ## Sources {#sources}

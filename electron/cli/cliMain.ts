@@ -11,6 +11,7 @@ import { renameWithRetry } from "../atomic-rename";
 import { isDiagnosticModeEnabled } from "../diagnostics/main-log-file";
 import { getInstallChannel, ownsItsUpdates } from "../install-channel";
 import { getSelectedDesktopSource, registerIpcHandlers } from "../ipc/handlers";
+import { frameImages } from "../mcp/frame-images";
 import { openVideoInHiddenWindow } from "../mcp/hidden-video";
 import { watchForMacMcpShutdown } from "../mcp/mac-update-shutdown";
 import { serveMcpOverStdio } from "../mcp/stdio-server";
@@ -421,6 +422,7 @@ export function runCli(command: CliCommand): void {
 					userDataDir,
 					runners,
 					openVideo: openVideoInHiddenWindow,
+					images: frameImages,
 					updateNotice: tellsAboutUpdates
 						? (updateNotice(app.getVersion(), readReleaseLookup(userDataDir)) ?? undefined)
 						: undefined,

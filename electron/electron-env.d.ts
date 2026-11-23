@@ -340,9 +340,11 @@ interface Window {
 			success: boolean;
 			path?: string;
 			// Browser-mode shim only: a blob: URL has no meaningful basename, so
-			// the shim carries the picked File's real name here for the label.
+			// the shim carries the picked File's real name here for the label. A
+			// picked image carries its own name too: `path` is the still made from it.
 			name?: string;
 			canceled?: boolean;
+			message?: string;
 		}>;
 		// Import an external audio file from the timeline toolbar (issue #350).
 		openAudioFilePicker: () => Promise<{
@@ -572,6 +574,16 @@ interface Window {
 		cliProgress: (progress: import("../src/lib/cliContracts").CliProgressEvent) => void;
 		cliLog: (level: "info" | "error", message: string) => void;
 		cliDone: (result: import("../src/lib/cliContracts").CliDoneResult) => Promise<void>;
+		cliExportFileSize: (file: import("../src/lib/cliContracts").CliExportFile) => Promise<number>;
+		/** At most 64 MiB a call; shorter than asked at the end of the file. */
+		cliExportFileRead: (
+			file: import("../src/lib/cliContracts").CliExportFile,
+			offset: number,
+			length: number,
+		) => Promise<ArrayBuffer>;
+		/** Writes into the export's output, which only exists once committed. */
+		cliExportFileWrite: (data: Uint8Array, position: number) => Promise<void>;
+		cliExportFileCommit: () => Promise<void>;
 		onCliStopRecording: (callback: () => void) => () => void;
 		setLocale: (locale: string) => Promise<void>;
 		saveDiagnostic: (payload: {

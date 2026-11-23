@@ -1,6 +1,6 @@
 // Post-export voiceover mixing for the CLI (`openscreen export --audio`).
 //
-// Takes the finished MP4's bytes, copies its video packets untouched (no
+// Takes the finished MP4, copies its video packets untouched (no
 // re-encode), renders a new audio track with OfflineAudioContext — the
 // original audio and the voiceover mixed, or the voiceover alone — and
 // re-muxes both into a new MP4 via mediabunny.
@@ -8,13 +8,13 @@
 import {
 	ALL_FORMATS,
 	AudioBufferSource,
-	BufferSource,
-	BufferTarget,
 	EncodedPacketSink,
 	EncodedVideoPacketSource,
 	Input,
 	Mp4OutputFormat,
 	Output,
+	type Source,
+	type Target,
 } from "mediabunny";
 
 export type VoiceoverMixMode = "mix" | "replace";
@@ -22,6 +22,8 @@ export type VoiceoverMixMode = "mix" | "replace";
 export interface VoiceoverMixOptions {
 	/** Encoded audio file bytes (mp3/wav/m4a — anything decodeAudioData accepts). */
 	voiceoverData: ArrayBuffer;
+	/** The whole video file. Only "mix" asks for it, to decode the original bed. */
+	readVideoData: () => Promise<ArrayBuffer>;
 	mode: VoiceoverMixMode;
 	/** Delay before the voiceover starts, in seconds. */
 	offsetSec: number;
@@ -79,31 +81,16 @@ async function renderMixedAudio(
 	return context.startRendering();
 }
 
-/** The MP4 exported at `videoUrl` with the voiceover mixed in, as an MP4's bytes.
- *
- *  The export is read as bytes, never as a Blob: Chromium pages a Blob that size to disk, and
- *  `blob()` rejects with "TypeError: Failed to fetch" once the profile's volume runs low on space.
- */
-export async function mixVoiceoverIntoExportedVideo(
-	videoUrl: string,
-	options: VoiceoverMixOptions,
-): Promise<ArrayBuffer> {
-	const response = await fetch(videoUrl);
-	if (!response.ok) {
-		throw new Error(`Failed to read the exported video back for mixing: ${videoUrl}`);
-	}
-	return mixVoiceoverIntoVideo(await response.arrayBuffer(), options);
-}
-
 /**
- * Returns a new MP4 with the same video stream and the mixed audio track.
+ * Writes to `target` a new MP4 with the same video stream and the mixed audio track.
  * The video packets are copied without re-encoding.
  */
 export async function mixVoiceoverIntoVideo(
-	video: ArrayBuffer,
+	video: Source,
+	target: Target,
 	options: VoiceoverMixOptions,
-): Promise<ArrayBuffer> {
-	const input = new Input({ source: new BufferSource(video), formats: ALL_FORMATS });
+): Promise<void> {
+	const input = new Input({ source: video, formats: ALL_FORMATS });
 	try {
 		const videoTrack = await input.getPrimaryVideoTrack();
 		if (!videoTrack) {
@@ -119,11 +106,14 @@ export async function mixVoiceoverIntoVideo(
 		}
 		const durationSec = await input.computeDuration();
 
-		// The full-file bytes are only needed to decode the original bed in "mix" mode.
-		const videoData = options.mode === "mix" ? video : null;
+		// The full-file bytes are only needed to decode the original bed in
+		// "mix" mode; "replace" skips the copy entirely.
+		const videoData = options.mode === "mix" ? await options.readVideoData() : null;
 		const mixedAudio = await renderMixedAudio(videoData, durationSec, options);
 
-		const target = new BufferTarget();
+		// ponytail: the index first keeps the video's packets in memory until the end, and the
+		// audio is decoded and rendered whole above. Mixing the voiceover in the compositor, as
+		// a scene audio track, is what would take both away.
 		const output = new Output({
 			format: new Mp4OutputFormat({ fastStart: "in-memory" }),
 			target,
@@ -151,11 +141,6 @@ export async function mixVoiceoverIntoVideo(
 			await output.cancel().catch(() => undefined);
 			throw error;
 		}
-		const buffer = target.buffer;
-		if (!buffer) {
-			throw new Error("Voiceover remux produced no output");
-		}
-		return buffer;
 	} finally {
 		input.dispose();
 	}

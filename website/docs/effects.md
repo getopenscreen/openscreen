@@ -18,7 +18,7 @@ Effects come from an agent: the built-in chat or an MCP client such as Claude Co
 
 ## Asking for an effect
 
-Describe what you want to see, and when: "a ripple on every click", "fade to black over the last two seconds, captions included". The agent writes the effect, places it on the timeline, and can look at the result with `getFrames` without exporting the video.
+Describe what you want to see, and when: "a ripple on every click", "fade to black over the last two seconds, captions included". The agent writes the effect, places it on the timeline, and can look at the result with `getFrames` without exporting the video. The `openscreen-effects` skill in OpenScreen's plugin gives an agent worked examples to start from.
 
 An effect knows where the cursor is and where each click landed, where the recording and the webcam sit in the video after zooms and layout, and the time. So a halo can follow the mouse, and a ripple can start from each click, wherever the zoom has moved it.
 

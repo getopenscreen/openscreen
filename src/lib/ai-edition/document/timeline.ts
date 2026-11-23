@@ -342,6 +342,44 @@ export function projectRawTimelineSecToPlayback(
 	return landed ?? outCursor + Math.max(0, rawSec - lastRawEnd);
 }
 
+/**
+ * Inverse of {@link projectRawTimelineSecToPlayback}: the raw ruler second that plays at output
+ * second `outSec`. A moment on a cut's edge lands on the kept side that follows it.
+ */
+export function projectPlaybackSecToRawTimeline(
+	clips: AxcutClip[],
+	trimRanges: AxcutTrimRange[],
+	outSec: number,
+	speedRegions: PlaybackSpeedRegion[] = [],
+): number {
+	const ordered = [...clips].sort((a, b) => a.timelineStartSec - b.timelineStartSec);
+	let outCursor = 0;
+	let lastRawEnd = 0;
+	for (const seg of keptRawSpans(ordered, trimRanges)) {
+		const segOut = outputDurationOfRawSpan(seg.startSec, seg.endSec, speedRegions);
+		if (outSec < outCursor + segOut) {
+			// Walk the constant-speed pieces the forward projection sums.
+			const edges = new Set<number>([seg.startSec, seg.endSec]);
+			for (const region of speedRegions) {
+				for (const edge of [region.startMs / 1000, region.endMs / 1000]) {
+					if (edge > seg.startSec && edge < seg.endSec) edges.add(edge);
+				}
+			}
+			const sorted = [...edges].sort((a, b) => a - b);
+			let left = Math.max(0, outSec - outCursor);
+			for (let i = 0; i < sorted.length - 1; i++) {
+				const pieceOut = outputDurationOfRawSpan(sorted[i], sorted[i + 1], speedRegions);
+				if (left < pieceOut) return sorted[i] + (left / pieceOut) * (sorted[i + 1] - sorted[i]);
+				left -= pieceOut;
+			}
+			return seg.endSec;
+		}
+		outCursor += segOut;
+		lastRawEnd = seg.endSec;
+	}
+	return lastRawEnd + Math.max(0, outSec - outCursor);
+}
+
 export function invertIntervals(intervals: Interval[], durationSec: number): Interval[] {
 	const cuts: Interval[] = [];
 	let cursor = 0;

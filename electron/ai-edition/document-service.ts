@@ -584,7 +584,6 @@ export class DocumentService {
 	}
 
 	private async unlinkProjectFiles(projectId: string): Promise<void> {
-		this.deletedProjectIds.add(projectId);
 		// Remove the canonical file and any lingering legacy `.axcut` for this id.
 		for (const filePath of [this.fileFor(projectId), this.legacyFileFor(projectId)]) {
 			try {
@@ -595,6 +594,7 @@ export class DocumentService {
 				}
 			}
 		}
+		this.deletedProjectIds.add(projectId);
 	}
 
 	async deleteProject(projectId: string): Promise<void> {

@@ -982,5 +982,21 @@ describe("DocumentService", () => {
 			).rejects.toThrow();
 			await expect(service.getProject(doc.project.id)).rejects.toThrow();
 		});
+
+		it("allows subsequent saves when deleteProject fails to unlink", async () => {
+			const doc = await service.createProject("Locked file");
+			const unlinkSpy = vi
+				.spyOn(fs, "unlink")
+				.mockRejectedValueOnce(Object.assign(new Error("EACCES"), { code: "EACCES" }));
+
+			await expect(service.deleteProject(doc.project.id)).rejects.toThrow("EACCES");
+			unlinkSpy.mockRestore();
+
+			const saved = await service.saveProject({
+				...doc,
+				project: { ...doc.project, title: "Still writable" },
+			});
+			expect(saved.project.title).toBe("Still writable");
+		});
 	});
 });

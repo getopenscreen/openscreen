@@ -956,4 +956,18 @@ describe("DocumentService", () => {
 			expect(service.storedProjectId(path.join(tempDir, "proj_a.json"))).toBeUndefined();
 		});
 	});
+
+	describe("deleteProject queue ordering", () => {
+		it("runs after an in-flight saveProject for the same project", async () => {
+			const doc = await service.createProject("Queued delete");
+			const savePromise = service.saveProject({
+				...doc,
+				project: { ...doc.project, title: "Updated" },
+			});
+			const deletePromise = service.deleteProject(doc.project.id);
+			await Promise.all([savePromise, deletePromise]);
+
+			await expect(service.getProject(doc.project.id)).rejects.toThrow();
+		});
+	});
 });

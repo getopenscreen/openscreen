@@ -100,6 +100,33 @@ export function ModalShell({
 		};
 	}, [open]);
 	if (!open) return null;
+	const handleKeyDown = (e: ReactKeyboardEvent<HTMLDivElement>) => {
+		if (e.key !== "Tab") return;
+		const dialog = dialogRef.current;
+		if (!dialog) return;
+		const focusable = Array.from(
+			dialog.querySelectorAll<HTMLElement>(
+				'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+			),
+		).filter((el) => el.closest('[aria-hidden="true"]') === null);
+		if (focusable.length === 0) {
+			e.preventDefault();
+			dialog.focus();
+			return;
+		}
+		const first = focusable[0];
+		const last = focusable[focusable.length - 1];
+		const active = document.activeElement;
+		if (e.shiftKey) {
+			if (active === first || active === dialog || !dialog.contains(active)) {
+				e.preventDefault();
+				last.focus();
+			}
+		} else if (active === last || !dialog.contains(active)) {
+			e.preventDefault();
+			first.focus();
+		}
+	};
 	return (
 		<div
 			ref={dialogRef}
@@ -108,6 +135,7 @@ export function ModalShell({
 			role="dialog"
 			aria-modal="true"
 			aria-labelledby="modal-title"
+			onKeyDown={handleKeyDown}
 		>
 			<div
 				className={styles.modalBackdrop}

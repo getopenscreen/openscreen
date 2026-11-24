@@ -143,4 +143,22 @@ describe("CloseProjectModal", () => {
 		fireEvent.keyDown(document, { key: "Escape" });
 		expect(onClose).toHaveBeenCalled();
 	});
+
+	it("wraps Tab and Shift+Tab focus inside the modal", async () => {
+		renderCloseModal({ recordings: noRecordings });
+		const dialog = screen.getByRole("dialog");
+		const closeBtn = screen.getByRole("button", { name: "Close" });
+		const keepBtn = await screen.findByRole("button", { name: "Keep & Close" });
+		await waitFor(() =>
+			expect(screen.getByRole("button", { name: "Discard Project" })).not.toBeDisabled(),
+		);
+
+		keepBtn.focus();
+		expect(document.activeElement).toBe(keepBtn);
+		fireEvent.keyDown(dialog, { key: "Tab" });
+		expect(document.activeElement).toBe(closeBtn);
+
+		fireEvent.keyDown(dialog, { key: "Tab", shiftKey: true });
+		expect(document.activeElement).toBe(keepBtn);
+	});
 });

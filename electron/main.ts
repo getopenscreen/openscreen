@@ -1119,6 +1119,7 @@ function updateTrayMenu(recording: boolean = false) {
 }
 
 let nativeBridgeHandle: NativeBridgeHandle | null = null;
+let quitDeferredForDiscard = false;
 
 const editorCloseController = createEditorCloseController({
 	ipcMain,
@@ -1132,12 +1133,14 @@ const editorCloseController = createEditorCloseController({
 	t: mainT,
 	platform: process.platform,
 	onDiscardSettled: () => {
+		const shouldQuitAfterDiscard = quitDeferredForDiscard;
+		quitDeferredForDiscard = false;
 		const preview = getCameraPreviewWindow();
 		if (isOnlyLingeringOverlay(BrowserWindow.getAllWindows(), [countdownOverlayWindow, preview])) {
 			countdownOverlayWindow?.close();
 			preview?.destroy();
 		}
-		if (BrowserWindow.getAllWindows().length === 0 && !sttShutdownPromise) {
+		if (shouldQuitAfterDiscard || BrowserWindow.getAllWindows().length === 0) {
 			app.quit();
 		}
 	},
@@ -1293,6 +1296,11 @@ app.on("before-quit", (event) => {
 	// quit is deferred below: the user asked to leave, and a check they can re-run from the
 	// tray is not worth holding the helper's teardown behind.
 	updateCheckAbort?.abort();
+	if (editorCloseController.isDiscarding()) {
+		event.preventDefault();
+		quitDeferredForDiscard = true;
+		return;
+	}
 	if (sttShutdownFinished) return;
 	event.preventDefault();
 	if (sttShutdownPromise) return;

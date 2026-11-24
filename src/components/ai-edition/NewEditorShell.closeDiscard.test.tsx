@@ -4,7 +4,7 @@ import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-libra
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const importMock = vi.hoisted(() => ({
-	importPendingRecording: vi.fn(async () => false),
+	importPendingRecording: vi.fn<() => Promise<string | null>>(async () => null),
 	maybeSaveFreshRecordingAutoZooms: vi.fn(),
 }));
 
@@ -67,6 +67,7 @@ import { useProjectStore } from "@/lib/ai-edition/store/projectStore";
 import { NewEditorShell } from "./NewEditorShell";
 
 let nativeClose: () => void = () => undefined;
+let nativeSaveBeforeClose: () => Promise<boolean> | boolean = () => true;
 const setHasDiscardableProject = vi.fn();
 const sendCloseConfirmResponse = vi.fn();
 const originalSave = useProjectStore.getState().saveDocument;
@@ -82,7 +83,7 @@ function renderShell() {
 }
 
 beforeEach(() => {
-	importMock.importPendingRecording.mockReset().mockResolvedValue(false);
+	importMock.importPendingRecording.mockReset().mockResolvedValue(null);
 	bridgeMock.recordings.mockClear();
 	setHasDiscardableProject.mockClear();
 	sendCloseConfirmResponse.mockClear();
@@ -97,7 +98,10 @@ beforeEach(() => {
 			nativeClose = listener;
 			return () => undefined;
 		},
-		onRequestSaveBeforeClose: () => () => undefined,
+		onRequestSaveBeforeClose: (listener: () => Promise<boolean> | boolean) => {
+			nativeSaveBeforeClose = listener;
+			return () => undefined;
+		},
 		sendCloseConfirmResponse,
 		findRecordingCamera: () => Promise.resolve(null),
 		preparePreviewAudioTrack: () => Promise.resolve(null),
@@ -132,7 +136,7 @@ describe("NewEditorShell close discard flow", () => {
 		const doc = createEmptyDocument({ projectId: "proj_fresh_rec", title: "Fresh" });
 		importMock.importPendingRecording.mockImplementationOnce(async () => {
 			useProjectStore.setState({ document: doc, projectId: doc.project.id, dirty: false });
-			return true;
+			return doc.project.id;
 		});
 
 		renderShell();
@@ -166,7 +170,7 @@ describe("NewEditorShell close discard flow", () => {
 		useProjectStore.setState({ saveDocument });
 		importMock.importPendingRecording.mockImplementationOnce(async () => {
 			useProjectStore.setState({ document: doc, projectId: doc.project.id, dirty: false });
-			return true;
+			return doc.project.id;
 		});
 
 		renderShell();
@@ -178,6 +182,69 @@ describe("NewEditorShell close discard flow", () => {
 
 		await waitFor(() => expect(saveDocument).toHaveBeenCalledOnce());
 		expect(setHasDiscardableProject).toHaveBeenLastCalledWith(false);
+	});
+
+	it("cancels an open close-discard prompt when an in-flight explicit save completes", async () => {
+		const doc = createEmptyDocument({ projectId: "proj_save_race", title: "Fresh" });
+		let resolveSave!: (saved: boolean) => void;
+		const saveDocument = vi.fn(
+			() =>
+				new Promise<boolean>((resolve) => {
+					resolveSave = resolve;
+				}),
+		);
+		useProjectStore.setState({ saveDocument });
+		importMock.importPendingRecording.mockImplementationOnce(async () => {
+			useProjectStore.setState({ document: doc, projectId: doc.project.id, dirty: false });
+			return doc.project.id;
+		});
+
+		renderShell();
+		await waitFor(() => expect(setHasDiscardableProject).toHaveBeenCalledWith(true));
+
+		await act(async () => {
+			fireEvent.keyDown(document.body, { key: "s", ctrlKey: true });
+		});
+		await act(async () => {
+			nativeClose();
+		});
+		expect(screen.getByRole("dialog")).toHaveTextContent("closeProject.title");
+
+		await act(async () => {
+			resolveSave(true);
+		});
+
+		expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+		expect(sendCloseConfirmResponse).toHaveBeenCalledWith("cancel");
+	});
+
+	it("does not mark a switched-to project discardable when import resolves late", async () => {
+		const otherDoc = createEmptyDocument({ projectId: "proj_other", title: "Other" });
+		importMock.importPendingRecording.mockImplementationOnce(async () => {
+			useProjectStore.setState({
+				document: otherDoc,
+				projectId: otherDoc.project.id,
+				dirty: false,
+			});
+			return "proj_imported_stale";
+		});
+
+		renderShell();
+		await waitFor(() => expect(importMock.importPendingRecording).toHaveBeenCalledOnce());
+		expect(setHasDiscardableProject).not.toHaveBeenCalledWith(true);
+	});
+
+	it("protects live edits in save-before-close", async () => {
+		const doc = createEmptyDocument({ projectId: "proj_save_close", title: "SaveClose" });
+		const saveDocument = vi.fn(async () => true);
+		useProjectStore.setState({ document: doc, projectId: doc.project.id, saveDocument });
+
+		renderShell();
+		await act(async () => {
+			await nativeSaveBeforeClose();
+		});
+
+		expect(saveDocument).toHaveBeenCalledWith(doc, { history: true, protectLiveEdits: true });
 	});
 
 	it("uses UnsavedChangesModal for existing dirty non-fresh projects", async () => {

@@ -574,7 +574,7 @@ export class DocumentService {
 		return stamped;
 	}
 
-	async deleteProject(projectId: string): Promise<void> {
+	private async unlinkProjectFiles(projectId: string): Promise<void> {
 		// Remove the canonical file and any lingering legacy `.axcut` for this id.
 		for (const filePath of [this.fileFor(projectId), this.legacyFileFor(projectId)]) {
 			try {
@@ -587,26 +587,32 @@ export class DocumentService {
 		}
 	}
 
+	async deleteProject(projectId: string): Promise<void> {
+		return this.enqueue(projectId, () => this.unlinkProjectFiles(projectId));
+	}
+
 	/**
 	 * Deletes the project once `removeMedia` has run. The file is moved aside first, so a project
 	 * that cannot be deleted fails before anything irreversible, and it comes back if
 	 * `removeMedia` throws.
 	 */
 	async deleteProjectAfter(projectId: string, removeMedia: () => Promise<void>): Promise<void> {
-		const filePath = this.fileFor(projectId);
-		const parked = `${filePath}.deleting`;
-		await renameWithRetry(filePath, parked);
-		try {
-			await removeMedia();
-		} catch (error) {
-			await renameWithRetry(parked, filePath);
-			throw error;
-		}
-		// The project is gone from every list already: a parked file left behind is only clutter.
-		await fs
-			.rm(parked, { force: true })
-			.catch((error) => console.warn(`[ai-edition] could not remove ${parked}:`, error));
-		await this.deleteProject(projectId);
+		return this.enqueue(projectId, async () => {
+			const filePath = this.fileFor(projectId);
+			const parked = `${filePath}.deleting`;
+			await renameWithRetry(filePath, parked);
+			try {
+				await removeMedia();
+			} catch (error) {
+				await renameWithRetry(parked, filePath);
+				throw error;
+			}
+			// The project is gone from every list already: a parked file left behind is only clutter.
+			await fs
+				.rm(parked, { force: true })
+				.catch((error) => console.warn(`[ai-edition] could not remove ${parked}:`, error));
+			await this.unlinkProjectFiles(projectId);
+		});
 	}
 
 	async addAsset(projectId: string, input: AddAssetInput): Promise<AxcutDocument> {

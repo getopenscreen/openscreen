@@ -309,6 +309,10 @@ export function NewEditorShell() {
 		freshRecordingProjectId !== null && projectId === freshRecordingProjectId;
 	const isFreshRecordingRef = useRef(isFreshRecording);
 	isFreshRecordingRef.current = isFreshRecording;
+	const clearFreshRecording = useCallback(() => {
+		isFreshRecordingRef.current = false;
+		setFreshRecordingProjectId(null);
+	}, []);
 	const { shortcuts, isMac, openConfig: openShortcutsConfig } = useShortcuts();
 	// The actions half of the dialog context, not the section: this component only ever *opens*
 	// one, and subscribing it to the open state would re-render the whole editor — timeline,
@@ -467,8 +471,12 @@ export function NewEditorShell() {
 		void (async () => {
 			if (!window.electronAPI) return;
 			try {
-				if (await importPendingRecording((warning) => toast.warning(warning))) {
-					setFreshRecordingProjectId(useProjectStore.getState().projectId);
+				const importedProjectId = await importPendingRecording((warning) => toast.warning(warning));
+				if (importedProjectId) {
+					if (useProjectStore.getState().projectId === importedProjectId) {
+						isFreshRecordingRef.current = true;
+						setFreshRecordingProjectId(importedProjectId);
+					}
 					toast.success("Recording added to a new project");
 					return;
 				}
@@ -523,9 +531,20 @@ export function NewEditorShell() {
 	// Clear fresh-recording status when switching to a different project or closing it.
 	useEffect(() => {
 		if (freshRecordingProjectId !== null && projectId !== freshRecordingProjectId) {
-			setFreshRecordingProjectId(null);
+			clearFreshRecording();
 		}
-	}, [freshRecordingProjectId, projectId]);
+	}, [freshRecordingProjectId, projectId, clearFreshRecording]);
+
+	// Cancel an open close-discard prompt as soon as the project stops being discardable.
+	useEffect(() => {
+		const pending = closeProjectPromptRef.current;
+		if (!pending) return;
+		if (!isFreshRecording || projectId !== pending.projectId) {
+			closeProjectPromptRef.current = null;
+			setCloseProjectPrompt(null);
+			pending.resolve({ choice: "cancel" });
+		}
+	}, [isFreshRecording, projectId]);
 
 	// Electron close interception
 	useEffect(() => {
@@ -553,6 +572,10 @@ export function NewEditorShell() {
 					} else if (choice.choice === "save") {
 						window.electronAPI.sendCloseConfirmResponse("save");
 					} else if (choice.choice === "discard-project") {
+						if (!isFreshRecordingRef.current || useProjectStore.getState().projectId !== activeId) {
+							window.electronAPI.sendCloseConfirmResponse("cancel");
+							return;
+						}
 						window.electronAPI.sendCloseConfirmResponse({
 							choice: "discard-project",
 							projectId: activeId,
@@ -579,7 +602,7 @@ export function NewEditorShell() {
 			const doc = useProjectStore.getState().document;
 			// The store already toasted the reason; answering false is what keeps the
 			// window open on top of it.
-			if (doc) return await saveDocument(doc, { history: true });
+			if (doc) return await saveDocument(doc, { history: true, protectLiveEdits: true });
 			return true;
 		});
 
@@ -1022,10 +1045,10 @@ export function NewEditorShell() {
 		const doc = useProjectStore.getState().document;
 		if (!doc) return;
 		if (await saveDocument(doc, { history: true })) {
-			setFreshRecordingProjectId(null);
+			clearFreshRecording();
 			toast.success("Project saved");
 		}
-	}, [saveDocument]);
+	}, [saveDocument, clearFreshRecording]);
 
 	// Native File menu (electron/main.ts) → v4 actions. The menu is shown via
 	// Menu.setApplicationMenu and dispatches these IPC events; the old editor
@@ -2036,7 +2059,7 @@ export function NewEditorShell() {
 				open={exportOpen}
 				onClose={() => setExportOpen(false)}
 				document={document}
-				onExportComplete={() => setFreshRecordingProjectId(null)}
+				onExportComplete={clearFreshRecording}
 			/>
 			<AddAudioLayerDialog
 				open={voiceoverFlow !== null}

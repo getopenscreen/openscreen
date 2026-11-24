@@ -96,5 +96,18 @@
 		"captureInterrupted": "De schermopname is na {{duration}} onverwacht gestopt. Het deel dat tot dan toe was opgenomen, is bewaard.",
 		"captureLost": "De schermopname is onverwacht gestopt en er is niets bruikbaars opgenomen.",
 		"audioLost": "Een deel van het geluid kon niet worden opgenomen, dus de opname is zonder dat geluid opgeslagen."
+	},
+	"closeProject": {
+		"title": "Deze opname behouden of verwijderen?",
+		"body": "Je hebt deze opname nog niet geëxporteerd of opgeslagen. Bewaar het project voor later of verwijder het nu.",
+		"titleDirty": "Deze opname behouden of verwijderen?",
+		"bodyDirty": "Deze opname heeft niet-opgeslagen wijzigingen. Sla het op en behoud het, of verwijder het project nu.",
+		"keepAndClose": "Behouden en sluiten",
+		"discardProject": "Project verwijderen",
+		"keepProject": "Project behouden",
+		"discardErrorTitle": "Kan project niet verwijderen",
+		"trashFailed": "Kon de opnames niet naar de Prullenmand verplaatsen. Definitief verwijderen?",
+		"recycleFailed": "Kon de opnames niet naar de Prullenbak verplaatsen. Definitief verwijderen?",
+		"deletePermanently": "Definitief verwijderen"
 	}
 }

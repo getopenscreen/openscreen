@@ -1625,6 +1625,150 @@ export function UnsavedChangesModal({
 	);
 }
 
+export type CloseProjectChoice =
+	| { choice: "keep" }
+	| { choice: "save" }
+	| { choice: "cancel" }
+	| { choice: "discard-project"; recordings: AiEditionRecordingsDisposal };
+
+interface CloseProjectModalProps extends BaseModalProps {
+	projectId: string | null;
+	dirty: boolean;
+	loadRecordings: (id: string) => Promise<AiEditionProjectRecordingsResult>;
+	onChoose: (choice: CloseProjectChoice) => void;
+}
+
+export function CloseProjectModal({
+	open,
+	onClose,
+	projectId,
+	dirty,
+	loadRecordings,
+	onChoose,
+}: CloseProjectModalProps) {
+	const td = useScopedT("dialogs");
+	const te = useScopedT("editor");
+	const tc = useScopedT("common");
+	const [recordings, setRecordings] = useState<AiEditionProjectRecordingsResult | null>(null);
+	const [loadingRecordings, setLoadingRecordings] = useState(false);
+	const [trashRecordings, setTrashRecordings] = useState(true);
+	const recycleBin = getPlatform() === "win32";
+
+	useEffect(() => {
+		if (!open || !projectId) {
+			setRecordings(null);
+			setLoadingRecordings(false);
+			setTrashRecordings(true);
+			return;
+		}
+		let cancelled = false;
+		setRecordings(null);
+		setTrashRecordings(true);
+		setLoadingRecordings(true);
+		void loadRecordings(projectId)
+			.then((result) => {
+				if (!cancelled && result.success) setRecordings(result);
+			})
+			.catch(() => undefined)
+			.finally(() => {
+				if (!cancelled) setLoadingRecordings(false);
+			});
+		return () => {
+			cancelled = true;
+		};
+	}, [open, projectId, loadRecordings]);
+
+	const hasOwnedRecordings = Boolean(recordings && recordings.count > 0);
+	const disposal: AiEditionRecordingsDisposal =
+		trashRecordings && hasOwnedRecordings ? "trash" : "keep";
+	const trashLabel = recordings
+		? te(recycleBin ? "openProjectDialog.alsoRecycle" : "openProjectDialog.alsoTrash", {
+				size: formatBytes(recordings.sizeBytes),
+			})
+		: "";
+
+	return (
+		<ModalShell
+			open={open}
+			onClose={onClose}
+			title={dirty ? td("closeProject.titleDirty") : td("closeProject.title")}
+			subtitle={dirty ? td("closeProject.bodyDirty") : td("closeProject.body")}
+		>
+			{hasOwnedRecordings ? (
+				<div
+					style={{
+						display: "flex",
+						alignItems: "center",
+						gap: 8,
+						marginBottom: 8,
+						font: "400 12px/1.4 var(--font-body)",
+					}}
+				>
+					<Toggle checked={trashRecordings} onChange={setTrashRecordings} ariaLabel={trashLabel} />
+					<span>{trashLabel}</span>
+				</div>
+			) : null}
+			{recordings && recordings.keptFor.length > 0 ? (
+				<div
+					style={{
+						font: "400 12px/1.4 var(--font-body)",
+						color: "var(--muted)",
+						marginBottom: 8,
+					}}
+				>
+					{te("openProjectDialog.recordingsKeptFor", {
+						projects: recordings.keptFor.join(", "),
+					})}
+				</div>
+			) : null}
+			{recordings && recordings.unreadable > 0 ? (
+				<div
+					style={{
+						font: "400 12px/1.4 var(--font-body)",
+						color: "var(--muted)",
+						marginBottom: 8,
+					}}
+				>
+					{te("openProjectDialog.recordingsKeptUnreadable")}
+				</div>
+			) : null}
+			<div
+				style={{
+					display: "flex",
+					justifyContent: "flex-end",
+					gap: 8,
+					paddingTop: 12,
+					borderTop: "1px solid var(--border-soft)",
+				}}
+			>
+				<button
+					type="button"
+					className={`${styles.btn} ${styles.btnSecondary}`}
+					onClick={() => onChoose({ choice: "cancel" })}
+				>
+					{tc("actions.cancel")}
+				</button>
+				<button
+					type="button"
+					className={`${styles.btn} ${styles.dangerBtn}`}
+					disabled={loadingRecordings}
+					onClick={() => onChoose({ choice: "discard-project", recordings: disposal })}
+				>
+					<Trash2 size={14} />
+					{td("closeProject.discardProject")}
+				</button>
+				<button
+					type="button"
+					className={`${styles.btn} ${styles.btnPrimary}`}
+					onClick={() => onChoose({ choice: dirty ? "save" : "keep" })}
+				>
+					{dirty ? td("unsavedChanges.saveAndClose") : td("closeProject.keepAndClose")}
+				</button>
+			</div>
+		</ModalShell>
+	);
+}
+
 export interface ChatHistoryModalProps extends BaseModalProps {
 	sessions: Array<{ id: string; title: string; messageCount: number; createdAt: string }>;
 	activeSessionId: string | null;

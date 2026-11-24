@@ -96,5 +96,18 @@
 		"captureInterrupted": "Przechwytywanie ekranu nieoczekiwanie zatrzymało się po {{duration}}. Część nagrana do tego momentu została zapisana.",
 		"captureLost": "Przechwytywanie ekranu nieoczekiwanie zatrzymało się i nie nagrano niczego, co można wykorzystać.",
 		"audioLost": "Nie udało się nagrać części dźwięku, więc nagranie zapisano bez niego."
+	},
+	"closeProject": {
+		"title": "Zachować czy odrzucić to nagranie?",
+		"body": "To nagranie nie zostało jeszcze wyeksportowane ani zapisane. Zachowaj projekt na później lub odrzuć go teraz.",
+		"titleDirty": "Zachować czy odrzucić to nagranie?",
+		"bodyDirty": "To nagranie ma niezapisane zmiany. Zapisz je i zachowaj lub odrzuć projekt teraz.",
+		"keepAndClose": "Zachowaj i zamknij",
+		"discardProject": "Odrzuć projekt",
+		"keepProject": "Zachowaj projekt",
+		"discardErrorTitle": "Nie udało się odrzucić projektu",
+		"trashFailed": "Nie udało się przenieść nagrań do Kosza. Usunąć je trwale?",
+		"recycleFailed": "Nie udało się przenieść nagrań do Kosza. Usunąć je trwale?",
+		"deletePermanently": "Usuń trwale"
 	}
 }

@@ -157,9 +157,10 @@ interface ExportDialogProps {
 	open: boolean;
 	onClose: () => void;
 	document: AxcutDocument | null;
+	onExportComplete?: () => void;
 }
 
-export function ExportDialog({ open, onClose, document }: ExportDialogProps) {
+export function ExportDialog({ open, onClose, document, onExportComplete }: ExportDialogProps) {
 	const t = useScopedT("editor");
 	const ts = useScopedT("settings");
 	// No usable GPU: the export still applies every effect (output is identical), it
@@ -459,6 +460,7 @@ export function ExportDialog({ open, onClose, document }: ExportDialogProps) {
 				}
 				setSavedPath(pickedPath);
 				setPhase("done");
+				onExportComplete?.();
 				// Reported after the export succeeded, so a cancelled or failed run never counts.
 				// Main owns the whole decision; a failure here simply means no ask, which is the
 				// safe direction for something that may only ever happen once.

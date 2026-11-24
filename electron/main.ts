@@ -39,6 +39,7 @@ import {
 import { bringToFront } from "./bringToFront";
 import { parseCliArgs } from "./cli/args";
 import { runCli } from "./cli/cliMain";
+import { createEditorCloseController } from "./closeDiscard";
 import { disableHttpCacheForDevServer } from "./dev-http-cache";
 import { mainLogFile } from "./diagnostics/main-log-file";
 import { buildEditMenuSubmenu, type EditorUndoRedoChannel, routeEditorUndoRedo } from "./edit-menu";
@@ -60,6 +61,7 @@ import {
 	getSelectedDesktopSource,
 	registerIpcHandlers,
 } from "./ipc/handlers";
+import type { NativeBridgeHandle } from "./ipc/nativeBridge";
 import { isOnlyLingeringOverlay } from "./lingeringOverlay";
 import { installMainProcessErrorGuards } from "./main-process-errors";
 import { serveAppChannel } from "./mcp/app-channel";
@@ -701,7 +703,7 @@ function setUpdateBadge(badge: UpdateBadge | null, releasePage: string | null = 
 function installBlock(): string | null {
 	return blockedFromInstalling({
 		recording: isRecording || recordingStartPending,
-		editorHasUnsavedChanges,
+		editorHasUnsavedChanges: editorCloseController.getHasUnsavedChanges(),
 		inApplicationsFolder:
 			process.platform === "darwin" ? (app.isInApplicationsFolder?.() ?? true) : true,
 		platform: process.platform,
@@ -1116,12 +1118,37 @@ function updateTrayMenu(recording: boolean = false) {
 	tray.setContextMenu(Menu.buildFromTemplate(menuTemplate));
 }
 
-let editorHasUnsavedChanges = false;
-let isForceClosing = false;
-let isCloseConfirmInFlight = false;
+let nativeBridgeHandle: NativeBridgeHandle | null = null;
+
+const editorCloseController = createEditorCloseController({
+	ipcMain,
+	deleteProject: (projectId, disposal) =>
+		nativeBridgeHandle
+			? nativeBridgeHandle.deleteProject(projectId, disposal)
+			: Promise.resolve({ success: false, error: "Native bridge is not initialized." }),
+	destroyViewsForSender: (senderId) => nativeBridgeHandle?.destroyViewsForSender(senderId),
+	forceClose: (win) => forceCloseEditorWindow(win as BrowserWindow),
+	showMessageBox,
+	t: mainT,
+	platform: process.platform,
+	onDiscardSettled: () => {
+		const preview = getCameraPreviewWindow();
+		if (isOnlyLingeringOverlay(BrowserWindow.getAllWindows(), [countdownOverlayWindow, preview])) {
+			countdownOverlayWindow?.close();
+			preview?.destroy();
+		}
+		if (BrowserWindow.getAllWindows().length === 0 && !sttShutdownPromise) {
+			app.quit();
+		}
+	},
+});
 
 ipcMain.on("set-has-unsaved-changes", (_, hasChanges: boolean) => {
-	editorHasUnsavedChanges = hasChanges;
+	editorCloseController.setHasUnsavedChanges(hasChanges);
+});
+
+ipcMain.on("set-has-discardable-project", (_, discardable: boolean) => {
+	editorCloseController.setHasDiscardableProject(Boolean(discardable));
 });
 
 // Quit requested from the editor's in-app File menu. Mirrors the native
@@ -1133,58 +1160,31 @@ ipcMain.on("app-quit", () => {
 function forceCloseEditorWindow(windowToClose: BrowserWindow | null) {
 	if (!windowToClose || windowToClose.isDestroyed()) return;
 
-	isForceClosing = true;
+	editorCloseController.setForceClosing(true);
 	setImmediate(() => {
 		try {
 			if (!windowToClose.isDestroyed()) {
 				windowToClose.close();
 			}
 		} finally {
-			isForceClosing = false;
+			editorCloseController.setForceClosing(false);
 		}
 	});
 }
 
 function createEditorWindowWrapper() {
 	if (mainWindow) {
-		isForceClosing = true;
+		editorCloseController.setForceClosing(true);
 		mainWindow.close();
-		isForceClosing = false;
+		editorCloseController.setForceClosing(false);
 		mainWindow = null;
 	}
 	mainWindow = createEditorWindow();
-	editorHasUnsavedChanges = false;
+	editorCloseController.resetForNewEditorWindow();
 
-	mainWindow.on("close", (event) => {
-		if (isForceClosing || !editorHasUnsavedChanges || isCloseConfirmInFlight) return;
-
-		event.preventDefault();
-		isCloseConfirmInFlight = true;
-
-		const windowToClose = mainWindow;
-		if (!windowToClose || windowToClose.isDestroyed()) return;
-
-		// Ask renderer to show the in-app close dialog.
-		windowToClose.webContents.send("request-close-confirm");
-
-		ipcMain.once("close-confirm-response", (event, choice: "save" | "discard" | "cancel") => {
-			if (event.sender.id !== windowToClose?.webContents.id) return;
-			isCloseConfirmInFlight = false;
-			if (!windowToClose || windowToClose.isDestroyed()) return;
-
-			if (choice === "save") {
-				// Save first, then close when the renderer reports done.
-				windowToClose.webContents.send("request-save-before-close");
-				ipcMain.once("save-before-close-done", (event, shouldClose: boolean) => {
-					if (event.sender.id !== windowToClose?.webContents.id) return;
-					if (!shouldClose) return;
-					forceCloseEditorWindow(windowToClose);
-				});
-			} else if (choice === "discard") {
-				forceCloseEditorWindow(windowToClose);
-			}
-			// "cancel": flag reset, window stays open
-		});
+	const windowToClose = mainWindow;
+	windowToClose.on("close", (event) => {
+		editorCloseController.handleWindowClose(event, windowToClose);
 	});
 }
 
@@ -1229,6 +1229,7 @@ function createCountdownOverlayWindowWrapper() {
 // CLI mode owns its own lifecycle (see electron/cli/cliMain.ts).
 if (!cliCommand) {
 	app.on("window-all-closed", () => {
+		if (editorCloseController.isDiscarding()) return;
 		// Only when it is what starts the quit: a quit already under way closes every window too.
 		if (!sttShutdownPromise) {
 			console.info("[app] the last window closed; quitting");
@@ -1545,15 +1546,15 @@ appReady?.then(async () => {
 	function switchToHudWrapper() {
 		if (isWindowsUpdatePending()) return;
 		if (mainWindow) {
-			isForceClosing = true;
+			editorCloseController.setForceClosing(true);
 			mainWindow.close();
-			isForceClosing = false;
+			editorCloseController.setForceClosing(false);
 			mainWindow = null;
 		}
 		showMainWindow();
 	}
 
-	const { mcpController, mcpAppChannel } = registerIpcHandlers(
+	const { mcpController, mcpAppChannel, nativeBridge } = registerIpcHandlers(
 		createEditorWindowWrapper,
 		createSourceSelectorWindowWrapper,
 		createCountdownOverlayWindowWrapper,
@@ -1577,8 +1578,9 @@ appReady?.then(async () => {
 			}
 		},
 		switchToHudWrapper,
-		() => editorHasUnsavedChanges,
+		() => editorCloseController.getHasUnsavedChanges(),
 	);
+	nativeBridgeHandle = nativeBridge;
 
 	// Native STT (whisper.cpp + forced alignment) — single instance per app.
 	registerSttIpc(ipcMain);

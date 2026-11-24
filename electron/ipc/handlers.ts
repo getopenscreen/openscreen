@@ -5593,7 +5593,7 @@ export function registerIpcHandlers(
 		});
 	});
 
-	registerNativeBridgeHandlers({
+	const nativeBridge = registerNativeBridgeHandlers({
 		getPlatform: () => process.platform,
 		getCurrentProjectPath: () => currentProjectPath,
 		getCurrentVideoPath: () => currentVideoPath,
@@ -5665,6 +5665,7 @@ export function registerIpcHandlers(
 	return {
 		mcpController,
 		mcpAppChannel: { deps: mcpToolDeps, runTool: mcpRunTool },
+		nativeBridge,
 		agentServices: {
 			mcpToolDeps,
 			documents: aiEditionDocuments,

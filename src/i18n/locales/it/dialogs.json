@@ -96,5 +96,18 @@
 		"captureInterrupted": "L'acquisizione dello schermo si è interrotta inaspettatamente dopo {{duration}}. La parte registrata fino a quel momento è stata salvata.",
 		"captureLost": "L'acquisizione dello schermo si è interrotta inaspettatamente e non è stato registrato nulla di utilizzabile.",
 		"audioLost": "Non è stato possibile registrare parte dell'audio, quindi la registrazione è stata salvata senza."
+	},
+	"closeProject": {
+		"title": "Conservare o eliminare questa registrazione?",
+		"body": "Non hai ancora esportato o salvato questa registrazione. Conserva il progetto per dopo o eliminalo ora.",
+		"titleDirty": "Conservare o eliminare questa registrazione?",
+		"bodyDirty": "Questa registrazione contiene modifiche non salvate. Salvala e conservala, oppure elimina il progetto ora.",
+		"keepAndClose": "Conserva e chiudi",
+		"discardProject": "Elimina progetto",
+		"keepProject": "Conserva progetto",
+		"discardErrorTitle": "Impossibile eliminare il progetto",
+		"trashFailed": "Impossibile spostare le registrazioni nel Cestino. Eliminarle definitivamente?",
+		"recycleFailed": "Impossibile spostare le registrazioni nel Cestino. Eliminarle definitivamente?",
+		"deletePermanently": "Elimina definitivamente"
 	}
 }

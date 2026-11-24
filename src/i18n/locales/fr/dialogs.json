@@ -96,5 +96,18 @@
 		"captureInterrupted": "La capture d'écran s'est arrêtée de façon inattendue après {{duration}}. La partie enregistrée jusque-là a été conservée.",
 		"captureLost": "La capture d'écran s'est arrêtée de façon inattendue et rien d'exploitable n'a été enregistré.",
 		"audioLost": "Une partie du son n'a pas pu être enregistrée : l'enregistrement a été sauvegardé sans elle."
+	},
+	"closeProject": {
+		"title": "Conserver ou supprimer cet enregistrement ?",
+		"body": "Vous n'avez pas encore exporté ni enregistré ce projet. Conservez-le pour plus tard ou supprimez-le maintenant.",
+		"titleDirty": "Conserver ou supprimer cet enregistrement ?",
+		"bodyDirty": "Cet enregistrement contient des modifications non enregistrées. Enregistrez et conservez-le, ou supprimez le projet maintenant.",
+		"keepAndClose": "Conserver et fermer",
+		"discardProject": "Supprimer le projet",
+		"keepProject": "Conserver le projet",
+		"discardErrorTitle": "Impossible de supprimer le projet",
+		"trashFailed": "Impossible de placer les enregistrements dans la Corbeille. Les supprimer définitivement ?",
+		"recycleFailed": "Impossible de placer les enregistrements dans la Corbeille. Les supprimer définitivement ?",
+		"deletePermanently": "Supprimer définitivement"
 	}
 }

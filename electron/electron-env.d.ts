@@ -557,9 +557,20 @@ interface Window {
 		notifyCountdownOverlayCleared: (runId: number) => void;
 		setMicrophoneExpanded: (expanded: boolean) => void;
 		setHasUnsavedChanges: (hasChanges: boolean) => void;
+		setHasDiscardableProject?: (discardable: boolean) => void;
 		onRequestSaveBeforeClose: (callback: () => Promise<boolean> | boolean) => () => void;
 		onRequestCloseConfirm: (callback: () => void) => () => void;
-		sendCloseConfirmResponse: (choice: "save" | "discard" | "cancel") => void;
+		sendCloseConfirmResponse: (
+			choice:
+				| "save"
+				| "discard"
+				| "cancel"
+				| {
+						choice: "discard-project";
+						projectId: string;
+						recordings: import("../src/native/contracts").AiEditionRecordingsDisposal;
+				  },
+		) => void;
 		stt: {
 			transcribe: (
 				request: import("./stt/transcriptionContract").SttTranscribeRequest,

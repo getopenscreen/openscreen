@@ -64,6 +64,8 @@ import { importProjectFile } from "./importProjectFile";
 import { insertionsEnabled } from "./insertionsEnabled";
 import { ChatStripPanel } from "./LeftPanel";
 import {
+	type CloseProjectChoice,
+	CloseProjectModal,
 	EditClipModal,
 	NewProjectModal,
 	OpenProjectModal,
@@ -296,6 +298,17 @@ export function NewEditorShell() {
 		resolve: (choice: UnsavedChoice) => void;
 	} | null>(null);
 	const unsavedPromptRef = useRef<typeof unsavedPrompt>(null);
+	const [freshRecordingProjectId, setFreshRecordingProjectId] = useState<string | null>(null);
+	const [closeProjectPrompt, setCloseProjectPrompt] = useState<{
+		projectId: string;
+		dirty: boolean;
+		resolve: (choice: CloseProjectChoice) => void;
+	} | null>(null);
+	const closeProjectPromptRef = useRef<typeof closeProjectPrompt>(null);
+	const isFreshRecording =
+		freshRecordingProjectId !== null && projectId === freshRecordingProjectId;
+	const isFreshRecordingRef = useRef(isFreshRecording);
+	isFreshRecordingRef.current = isFreshRecording;
 	const { shortcuts, isMac, openConfig: openShortcutsConfig } = useShortcuts();
 	// The actions half of the dialog context, not the section: this component only ever *opens*
 	// one, and subscribing it to the open state would re-render the whole editor — timeline,
@@ -371,6 +384,9 @@ export function NewEditorShell() {
 			// Settle that request before replacing the only dialog/resolver slot.
 			unsavedPromptRef.current?.resolve("cancel");
 			unsavedPromptRef.current = null;
+			closeProjectPromptRef.current?.resolve({ choice: "cancel" });
+			closeProjectPromptRef.current = null;
+			setCloseProjectPrompt(null);
 			if (!useProjectStore.getState().dirty) {
 				setUnsavedPrompt(null);
 				return Promise.resolve("discard");
@@ -379,6 +395,22 @@ export function NewEditorShell() {
 				const prompt = { action, resolve };
 				unsavedPromptRef.current = prompt;
 				setUnsavedPrompt(prompt);
+			});
+		},
+		[],
+	);
+
+	const promptCloseFreshRecording = useCallback(
+		(activeProjectId: string, isDirty: boolean): Promise<CloseProjectChoice> => {
+			unsavedPromptRef.current?.resolve("cancel");
+			unsavedPromptRef.current = null;
+			setUnsavedPrompt(null);
+			closeProjectPromptRef.current?.resolve({ choice: "cancel" });
+			closeProjectPromptRef.current = null;
+			return new Promise<CloseProjectChoice>((resolve) => {
+				const prompt = { projectId: activeProjectId, dirty: isDirty, resolve };
+				closeProjectPromptRef.current = prompt;
+				setCloseProjectPrompt(prompt);
 			});
 		},
 		[],
@@ -436,6 +468,7 @@ export function NewEditorShell() {
 			if (!window.electronAPI) return;
 			try {
 				if (await importPendingRecording((warning) => toast.warning(warning))) {
+					setFreshRecordingProjectId(useProjectStore.getState().projectId);
 					toast.success("Recording added to a new project");
 					return;
 				}
@@ -487,13 +520,21 @@ export function NewEditorShell() {
 		return () => window.removeEventListener("beforeunload", onBeforeUnload);
 	}, []);
 
+	// Clear fresh-recording status when switching to a different project or closing it.
+	useEffect(() => {
+		if (freshRecordingProjectId !== null && projectId !== freshRecordingProjectId) {
+			setFreshRecordingProjectId(null);
+		}
+	}, [freshRecordingProjectId, projectId]);
+
 	// Electron close interception
 	useEffect(() => {
 		if (!window.electronAPI) return;
 
-		// 1. Sync dirty state to Electron main process
+		// 1. Sync dirty & discardable state to Electron main process
 		window.electronAPI.setHasUnsavedChanges(dirty);
-	}, [dirty]);
+		window.electronAPI.setHasDiscardableProject?.(isFreshRecording);
+	}, [dirty, isFreshRecording]);
 
 	useEffect(() => {
 		if (!window.electronAPI) return;
@@ -501,6 +542,27 @@ export function NewEditorShell() {
 		// 2. Handle request-close-confirm from Electron
 		const unsubCloseConfirm = window.electronAPI.onRequestCloseConfirm(() => {
 			void (async () => {
+				const activeId = useProjectStore.getState().projectId;
+				if (isFreshRecordingRef.current && activeId) {
+					const choice = await promptCloseFreshRecording(
+						activeId,
+						useProjectStore.getState().dirty,
+					);
+					if (choice.choice === "keep") {
+						window.electronAPI.sendCloseConfirmResponse("discard");
+					} else if (choice.choice === "save") {
+						window.electronAPI.sendCloseConfirmResponse("save");
+					} else if (choice.choice === "discard-project") {
+						window.electronAPI.sendCloseConfirmResponse({
+							choice: "discard-project",
+							projectId: activeId,
+							recordings: choice.recordings,
+						});
+					} else {
+						window.electronAPI.sendCloseConfirmResponse("cancel");
+					}
+					return;
+				}
 				const choice = await promptUnsaved("close");
 				if (choice === "discard") {
 					window.electronAPI.sendCloseConfirmResponse("discard");
@@ -525,7 +587,7 @@ export function NewEditorShell() {
 			unsubCloseConfirm?.();
 			unsubSaveBeforeClose?.();
 		};
-	}, [promptUnsaved, saveDocument]);
+	}, [promptCloseFreshRecording, promptUnsaved, saveDocument]);
 
 	const videoSources = useMemo(() => {
 		if (!document) return [];
@@ -959,7 +1021,10 @@ export function NewEditorShell() {
 	const handleSave = useCallback(async () => {
 		const doc = useProjectStore.getState().document;
 		if (!doc) return;
-		if (await saveDocument(doc, { history: true })) toast.success("Project saved");
+		if (await saveDocument(doc, { history: true })) {
+			setFreshRecordingProjectId(null);
+			toast.success("Project saved");
+		}
 	}, [saveDocument]);
 
 	// Native File menu (electron/main.ts) → v4 actions. The menu is shown via
@@ -1945,7 +2010,34 @@ export function NewEditorShell() {
 				action={unsavedPrompt?.action ?? "new"}
 				onChoose={handleConfirmUnsaved}
 			/>
-			<ExportDialog open={exportOpen} onClose={() => setExportOpen(false)} document={document} />
+			<CloseProjectModal
+				open={closeProjectPrompt !== null}
+				onClose={() => {
+					closeProjectPrompt?.resolve({ choice: "cancel" });
+					if (closeProjectPromptRef.current === closeProjectPrompt) {
+						closeProjectPromptRef.current = null;
+					}
+					setCloseProjectPrompt(null);
+				}}
+				projectId={closeProjectPrompt?.projectId ?? null}
+				dirty={closeProjectPrompt?.dirty ?? false}
+				loadRecordings={nativeBridgeClient.aiEdition.recordings}
+				onChoose={(choice) => {
+					const prompt = closeProjectPrompt;
+					if (!prompt) return;
+					if (closeProjectPromptRef.current === prompt) {
+						closeProjectPromptRef.current = null;
+					}
+					setCloseProjectPrompt(null);
+					prompt.resolve(choice);
+				}}
+			/>
+			<ExportDialog
+				open={exportOpen}
+				onClose={() => setExportOpen(false)}
+				document={document}
+				onExportComplete={() => setFreshRecordingProjectId(null)}
+			/>
 			<AddAudioLayerDialog
 				open={voiceoverFlow !== null}
 				maxDurationSec={voiceoverFlow?.maxDurationSec ?? 0}

@@ -96,5 +96,18 @@
 		"captureInterrupted": "Ekran yakalama {{duration}} sonra beklenmedik şekilde durdu. O ana kadar kaydedilen bölüm kaydedildi.",
 		"captureLost": "Ekran yakalama beklenmedik şekilde durdu ve kullanılabilir hiçbir şey kaydedilmedi.",
 		"audioLost": "Sesin bir kısmı kaydedilemedi, bu yüzden kayıt o ses olmadan kaydedildi."
+	},
+	"closeProject": {
+		"title": "Bu kayıt saklansın mı yoksa atılsın mı?",
+		"body": "Bu kaydı henüz dışa aktarmadınız veya kaydetmediniz. Projeyi sonrası için saklayın ya da şimdi atın.",
+		"titleDirty": "Bu kayıt saklansın mı yoksa atılsın mı?",
+		"bodyDirty": "Bu kayıtta kaydedilmemiş değişiklikler var. Kaydedip saklayın veya projeyi şimdi atın.",
+		"keepAndClose": "Sakla ve Kapat",
+		"discardProject": "Projeyi At",
+		"keepProject": "Projeyi Sakla",
+		"discardErrorTitle": "Proje atılamadı",
+		"trashFailed": "Kayıtlar Çöp Sepeti'ne taşınamadı. Kalıcı olarak silinsin mi?",
+		"recycleFailed": "Kayıtlar Geri Dönüşüm Kutusu'na taşınamadı. Kalıcı olarak silinsin mi?",
+		"deletePermanently": "Kalıcı olarak sil"
 	}
 }

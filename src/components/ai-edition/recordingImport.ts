@@ -415,18 +415,25 @@ export async function importPendingRecording(
 		const warning = result.success ? result.warning : undefined;
 
 		const label = screenPath.split(/[\\/]/).pop() || "Recording";
+		// Read before the project exists, so no wait of its own sits between creating the
+		// project and adding the recording to it.
+		const cameraLook = await readSquareCameraPref();
 		const created = await useProjectStore
 			.getState()
 			.createProject(`Recording ${new Date().toLocaleString()}`);
 		if (pending) pending.projectId = created.project.id;
-		const cameraLook = await readSquareCameraPref();
 		const fresh = useProjectStore.getState().document;
-		if (cameraLook && fresh) {
+		// Only onto the project made for this recording, never one opened since.
+		if (cameraLook && fresh?.project.id === created.project.id) {
 			// `history: false`, like the timeline seed below: the editor set this up, the user
 			// did not, so their first Ctrl+Z must not undo it.
-			await useProjectStore
+			const saved = await useProjectStore
 				.getState()
 				.saveDocument(patchEditorSettings(fresh, cameraLook), { history: false });
+			// The recording matters more than its camera's look: the import goes on, because
+			// leaving the session pending would make the next editor mount import the same
+			// take into a second project (#364). The webcam then has the project's own look.
+			if (!saved) console.warn("The recording bar's Custom camera could not be applied.");
 		}
 		await useProjectStore.getState().addAsset(screenPath, label);
 		// Mark before the video element can fire `loadedmetadata`. The asset path is

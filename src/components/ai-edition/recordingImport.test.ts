@@ -231,6 +231,39 @@ describe("importPendingRecording", () => {
 			expect(saveDocument).not.toHaveBeenCalled();
 		});
 
+		it("writes nothing onto a project opened while the import was under way", async () => {
+			stubElectronApi("/recordings/recording-1.mp4");
+			stubRecordingPrefs({ camShape: "square", camRoundness: 0.25 });
+			createProject.mockReset();
+			createProject.mockImplementationOnce(async (title: string) => {
+				const created = createEmptyDocument({ projectId: "proj_stub", title });
+				// Another project took the editor before the import could write.
+				useProjectStore.setState({
+					document: createEmptyDocument({ projectId: "proj_other", title: "Other" }),
+				});
+				return created;
+			});
+
+			await importPendingRecording();
+
+			expect(saveDocument).not.toHaveBeenCalled();
+		});
+
+		// Leaving the session pending would import the take into a second project next time.
+		it("still imports the recording when the camera look cannot be saved", async () => {
+			const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+			const api = stubElectronApi("/recordings/recording-1.mp4");
+			stubRecordingPrefs({ camShape: "square", camRoundness: 0.25 });
+			saveDocument.mockResolvedValueOnce(false);
+
+			await expect(importPendingRecording()).resolves.toBe(true);
+
+			expect(addAsset).toHaveBeenCalledWith("/recordings/recording-1.mp4", "recording-1.mp4");
+			expect(api.setCurrentRecordingSession).toHaveBeenCalledWith(null);
+			expect(warn).toHaveBeenCalledWith("The recording bar's Custom camera could not be applied.");
+			warn.mockRestore();
+		});
+
 		it("keeps the project's own look when the preference cannot be read", async () => {
 			stubElectronApi("/recordings/recording-1.mp4");
 			stubRecordingPrefsBridge(vi.fn(async () => Promise.reject(new Error("bridge down"))));

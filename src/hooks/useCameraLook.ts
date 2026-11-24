@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { DEFAULT_WEBCAM_ROUNDNESS } from "../lib/projectDefaults";
 
 /** Device settings' preview shapes: the camera's whole frame, or a rounded square crop. */
@@ -38,11 +38,20 @@ export function useCameraLook(): CameraLook {
 		};
 	}, []);
 
-	// Shown at once, then persisted; the published snapshot that follows agrees with it.
+	// Counts edits, so a failed write only reconciles when nothing newer was picked since.
+	const edits = useRef(0);
+	// Shown at once, then persisted; the published snapshot that follows agrees with it. A
+	// failed write publishes nothing, so this window would keep a value no other window has:
+	// read the saved one back instead.
 	const save = useCallback((patch: Partial<StoredLook>) => {
+		const edit = ++edits.current;
 		setStored((current) => ({ ...current, ...patch }));
-		void window.electronAPI?.setRecordingPrefs?.(patch).catch((error) => {
+		void window.electronAPI?.setRecordingPrefs?.(patch).catch(async (error) => {
 			console.warn("Failed to persist the camera look:", error);
+			const prefs = await window.electronAPI?.getRecordingPrefs?.().catch(() => undefined);
+			if (prefs && edit === edits.current) {
+				setStored({ camShape: prefs.camShape, camRoundness: prefs.camRoundness });
+			}
 		});
 	}, []);
 	const setShape = useCallback(

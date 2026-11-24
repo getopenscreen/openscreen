@@ -35,3 +35,34 @@ it("displays incoming frames and offers three bounded preview sizes", async () =
 	view.unmount();
 	expect(unsubscribe).toHaveBeenCalledOnce();
 });
+
+it("shows the whole frame by default, and rounds only the Custom (square) preview", async () => {
+	let changed:
+		| ((prefs: { camShape: "square" | null; camRoundness: number | null }) => void)
+		| undefined;
+	const getRecordingPrefs = vi.fn().mockResolvedValue({ camShape: null, camRoundness: 0.4 });
+	const unsubscribe = vi.fn();
+	window.electronAPI = {
+		onCameraPreviewFrame: () => () => undefined,
+		getRecordingPrefs,
+		onRecordingPrefsChanged: (
+			callback: (prefs: { camShape: "square" | null; camRoundness: number | null }) => void,
+		) => {
+			changed = callback;
+			return unsubscribe;
+		},
+	} as unknown as Window["electronAPI"];
+	const view = render(<FloatingCameraPreview />);
+	const preview = screen.getByTestId("floating-camera-preview");
+	await waitFor(() => expect(getRecordingPrefs).toHaveBeenCalled());
+	// Default: the stylesheet's corners, whatever roundness is stored.
+	expect(preview.className).not.toContain("square");
+	expect(preview.style.borderRadius).toBe("");
+
+	act(() => changed?.({ camShape: "square", camRoundness: 1 }));
+	expect(preview.className).toContain("square");
+	// Half the roundness, as a percentage of the square box.
+	expect(preview.style.borderRadius).toBe("50%");
+	view.unmount();
+	expect(unsubscribe).toHaveBeenCalledOnce();
+});

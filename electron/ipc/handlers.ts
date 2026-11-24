@@ -754,6 +754,10 @@ export interface RecordingPrefs {
 	camDeviceName: string | null;
 	/** Capture resolution for the camera. See WEBCAM_QUALITY_PRESETS. */
 	camQuality: WebcamQualityId;
+	/** Device settings' Custom (a square crop), or null for Default. See RecordingPreferences.camShape. */
+	camShape: "square" | null;
+	/** The Custom (square) preview's corner rounding. See RecordingPreferences.camRoundness. */
+	camRoundness: number | null;
 	systemAudioEnabled: boolean;
 	cursorCaptureMode: CursorCaptureMode;
 	hideDesktopIcons: boolean;
@@ -768,6 +772,8 @@ const defaultRecordingPrefs: RecordingPrefs = {
 	camDeviceId: null,
 	camDeviceName: null,
 	camQuality: DEFAULT_WEBCAM_QUALITY,
+	camShape: null,
+	camRoundness: null,
 	systemAudioEnabled: false,
 	cursorCaptureMode: "editable-overlay",
 	hideDesktopIcons: false,
@@ -2418,6 +2424,8 @@ export function registerIpcHandlers(
 					.askForSystemAudioOnce()
 					.catch((error) => console.warn("[permissions] system audio request failed:", error));
 			}
+			// Device settings' Custom: the floating preview takes the shape the take will have.
+			if (previous.camShape !== next.camShape) cameraPreview.setSquare(next.camShape === "square");
 		},
 	);
 
@@ -2593,6 +2601,7 @@ export function registerIpcHandlers(
 			: undefined,
 		(owner) => BrowserWindow.fromWebContents(owner),
 	);
+	cameraPreview.setSquare(recordingPrefs.get().camShape === "square");
 	// destroy() bypasses the preview close-to-hide handler during application shutdown.
 	app.on("before-quit", () => cameraPreview.dispose());
 	function ensureMacCameraPreviewWindow() {

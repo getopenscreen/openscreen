@@ -18,6 +18,7 @@ import type { CursorTelemetryPoint } from "@/components/video-editor/types";
 import { createId } from "@/lib/ai-edition/document/ids";
 import { clipAwaitsProbedDuration } from "@/lib/ai-edition/document/timeline";
 import type { AxcutDocument } from "@/lib/ai-edition/schema";
+import { patchEditorSettings } from "@/lib/ai-edition/store/editorSettings";
 import {
 	DOCUMENT_SAVES_WAIT_TIMEOUT_MS,
 	saveWithDeadline,
@@ -28,6 +29,7 @@ import {
 	appendAutoZoomSuggestions,
 	collectAutoZoomSuggestionsForLatestDocument,
 } from "@/lib/ai-edition/timeline/apply-auto-zooms";
+import { DEFAULT_WEBCAM_ROUNDNESS } from "@/lib/projectDefaults";
 import type { RecordingSession } from "@/lib/recordingSession";
 import { nativeBridgeClient } from "@/native/client";
 
@@ -140,6 +142,36 @@ async function readAutoZoomPref(timeoutMs = DOCUMENT_SAVES_WAIT_TIMEOUT_MS): Pro
 		return settled === "timeout" ? true : settled;
 	} catch {
 		return true;
+	}
+}
+
+/**
+ * Device settings' Custom, which a fresh take's webcam starts with: the square crop and the
+ * rounding the user watched in the floating preview while recording, the editor's default
+ * rounding for a square camera until the slider was moved. Default carries nothing: the take
+ * keeps its project's own look. Also nothing when the bridge is unreachable, throws or does not
+ * answer in time (bounded like `readAutoZoomPref`).
+ */
+async function readSquareCameraPref(
+	timeoutMs = DOCUMENT_SAVES_WAIT_TIMEOUT_MS,
+): Promise<{ webcamMaskShape: "square"; webcamRoundness: number } | null> {
+	try {
+		const read = (async () => {
+			const prefs = await window.electronAPI?.getRecordingPrefs?.();
+			if (prefs?.camShape !== "square") return null;
+			const roundness = prefs.camRoundness;
+			return {
+				webcamMaskShape: "square" as const,
+				webcamRoundness:
+					typeof roundness === "number" && Number.isFinite(roundness)
+						? roundness
+						: DEFAULT_WEBCAM_ROUNDNESS.square,
+			};
+		})();
+		const settled = await saveWithDeadline(read, timeoutMs);
+		return settled === "timeout" ? null : settled;
+	} catch {
+		return null;
 	}
 }
 
@@ -387,6 +419,15 @@ export async function importPendingRecording(
 			.getState()
 			.createProject(`Recording ${new Date().toLocaleString()}`);
 		if (pending) pending.projectId = created.project.id;
+		const cameraLook = await readSquareCameraPref();
+		const fresh = useProjectStore.getState().document;
+		if (cameraLook && fresh) {
+			// `history: false`, like the timeline seed below: the editor set this up, the user
+			// did not, so their first Ctrl+Z must not undo it.
+			await useProjectStore
+				.getState()
+				.saveDocument(patchEditorSettings(fresh, cameraLook), { history: false });
+		}
 		await useProjectStore.getState().addAsset(screenPath, label);
 		// Mark before the video element can fire `loadedmetadata`. The asset path is
 		// already on the document; waiting until the 60s seed finished let the first

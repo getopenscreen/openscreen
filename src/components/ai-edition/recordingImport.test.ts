@@ -3,9 +3,11 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { CursorTelemetryPoint } from "@/components/video-editor/types";
 import { replaceTimeline as replaceTimelineOp } from "@/lib/ai-edition/document/timeline";
 import { type AxcutDocument, createEmptyDocument } from "@/lib/ai-edition/schema";
+import { getEditorSettings } from "@/lib/ai-edition/store/editorSettings";
 import { useProjectStore } from "@/lib/ai-edition/store/projectStore";
 import { undo } from "@/lib/ai-edition/store/undo";
 import { clearHistory, past } from "@/lib/ai-edition/store/undoStack";
+import { DEFAULT_WEBCAM_ROUNDNESS } from "@/lib/projectDefaults";
 import {
 	applyPendingFreshRecordingAutoZooms,
 	consumeFreshRecordingAutoZoomPending,
@@ -176,6 +178,67 @@ describe("importPendingRecording", () => {
 			"Auto-imported recording",
 			{ history: false },
 		);
+	});
+
+	describe("camera roundness from Device settings", () => {
+		const saveDocument = vi.fn(async (): Promise<boolean> => true);
+		beforeEach(() => {
+			// The real `createProject` installs the new document; the import reads it from there.
+			createProject.mockImplementationOnce(async (title: string) => {
+				const created = createEmptyDocument({ projectId: "proj_stub", title });
+				useProjectStore.setState({ document: created });
+				return created;
+			});
+			useProjectStore.setState({ saveDocument });
+		});
+
+		it("starts a fresh take's webcam square, at the roundness picked in the HUD", async () => {
+			stubElectronApi("/recordings/recording-1.mp4");
+			stubRecordingPrefs({ camShape: "square", camRoundness: 0.25 });
+
+			await importPendingRecording();
+
+			expect(saveDocument).toHaveBeenCalledOnce();
+			const [saved, options] = saveDocument.mock.calls[0] as unknown as [
+				AxcutDocument,
+				{ history: boolean },
+			];
+			expect(getEditorSettings(saved)).toMatchObject({
+				webcamMaskShape: "square",
+				webcamRoundness: 0.25,
+			});
+			// Set up by the editor, not an edit: the first Ctrl+Z must not undo it.
+			expect(options).toEqual({ history: false });
+		});
+
+		it("uses the editor's square rounding when Square was picked but not rounded", async () => {
+			stubElectronApi("/recordings/recording-1.mp4");
+			stubRecordingPrefs({ camShape: "square", camRoundness: null });
+
+			await importPendingRecording();
+
+			const [saved] = saveDocument.mock.calls[0] as unknown as [AxcutDocument];
+			expect(getEditorSettings(saved).webcamRoundness).toBe(DEFAULT_WEBCAM_ROUNDNESS.square);
+		});
+
+		// A roundness left from an earlier Square pick belongs to the Square preview only.
+		it("leaves the project's look alone under Default, whatever roundness is stored", async () => {
+			stubElectronApi("/recordings/recording-1.mp4");
+			stubRecordingPrefs({ camShape: null, camRoundness: 0.25 });
+
+			await importPendingRecording();
+
+			expect(saveDocument).not.toHaveBeenCalled();
+		});
+
+		it("keeps the project's own look when the preference cannot be read", async () => {
+			stubElectronApi("/recordings/recording-1.mp4");
+			stubRecordingPrefsBridge(vi.fn(async () => Promise.reject(new Error("bridge down"))));
+
+			await expect(importPendingRecording()).resolves.toBe(true);
+
+			expect(saveDocument).not.toHaveBeenCalled();
+		});
 	});
 });
 

@@ -8,6 +8,7 @@ import { nativeBridgeClient } from "@/native";
 import { canRecordMicrophone, getPlatform } from "@/utils/platformUtils";
 import { type CameraDevice } from "../../hooks/useCameraDevices";
 import { useCameraHudSync } from "../../hooks/useCameraHudSync";
+import { useCameraLook } from "../../hooks/useCameraLook";
 import { useFloatingCameraPreview } from "../../hooks/useFloatingCameraPreview";
 import {
 	isPlaceholderMicrophoneLabel,
@@ -99,6 +100,8 @@ export function LaunchWindow() {
 	const tCommon = useScopedT("common");
 	// The microphone check's toast is worded where the camera check's is: in `editor`.
 	const tEditor = useScopedT("editor");
+	// The editor's own words for the camera's shape and rounding, which Device settings sets too.
+	const tSettings = useScopedT("settings");
 	const updateBadge = useUpdateBadge();
 	const applyUpdate = useCallback(() => {
 		void window.electronAPI?.applyUpdate?.().catch(() => {
@@ -154,6 +157,7 @@ export function LaunchWindow() {
 		dismissSoftwareEncoderFallbackNotice,
 		recordingPrefsLoaded,
 	} = useScreenRecorder();
+	const cameraLook = useCameraLook();
 
 	// Choosing a device and switching one on are deliberately separate concerns.
 	const cameraPreview = useFloatingCameraPreview(
@@ -1221,8 +1225,14 @@ export function LaunchWindow() {
 				"1440p": t("webcam.quality1440p"),
 				"2160p": t("webcam.quality2160p"),
 			},
+			cameraShape: tSettings("layout.webcamShape"),
+			cameraShapeOptions: {
+				default: tSettings("cursor.themeDefault"),
+				square: tSettings("layout.bgModes.custom"),
+			},
+			cameraRoundness: tSettings("effects.roundness"),
 		}),
-		[t, tCommon],
+		[t, tCommon, tSettings],
 	);
 
 	const versionLabel = appInfo ? t("deviceSettings.version", { version: appInfo.version }) : null;
@@ -1467,6 +1477,10 @@ export function LaunchWindow() {
 								checkingForUpdates={isCheckingForUpdates}
 								cameraQuality={webcamQuality}
 								onSelectCameraQuality={handleSelectCameraQuality}
+								cameraShape={cameraLook.shape}
+								onSelectCameraShape={cameraLook.setShape}
+								cameraRoundness={cameraLook.roundness}
+								onChangeCameraRoundness={cameraLook.setRoundness}
 								onSelectMic={handleSelectMicDevice}
 								onSelectCamera={handleSelectCameraDevice}
 								onCheckForUpdates={handleCheckForUpdates}

@@ -34,10 +34,15 @@ const labels: HudDeviceSettingsLabels = {
 		"1440p": "1440p",
 		"2160p": "4K",
 	},
+	cameraShape: "Camera shape",
+	cameraShapeOptions: { default: "Default", square: "Custom" },
+	cameraRoundness: "Roundness",
 };
 
 function renderPanel(overrides: Partial<Parameters<typeof HudDeviceSettings>[0]> = {}) {
 	const onSelectCameraQuality = vi.fn();
+	const onChangeCameraRoundness = vi.fn();
+	const onSelectCameraShape = vi.fn();
 	render(
 		// The close button's tooltip needs the provider the app mounts around every window.
 		<TooltipProvider>
@@ -55,6 +60,10 @@ function renderPanel(overrides: Partial<Parameters<typeof HudDeviceSettings>[0]>
 				checkingForUpdates={false}
 				cameraQuality="1440p"
 				onSelectCameraQuality={onSelectCameraQuality}
+				cameraShape="default"
+				onSelectCameraShape={onSelectCameraShape}
+				cameraRoundness={0.4}
+				onChangeCameraRoundness={onChangeCameraRoundness}
 				onSelectMic={vi.fn()}
 				onSelectCamera={vi.fn()}
 				onCheckForUpdates={vi.fn()}
@@ -64,8 +73,38 @@ function renderPanel(overrides: Partial<Parameters<typeof HudDeviceSettings>[0]>
 			/>
 		</TooltipProvider>,
 	);
-	return { onSelectCameraQuality };
+	return { onSelectCameraQuality, onChangeCameraRoundness, onSelectCameraShape };
 }
+
+describe("HudDeviceSettings camera shape and roundness", () => {
+	it("shows the saved roundness and reports a new one as a fraction", () => {
+		const { onChangeCameraRoundness } = renderPanel({ cameraShape: "square" });
+		const slider = screen.getByTestId("camera-roundness") as HTMLInputElement;
+		expect(slider.value).toBe("40");
+		expect(screen.getByText("40%")).toBeTruthy();
+
+		fireEvent.change(slider, { target: { value: "25" } });
+
+		expect(onChangeCameraRoundness).toHaveBeenCalledWith(0.25);
+	});
+
+	it("offers Default, checked, and Custom, with no roundness until Custom is picked", () => {
+		const { onSelectCameraShape } = renderPanel();
+		expect(screen.getByTestId("camera-shape-default").getAttribute("aria-checked")).toBe("true");
+		expect(screen.queryByTestId("camera-roundness")).toBeNull();
+		expect(screen.getByTestId("camera-shape-square").getAttribute("aria-checked")).toBe("false");
+
+		fireEvent.click(screen.getByTestId("camera-shape-square"));
+
+		expect(onSelectCameraShape).toHaveBeenCalledWith("square");
+	});
+
+	it("is not offered without a camera", () => {
+		renderPanel({ cameraDevices: [], cameraShape: "square" });
+		expect(screen.queryByTestId("camera-roundness")).toBeNull();
+		expect(screen.queryByTestId("camera-shape-square")).toBeNull();
+	});
+});
 
 describe("HudDeviceSettings camera quality", () => {
 	it("offers every preset the capture pipeline knows about", () => {

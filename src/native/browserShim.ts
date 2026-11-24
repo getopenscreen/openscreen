@@ -56,6 +56,8 @@ type ShimRecordingPrefs = {
 	camEnabled: boolean;
 	camDeviceId: string | null;
 	camDeviceName: string | null;
+	camShape: "square" | null;
+	camRoundness: number | null;
 	systemAudioEnabled: boolean;
 	cursorCaptureMode: "editable-overlay" | "system";
 	autoZoomEnabled: boolean;
@@ -68,6 +70,8 @@ let shimRecordingPrefs: ShimRecordingPrefs = {
 	camEnabled: false,
 	camDeviceId: null,
 	camDeviceName: null,
+	camShape: null,
+	camRoundness: null,
 	systemAudioEnabled: false,
 	cursorCaptureMode: "editable-overlay",
 	autoZoomEnabled: true,

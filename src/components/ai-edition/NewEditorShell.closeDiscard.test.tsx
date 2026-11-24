@@ -234,6 +234,35 @@ describe("NewEditorShell close discard flow", () => {
 		expect(setHasDiscardableProject).not.toHaveBeenCalledWith(true);
 	});
 
+	it("does not restore discardable state when explicit save happened while import was pending", async () => {
+		const doc = createEmptyDocument({ projectId: "proj_saved_mid_import", title: "Fresh" });
+		let resolveImport!: (id: string | null) => void;
+		const saveDocument = vi.fn(async () => {
+			useProjectStore.setState({ dirty: false });
+			return true;
+		});
+		useProjectStore.setState({ saveDocument });
+		importMock.importPendingRecording.mockImplementationOnce(
+			() =>
+				new Promise<string | null>((resolve) => {
+					useProjectStore.setState({ document: doc, projectId: doc.project.id, dirty: false });
+					resolveImport = resolve;
+				}),
+		);
+
+		renderShell();
+		await act(async () => {
+			fireEvent.keyDown(document.body, { key: "s", ctrlKey: true });
+		});
+		await waitFor(() => expect(saveDocument).toHaveBeenCalledOnce());
+
+		await act(async () => {
+			resolveImport(doc.project.id);
+		});
+
+		expect(setHasDiscardableProject).not.toHaveBeenCalledWith(true);
+	});
+
 	it("protects live edits in save-before-close", async () => {
 		const doc = createEmptyDocument({ projectId: "proj_save_close", title: "SaveClose" });
 		const saveDocument = vi.fn(async () => true);

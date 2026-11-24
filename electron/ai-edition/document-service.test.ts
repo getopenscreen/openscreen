@@ -969,5 +969,18 @@ describe("DocumentService", () => {
 
 			await expect(service.getProject(doc.project.id)).rejects.toThrow();
 		});
+
+		it("rejects a late saveProject after deleteProject without recreating the file", async () => {
+			const doc = await service.createProject("Deleted before save");
+			await service.deleteProject(doc.project.id);
+
+			await expect(
+				service.saveProject({
+					...doc,
+					project: { ...doc.project, title: "Stale write" },
+				}),
+			).rejects.toThrow();
+			await expect(service.getProject(doc.project.id)).rejects.toThrow();
+		});
 	});
 });

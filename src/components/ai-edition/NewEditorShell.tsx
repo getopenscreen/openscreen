@@ -309,6 +309,7 @@ export function NewEditorShell() {
 		freshRecordingProjectId !== null && projectId === freshRecordingProjectId;
 	const isFreshRecordingRef = useRef(isFreshRecording);
 	isFreshRecordingRef.current = isFreshRecording;
+	const explicitlyKeptProjectIdsRef = useRef<Set<string>>(new Set());
 	const clearFreshRecording = useCallback(() => {
 		isFreshRecordingRef.current = false;
 		setFreshRecordingProjectId(null);
@@ -473,7 +474,10 @@ export function NewEditorShell() {
 			try {
 				const importedProjectId = await importPendingRecording((warning) => toast.warning(warning));
 				if (importedProjectId) {
-					if (useProjectStore.getState().projectId === importedProjectId) {
+					if (
+						useProjectStore.getState().projectId === importedProjectId &&
+						!explicitlyKeptProjectIdsRef.current.has(importedProjectId)
+					) {
 						isFreshRecordingRef.current = true;
 						setFreshRecordingProjectId(importedProjectId);
 					}
@@ -1045,6 +1049,7 @@ export function NewEditorShell() {
 		const doc = useProjectStore.getState().document;
 		if (!doc) return;
 		if (await saveDocument(doc, { history: true })) {
+			explicitlyKeptProjectIdsRef.current.add(doc.project.id);
 			clearFreshRecording();
 			toast.success("Project saved");
 		}
@@ -2059,7 +2064,11 @@ export function NewEditorShell() {
 				open={exportOpen}
 				onClose={() => setExportOpen(false)}
 				document={document}
-				onExportComplete={clearFreshRecording}
+				onExportComplete={() => {
+					const activeId = useProjectStore.getState().projectId;
+					if (activeId) explicitlyKeptProjectIdsRef.current.add(activeId);
+					clearFreshRecording();
+				}}
 			/>
 			<AddAudioLayerDialog
 				open={voiceoverFlow !== null}

@@ -248,6 +248,8 @@ export class DocumentService {
 	private readonly writeQueues = new Map<string, Promise<void>>();
 	/** Bumped as each read or save of a project starts — see saveProjectIfUnchanged. */
 	private readonly generations = new Map<string, number>();
+	/** Projects deleted in this process, so a save queued from an earlier read cannot recreate them. */
+	private readonly deletedProjectIds = new Set<string>();
 
 	// `mediaRegistryDir` is where the media-links registry file lives
 	// (RECORDINGS_DIR in production) — see getProject. Injected for the same
@@ -521,6 +523,7 @@ export class DocumentService {
 	async createProject(title: string): Promise<AxcutDocument> {
 		await this.ensureProjectsDir();
 		const projectId = createId("proj");
+		this.deletedProjectIds.delete(projectId);
 		// Every new project comes through here — the New dialog, the empty state and a finished
 		// recording alike — so this is the one place it takes the user's look.
 		const doc: AxcutDocument = {
@@ -534,7 +537,13 @@ export class DocumentService {
 	async saveProject(document: AxcutDocument): Promise<AxcutDocument> {
 		const stamped = stampForSave(document);
 		this.touch(stamped.project.id);
-		await this.writeProject(stamped);
+		const written = await this.writeProject(
+			stamped,
+			async () => !this.deletedProjectIds.has(stamped.project.id),
+		);
+		if (!written) {
+			throw new DocumentNotFoundError(stamped.project.id);
+		}
 		// After the write, never before: a derived file is not worth delaying the user's edit
 		// reaching disk, and a failure to generate one must not fail the save.
 		await ensureDocumentExtensions(stamped);
@@ -575,6 +584,7 @@ export class DocumentService {
 	}
 
 	private async unlinkProjectFiles(projectId: string): Promise<void> {
+		this.deletedProjectIds.add(projectId);
 		// Remove the canonical file and any lingering legacy `.axcut` for this id.
 		for (const filePath of [this.fileFor(projectId), this.legacyFileFor(projectId)]) {
 			try {

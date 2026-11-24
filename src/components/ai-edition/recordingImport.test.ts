@@ -249,6 +249,28 @@ describe("importPendingRecording", () => {
 			expect(saveDocument).not.toHaveBeenCalled();
 		});
 
+		// The camera save waits; a project opened during it must not be where the recording goes.
+		it("adds the recording before the camera save, so a switch during it cannot take it", async () => {
+			stubElectronApi("/recordings/recording-1.mp4");
+			stubRecordingPrefs({ camShape: "square", camRoundness: 0.25 });
+			saveDocument.mockImplementationOnce(async () => {
+				useProjectStore.setState({
+					document: createEmptyDocument({ projectId: "proj_other", title: "Other" }),
+				});
+				return true;
+			});
+
+			await expect(importPendingRecording()).resolves.toBe(true);
+
+			expect(addAsset).toHaveBeenCalledOnce();
+			expect(saveDocument).toHaveBeenCalledOnce();
+			expect(addAsset.mock.invocationCallOrder[0]).toBeLessThan(
+				saveDocument.mock.invocationCallOrder[0],
+			);
+			const [saved] = saveDocument.mock.calls[0] as unknown as [AxcutDocument];
+			expect(saved.project.id).toBe("proj_stub");
+		});
+
 		// Leaving the session pending would import the take into a second project next time.
 		it("still imports the recording when the camera look cannot be saved", async () => {
 			const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);

@@ -422,19 +422,8 @@ export async function importPendingRecording(
 			.getState()
 			.createProject(`Recording ${new Date().toLocaleString()}`);
 		if (pending) pending.projectId = created.project.id;
-		const fresh = useProjectStore.getState().document;
-		// Only onto the project made for this recording, never one opened since.
-		if (cameraLook && fresh?.project.id === created.project.id) {
-			// `history: false`, like the timeline seed below: the editor set this up, the user
-			// did not, so their first Ctrl+Z must not undo it.
-			const saved = await useProjectStore
-				.getState()
-				.saveDocument(patchEditorSettings(fresh, cameraLook), { history: false });
-			// The recording matters more than its camera's look: the import goes on, because
-			// leaving the session pending would make the next editor mount import the same
-			// take into a second project (#364). The webcam then has the project's own look.
-			if (!saved) console.warn("The recording bar's Custom camera could not be applied.");
-		}
+		// Straight after creating the project, with no wait of this import's own between the
+		// two, so the recording lands in the project made for it.
 		await useProjectStore.getState().addAsset(screenPath, label);
 		// Mark before the video element can fire `loadedmetadata`. The asset path is
 		// already on the document; waiting until the 60s seed finished let the first
@@ -447,6 +436,20 @@ export async function importPendingRecording(
 		// preference.
 		if (cursorCaptureMode !== "system") {
 			markFreshRecordingAutoZoomPending(screenPath);
+		}
+		// After the mark: the camera save waits, and the video must not load unmarked meanwhile.
+		const withRecording = useProjectStore.getState().document;
+		// Only onto the project made for this recording, never one opened since.
+		if (cameraLook && withRecording?.project.id === created.project.id) {
+			// `history: false`, like the timeline seed below: the editor set this up, the user
+			// did not, so their first Ctrl+Z must not undo it.
+			const saved = await useProjectStore
+				.getState()
+				.saveDocument(patchEditorSettings(withRecording, cameraLook), { history: false });
+			// The recording matters more than its camera's look: the import goes on, because
+			// leaving the session pending would make the next editor mount import the same
+			// take into a second project (#364). The webcam then has the project's own look.
+			if (!saved) console.warn("The recording bar's Custom camera could not be applied.");
 		}
 		// Consumed: the recording now lives in a project. Cleared here rather than
 		// after the timeline seed below so a failure down there can't hand the same

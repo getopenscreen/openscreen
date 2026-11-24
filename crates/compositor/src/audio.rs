@@ -3118,7 +3118,10 @@ mod tests {
         // crests back over full scale), raised by the loudness gain: the export read +0.5 dBTP.
         let mut recording = through_aac(&voice(8.0, 1.0, 2.0), "clipped-recording");
         let gain = loudness_gain_for(loudness_of(&recording));
-        assert!(gain > 1.0, "the fixture needs raising, like #1157's +1.6 dB: {gain}");
+        // Any raise will do: how much depends on the AAC encoder's version (ffmpeg 9.0 asks
+        // +1.24 dB of this fixture, 9.1 +0.95, #1157 asked +1.6). The crests over full scale,
+        // checked just below, are what the test needs.
+        assert!(gain > 0.0, "the fixture needs raising, like #1157's +1.6 dB: {gain}");
         apply_gain_db(&mut recording, gain);
         assert_lufs(loudness_of(&recording), -16.0);
         let hot = true_peak_dbtp(&recording);

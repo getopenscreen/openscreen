@@ -22,6 +22,25 @@ function fnBody(name: string): string {
 	return source.slice(start, end === -1 ? undefined : end);
 }
 
+/** The continuation after `start()` settles — where a stale start must not publish. */
+function afterStart(body: string): string {
+	const anchor = body.indexOf("await session.start()");
+	expect(anchor, "no await session.start()").toBeGreaterThan(-1);
+	return body.slice(anchor);
+}
+
+/** The `onKeyEvent` callback — where queued keys from a stale session must be dropped. */
+function keyEventCallback(body: string): string {
+	const anchor = body.indexOf("onKeyEvent:");
+	expect(anchor, "no onKeyEvent").toBeGreaterThan(-1);
+	// The callback closes with `},` (an object property), not `}),`. Bound the
+	// slice at the first statement after the factory call so the post-start
+	// continuation guard cannot leak into this region.
+	const end = body.indexOf("pendingKeystrokeKeySession = session", anchor);
+	expect(end, "no statement after onKeyEvent").toBeGreaterThan(-1);
+	return body.slice(anchor, end);
+}
+
 describe("keystroke key capture lifecycle", () => {
 	const start = fnBody("startKeystrokeKeyCapture");
 	const stop = fnBody("stopKeystrokeKeyCapture");
@@ -50,19 +69,31 @@ describe("keystroke key capture lifecycle", () => {
 	});
 
 	it("does not republish a session whose generation Stop invalidated", () => {
-		expect(start).toContain("if (generation !== keystrokeKeyGeneration) return;");
-		expect(start).toContain("keystrokeKeySession = session");
+		// Scope to the continuation after start(): a guard only inside onKeyEvent
+		// must not satisfy this test.
+		const continuation = afterStart(start);
+		expect(continuation).toContain("if (generation !== keystrokeKeyGeneration) return;");
+		expect(continuation).toContain("keystrokeKeySession = session");
 	});
 
 	it("drops key events from a torn-down session", () => {
-		expect(start).toContain("if (generation !== keystrokeKeyGeneration) return;");
-		expect(start).toContain("broadcastKeystroke(event.vk, event.modifiers)");
+		// Scope to the callback only: a guard only in the post-start continuation
+		// must not satisfy this test.
+		const callback = keyEventCallback(start);
+		expect(callback).toContain("if (generation !== keystrokeKeyGeneration) return;");
+		expect(callback).toContain("broadcastKeystroke(event.vk, event.modifiers)");
 	});
 
 	it("owns teardown once: a stale start does not stop the session Stop already stopped", () => {
-		// The generation-mismatch branch must only `return`, never call stop().
-		const mismatch = start.slice(start.indexOf("if (generation !== keystrokeKeyGeneration)"));
-		const branch = mismatch.slice(0, mismatch.indexOf("keystrokeKeySession = session"));
+		// The generation-mismatch branch in the post-start continuation must only
+		// `return`, never call stop() — Stop is the sole owner of teardown.
+		const continuation = afterStart(start);
+		const mismatch = continuation.indexOf("if (generation !== keystrokeKeyGeneration)");
+		expect(mismatch, "no completion generation guard").toBeGreaterThan(-1);
+		const branch = continuation.slice(
+			mismatch,
+			continuation.indexOf("keystrokeKeySession = session"),
+		);
 		expect(branch).not.toContain("session.stop()");
 	});
 });

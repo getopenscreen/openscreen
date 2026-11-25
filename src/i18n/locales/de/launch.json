@@ -42,7 +42,7 @@
 			"mirror": "Horizontal spiegeln",
 			"mirrorTip": "Spiegelt den Text, damit er im Spiegel lesbar ist"
 		},
-		"addTimelineMarker": "Timeline-Marker hinzufügen (M)"
+		"addTimelineMarker": "Timeline-Marker hinzufügen"
 	},
 	"audio": {
 		"systemAudio": "Systemton",

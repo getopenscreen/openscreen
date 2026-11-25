@@ -42,7 +42,7 @@
 			"mirror": "水平鏡像",
 			"mirrorTip": "水平翻轉文字，以便在鏡子中閱讀"
 		},
-		"addTimelineMarker": "新增時間軸標記（M）"
+		"addTimelineMarker": "新增時間軸標記"
 	},
 	"audio": {
 		"systemAudio": "系統音訊",

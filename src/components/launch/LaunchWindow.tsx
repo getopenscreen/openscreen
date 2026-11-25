@@ -362,25 +362,6 @@ export function LaunchWindow() {
 	}, []);
 
 	useEffect(() => {
-		const handleMarkerKey = (event: KeyboardEvent) => {
-			// M while a take runs. No modifiers, so platform menu accelerators keep
-			// theirs, and nothing while an input holds focus.
-			if (event.key !== "m" && event.key !== "M") return;
-			if (event.ctrlKey || event.altKey || event.metaKey) return;
-			if (event.repeat) return;
-			const target = event.target as HTMLElement | null;
-			if (
-				target &&
-				(target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable)
-			)
-				return;
-			addTimelineMarker();
-		};
-		window.addEventListener("keydown", handleMarkerKey);
-		return () => window.removeEventListener("keydown", handleMarkerKey);
-	}, [addTimelineMarker]);
-
-	useEffect(() => {
 		if (!isPopoverOpen) return;
 
 		const handlePointerDown = (event: PointerEvent) => {

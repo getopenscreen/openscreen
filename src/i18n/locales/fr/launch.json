@@ -42,7 +42,7 @@
 			"mirror": "Miroir horizontal",
 			"mirrorTip": "Retourne le texte pour pouvoir le lire dans un miroir"
 		},
-		"addTimelineMarker": "Ajouter un marqueur de montage (M)"
+		"addTimelineMarker": "Ajouter un marqueur de montage"
 	},
 	"audio": {
 		"systemAudio": "Audio système",

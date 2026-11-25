@@ -96,7 +96,7 @@ type UseScreenRecorderReturn = {
 	elapsedSeconds: number;
 	/** How many timeline markers were pressed during the current take. */
 	markerCount: number;
-	/** Stamps a marker at the current recording time (HUD button / shortcut). */
+	/** Stamps a marker at the current recording time from the HUD button. */
 	addTimelineMarker: () => void;
 	toggleRecording: () => void;
 	/** Starts recording with no countdown overlay. Used by the headless CLI runner. */

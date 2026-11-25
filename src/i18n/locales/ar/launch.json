@@ -42,7 +42,7 @@
 			"mirror": "عكس أفقي",
 			"mirrorTip": "اقلب النص أفقيًا لقراءته في مرآة"
 		},
-		"addTimelineMarker": "إضافة علامة على الخط الزمني (M)"
+		"addTimelineMarker": "إضافة علامة على الخط الزمني"
 	},
 	"audio": {
 		"systemAudio": "صوت النظام",

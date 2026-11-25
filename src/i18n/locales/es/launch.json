@@ -42,7 +42,7 @@
 			"mirror": "Reflejar horizontalmente",
 			"mirrorTip": "Refleja el texto para poder leerlo en un espejo"
 		},
-		"addTimelineMarker": "Añadir un marcador de línea de tiempo (M)"
+		"addTimelineMarker": "Añadir un marcador de línea de tiempo"
 	},
 	"audio": {
 		"systemAudio": "Audio del sistema",

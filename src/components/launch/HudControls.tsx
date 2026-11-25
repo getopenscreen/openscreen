@@ -551,7 +551,8 @@ export const HudNotesButton = memo(function HudNotesButton({
 });
 
 // Mid-take only: each press stamps a marker at the current recording time, shown
-// later on the editor's timeline. The count reads at a glance how many were set.
+// later on the editor's timeline. The badge counts markers without changing the
+// control's icon-button footprint.
 export const HudMarkerButton = memo(function HudMarkerButton({
 	disabled,
 	label,
@@ -568,17 +569,18 @@ export const HudMarkerButton = memo(function HudMarkerButton({
 			<button
 				type="button"
 				data-testid="launch-marker-button"
-				aria-label={label}
+				aria-label={count > 0 ? `${label} (${count})` : label}
 				disabled={disabled}
-				// Wider than hudIconBtnClasses' fixed 34px once the count shows, so
-				// the digits never clip; the plain icon keeps the bar's rhythm.
-				className={`${hudIconBtnClasses} ${count > 0 ? "w-auto min-w-[34px] gap-[3px] px-2" : ""}`}
+				className={`${hudIconBtnClasses} relative`}
 				onClick={onClick}
 			>
 				<Bookmark size={ICON_SIZE} />
 				{count > 0 && (
-					<span className="text-[10px] font-semibold leading-none text-white/85 tabular-nums">
-						{count}
+					<span
+						aria-hidden
+						className="absolute -top-0.5 -right-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-[#10b981] px-1 text-[9px] font-semibold leading-none text-[#07110c] tabular-nums"
+					>
+						{count > 99 ? "99+" : count}
 					</span>
 				)}
 			</button>

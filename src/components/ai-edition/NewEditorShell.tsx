@@ -28,7 +28,11 @@ import type {
 } from "@/lib/ai-edition/schema";
 import { withPastedShaderEffect } from "@/lib/ai-edition/shaderEffects";
 import { useMcpDocumentHost } from "@/lib/ai-edition/store/mcpDocumentHost";
-import { saveWithDeadline, useProjectStore } from "@/lib/ai-edition/store/projectStore";
+import {
+	saveWithDeadline,
+	useProjectStore,
+	waitForDocumentSaves,
+} from "@/lib/ai-edition/store/projectStore";
 import {
 	useAssetTranscriptions,
 	useAutoTranscription,
@@ -167,6 +171,11 @@ export async function runLoadedMetadataWrite(
 	// still sitting at the placeholder reads as waiting.
 	const finite = Number.isFinite(durationSec) && durationSec > 0;
 	const knownSec = finite ? durationSec : PLACEHOLDER_DURATION_SEC;
+	// Read the document only once no save is still landing, or this write would be built on
+	// the one before it and undo it when it lands: a fresh recording's camera look, saved by
+	// the import just as the video loads, is the write this waits for. A timeout reads
+	// anyway, as before: dropping the probed duration would leave the placeholder clip.
+	await waitForDocumentSaves(deps.saveTimeoutMs);
 	const state = useProjectStore.getState();
 	// The placeholder exists so the FIRST clip is not empty, nothing more. Once a
 	// timeline is there, a length nothing measured has nothing to fold in -- and

@@ -165,8 +165,12 @@ describe("importPendingRecording", () => {
 		stubElectronApi("/recordings/recording-1.webm");
 		addAsset.mockImplementationOnce(async () => {
 			useProjectStore.setState({
-				// biome-ignore lint/suspicious/noExplicitAny: only the two fields the seed reads
-				document: { assets: [{ id: "a1" }], timeline: { clips: [] } } as any,
+				document: {
+					project: { id: "proj_stub" },
+					assets: [{ id: "a1" }],
+					timeline: { clips: [] },
+					// biome-ignore lint/suspicious/noExplicitAny: only the fields the seed reads
+				} as any,
 			});
 			return null;
 		});
@@ -269,6 +273,36 @@ describe("importPendingRecording", () => {
 			);
 			const [saved] = saveDocument.mock.calls[0] as unknown as [AxcutDocument];
 			expect(saved.project.id).toBe("proj_stub");
+		});
+
+		it("sets up nothing on a project with a recording and no clips opened during the save", async () => {
+			const api = stubElectronApi("/recordings/recording-1.mp4");
+			stubRecordingPrefs({ camShape: "square", camRoundness: 0.25 });
+			const other = createEmptyDocument({ projectId: "proj_other", title: "Other" });
+			saveDocument.mockImplementationOnce(async () => {
+				useProjectStore.setState({
+					document: {
+						...other,
+						assets: [
+							{
+								id: "asset_b",
+								kind: "video",
+								label: "b.mp4",
+								originalPath: "/recordings/b.mp4",
+								cameraTrack: null,
+							},
+						],
+					},
+				});
+				return true;
+			});
+
+			await expect(importPendingRecording()).resolves.toBe(true);
+
+			// B is left as it was: no placeholder clip seeded into it.
+			expect(replaceTimeline).not.toHaveBeenCalled();
+			// The recording is already in its own project, so the hand-off is still consumed.
+			expect(api.setCurrentRecordingSession).toHaveBeenCalledWith(null);
 		});
 
 		// Leaving the session pending would import the take into a second project next time.

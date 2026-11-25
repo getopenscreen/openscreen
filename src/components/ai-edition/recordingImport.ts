@@ -461,8 +461,14 @@ export async function importPendingRecording(
 		// asset, drop a default 60s clip into the timeline so the editor isn't stuck
 		// on "No clips yet" the moment the user lands in the project. Real duration
 		// overwrites this when handleLoadedMetadata fires with a finite value.
+		// Every wait above is a moment another project can open: set up only the project made
+		// for this recording, which already holds it, so the session stays consumed either way.
 		const doc = useProjectStore.getState().document;
-		if (doc && doc.timeline.clips.length === 0 && doc.assets.length > 0) {
+		if (
+			doc?.project.id === created.project.id &&
+			doc.timeline.clips.length === 0 &&
+			doc.assets.length > 0
+		) {
 			// `history: false`. Nothing here is an edit: the user finished a recording and the
 			// editor built them a project around it, unattended, on mount. Recording it left a
 			// brand-new project sitting at `past.length === 1` before the user had touched
@@ -475,7 +481,7 @@ export async function importPendingRecording(
 				});
 		}
 		const latest = useProjectStore.getState().document;
-		if (latest) {
+		if (latest?.project.id === created.project.id) {
 			await maybeSaveFreshRecordingAutoZooms(latest);
 		}
 		if (warning) {

@@ -1169,9 +1169,16 @@ mod tests {
         };
         let (x0_base, _, x1_base, _) = ink_bounds(&px_base, w, h);
         let (x0_punct, _, x1_punct, _) = ink_bounds(&px_punct, w, h);
+        let prefix_end = (x0_base + 80).min(w);
+        let prefix_unchanged = (0..h).all(|y| {
+            (x0_base..prefix_end).all(|x| {
+                let i = (y * w + x) * 4 + 3;
+                px_base[i].abs_diff(px_punct[i]) <= 2
+            })
+        });
         assert!(
-            (x0_base as isize - x0_punct as isize).abs() <= 2 && x1_punct > x1_base + 10,
-            "la ponctuation finale d'une phrase LTR doit s'ajouter à droite : ({x0_base}..{x1_base}) vs ({x0_punct}..{x1_punct})"
+            prefix_unchanged && x1_punct > x1_base + 10,
+            "la ponctuation finale d'une phrase LTR doit s'ajouter à droite sans décaler le préfixe : ({x0_base}..{x1_base}) vs ({x0_punct}..{x1_punct})"
         );
     }
 }

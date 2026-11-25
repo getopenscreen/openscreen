@@ -893,13 +893,78 @@ fn oriented_cursor(track: CursorTrack, turned: bool) -> CursorTrack {
     if turned { track.turned() } else { track }
 }
 
+/// How many shaped tracks `ShapedCursors` keeps. Each is the whole recording at 240 Hz, about
+/// 20 MB for an hour of footage, so the cap bounds memory. Scrubbing back and forth over a cut
+/// needs two.
+const SHAPED_CURSORS_CAP: usize = 4;
+
+/// What a shaped track was built from: the telemetry (`cursor_key`), the smoothing, and the
+/// playing chain's breaks and motion sections (`cursor_shape_inputs`).
+#[derive(Clone, PartialEq)]
+struct ShapedCursorKey {
+    track: String,
+    smoothing: f32,
+    shape: CursorShape,
+}
+
+/// The shaped cursor tracks the preview already built, the most recently used last.
+///
+/// Shaping is one spring pass over the whole recording, on the render thread, and its inputs
+/// change with the chain of clips that plays. Without this, every crossing of a cut, played or
+/// scrubbed, paid that pass again: tens of milliseconds on an hour of footage, at the very frame
+/// the cut shows.
+#[derive(Default)]
+struct ShapedCursors {
+    entries: Vec<(ShapedCursorKey, CursorTrack)>,
+}
+
+impl ShapedCursors {
+    /// The track for `key`, from `build` the first time and from memory afterwards.
+    fn get_or_build(
+        &mut self,
+        key: ShapedCursorKey,
+        build: impl FnOnce() -> CursorTrack,
+    ) -> CursorTrack {
+        if let Some(found) = self.entries.iter().position(|(k, _)| *k == key) {
+            let entry = self.entries.remove(found);
+            let track = entry.1.clone();
+            self.entries.push(entry);
+            return track;
+        }
+        let track = build();
+        if self.entries.len() >= SHAPED_CURSORS_CAP {
+            self.entries.remove(0);
+        }
+        self.entries.push((key, track.clone()));
+        track
+    }
+
+    /// `raw`, the telemetry `track_key` names, shaped for one chain of clips.
+    fn shaped(
+        &mut self,
+        raw: &CursorTrack,
+        track_key: &str,
+        smoothing: f32,
+        shape: &CursorShape,
+    ) -> CursorTrack {
+        let key = ShapedCursorKey {
+            track: track_key.to_string(),
+            smoothing,
+            shape: shape.clone(),
+        };
+        self.get_or_build(key, || raw.shaped(smoothing, &shape.0, &shape.1))
+    }
+}
+
 /// Rereads the active clip's cursor telemetry when its key changed (another file, or the same
 /// file turned the other way) and hands it to the compositor already smoothed, so a paused
 /// preview never shows one unsmoothed frame. Returns whether it reread.
+#[allow(clippy::too_many_arguments)]
 fn reload_cursor_if_changed(
     comp: &Compositor,
     raw_cursor: &mut Option<CursorTrack>,
     loaded_cursor_path: &mut String,
+    shaped_cursors: &mut ShapedCursors,
     screen_path: &str,
     turned: bool,
     smoothing: f32,
@@ -930,7 +995,12 @@ fn reload_cursor_if_changed(
     // curseur (`Compositor::resized`), et le relisser parcourt tout
     // l'enregistrement à chaque bascule d'un scrub.
     match raw_cursor {
-        Some(track) => comp.set_cursor(track.shaped(smoothing, &shape.0, &shape.1)),
+        Some(track) => comp.set_cursor(shaped_cursors.shaped(
+            track,
+            loaded_cursor_path,
+            smoothing,
+            shape,
+        )),
         None => comp.clear_cursor(),
     }
     true
@@ -941,8 +1011,8 @@ fn reload_cursor_if_changed(
 type CursorShape = (Vec<f32>, Vec<crate::cursor::MotionRegion>);
 
 /// Both belong to the chain of clip `clip_index` (`Scene::cursor_chain`): the clips of a chain
-/// share one shaped track, and the track is shaped again when playback moves to another chain,
-/// even on the same file. One spring pass over the recording.
+/// share one shaped track, and another chain needs another one, even on the same file. Each is
+/// one spring pass over the recording: built once, then kept (`ShapedCursors`).
 fn cursor_shape_inputs(scene: Option<&Scene>, clip_index: usize) -> CursorShape {
     scene
         .map(|s| {
@@ -1537,6 +1607,7 @@ unsafe fn advance_to_next_scene_clip(
     active_clip_index: &mut usize,
     raw_cursor: &mut Option<CursorTrack>,
     loaded_cursor_path: &mut String,
+    shaped_cursors: &mut ShapedCursors,
     smoothing: f32,
     last_smoothing: &mut f32,
     last_shape: &mut CursorShape,
@@ -1618,7 +1689,12 @@ unsafe fn advance_to_next_scene_clip(
             // (a clip that opens inside a Freeze showed the recorded position first).
             let shape = cursor_shape_inputs(Some(scene), next_index);
             match raw_cursor {
-                Some(track) => comp.set_cursor(track.shaped(smoothing, &shape.0, &shape.1)),
+                Some(track) => comp.set_cursor(shaped_cursors.shaped(
+                    track,
+                    loaded_cursor_path,
+                    smoothing,
+                    &shape,
+                )),
                 None => comp.clear_cursor(),
             }
             *last_smoothing = smoothing;
@@ -1727,6 +1803,7 @@ unsafe fn render_thread(
     let mut last_smoothing: f32 = -1.0; // force la 1re application (0.0 est une valeur valide)
     // The breaks and motion sections the current track was shaped with (`cursor_shape_inputs`).
     let mut last_shape: CursorShape = Default::default();
+    let mut shaped_cursors = ShapedCursors::default();
     // Fenêtre de stabilisation après un changement EN PAUSE. Un seul recompose ne suffit pas
     // quand l'effet demandé est asynchrone : la segmentation webcam (détourage / flou / fond
     // personnalisé) démarre son worker au 1er compose, ne SOUMET la frame qu'au 2e et ne
@@ -1845,6 +1922,7 @@ unsafe fn render_thread(
                         &comp,
                         &mut raw_cursor,
                         &mut loaded_cursor_path,
+                        &mut shaped_cursors,
                         &active_screen_path,
                         turned,
                         ip.cursor_smoothing,
@@ -1922,6 +2000,7 @@ unsafe fn render_thread(
                 &comp,
                 &mut raw_cursor,
                 &mut loaded_cursor_path,
+                &mut shaped_cursors,
                 &active_screen_path,
                 turned,
                 ip.cursor_smoothing,
@@ -1939,7 +2018,12 @@ unsafe fn render_thread(
         if let Some(raw) = &raw_cursor {
             let shape = cursor_shape_inputs(full_scene.as_ref(), active_clip_index);
             if ip.cursor_smoothing != last_smoothing || shape != last_shape {
-                comp.set_cursor(raw.shaped(ip.cursor_smoothing, &shape.0, &shape.1));
+                comp.set_cursor(shaped_cursors.shaped(
+                    raw,
+                    &loaded_cursor_path,
+                    ip.cursor_smoothing,
+                    &shape,
+                ));
                 last_smoothing = ip.cursor_smoothing;
                 last_shape = shape;
             }
@@ -2080,6 +2164,7 @@ unsafe fn render_thread(
                                 &mut active_clip_index,
                                 &mut raw_cursor,
                                 &mut loaded_cursor_path,
+                                &mut shaped_cursors,
                                 ip.cursor_smoothing,
                                 &mut last_smoothing,
                                 &mut last_shape,
@@ -2113,6 +2198,7 @@ unsafe fn render_thread(
                             &mut active_clip_index,
                             &mut raw_cursor,
                             &mut loaded_cursor_path,
+                            &mut shaped_cursors,
                             ip.cursor_smoothing,
                             &mut last_smoothing,
                             &mut last_shape,
@@ -2497,13 +2583,123 @@ pub fn run_standalone(_screen: &str, _webcam: &str, _cursor_json: &str) -> anyho
 
 #[cfg(test)]
 mod tests {
-    use super::{cursor_key, open_settle_window, should_settle, SETTLE_STEP, SETTLE_WINDOW};
+    use super::{
+        cursor_key, open_settle_window, should_settle, CursorShape, ShapedCursorKey,
+        ShapedCursors, SETTLE_STEP, SETTLE_WINDOW, SHAPED_CURSORS_CAP,
+    };
+    use crate::cursor::{CursorTrack, MotionEasing, MotionMode, MotionRegion};
     use std::time::Instant;
 
     #[test]
     fn cursor_key_tells_a_turned_clip_from_an_upright_one() {
         assert_eq!(cursor_key("a.mp4", false), "a.mp4.cursor.json");
         assert_ne!(cursor_key("a.mp4", false), cursor_key("a.mp4", true));
+    }
+
+    /// A pointer crossing the frame in four seconds, sampled at 30 Hz.
+    fn moving_cursor() -> CursorTrack {
+        let samples = (0..=120).map(|i| (i as f32 / 30.0, i as f32 / 120.0, 0.5)).collect();
+        CursorTrack::new(samples, Vec::new(), Vec::new())
+    }
+
+    fn shaped_key(track: &str, breaks: &[f32]) -> ShapedCursorKey {
+        ShapedCursorKey {
+            track: track.to_string(),
+            smoothing: 0.5,
+            shape: (breaks.to_vec(), Vec::new()),
+        }
+    }
+
+    fn freeze(start: f32, end: f32) -> MotionRegion {
+        MotionRegion {
+            start,
+            end,
+            mode: MotionMode::Freeze,
+            strength: 0.5,
+            easing: MotionEasing::EaseInOut,
+            blend_start: true,
+            blend_end: true,
+            anchor_start: start,
+            anchor_end: end,
+            progress: (0.0, 1.0),
+        }
+    }
+
+    /// How many of `keys`, asked in order, had to be built.
+    fn builds(cache: &mut ShapedCursors, keys: &[ShapedCursorKey]) -> usize {
+        let mut built = 0;
+        for key in keys {
+            cache.get_or_build(key.clone(), || {
+                built += 1;
+                moving_cursor()
+            });
+        }
+        built
+    }
+
+    /// The cost this removes: scrubbing back and forth over a cut asked for the same two tracks
+    /// again and again, and each request was a spring pass over the whole recording.
+    #[test]
+    fn a_shaped_cursor_is_built_once_per_track_smoothing_and_shape() {
+        let mut cache = ShapedCursors::default();
+        let before_cut = shaped_key("a", &[0.0]);
+        let after_cut = shaped_key("a", &[2.0]);
+        let crossings =
+            [before_cut.clone(), after_cut.clone(), before_cut.clone(), after_cut.clone()];
+        assert_eq!(builds(&mut cache, &crossings), 2);
+
+        let turned = shaped_key("a#turned", &[2.0]);
+        let stronger = ShapedCursorKey { smoothing: 0.8, ..after_cut.clone() };
+        let with_section =
+            ShapedCursorKey { shape: (vec![2.0], vec![freeze(2.5, 3.0)]), ..after_cut.clone() };
+        assert_eq!(
+            builds(&mut cache, &[turned, stronger, with_section]),
+            3,
+            "another track, smoothing or motion section",
+        );
+    }
+
+    #[test]
+    fn the_shaped_cursors_kept_are_the_most_recently_used() {
+        let mut cache = ShapedCursors::default();
+        let keys: Vec<ShapedCursorKey> =
+            (0..=SHAPED_CURSORS_CAP).map(|i| shaped_key("a", &[i as f32])).collect();
+        assert_eq!(builds(&mut cache, &keys[..SHAPED_CURSORS_CAP]), SHAPED_CURSORS_CAP);
+        // Using the oldest again makes the second oldest the one a new track pushes out.
+        assert_eq!(builds(&mut cache, &keys[..1]), 0);
+        assert_eq!(builds(&mut cache, &keys[SHAPED_CURSORS_CAP..]), 1);
+        assert_eq!(builds(&mut cache, &keys[..1]), 0, "the one used again is still there");
+        assert_eq!(builds(&mut cache, &keys[1..2]), 1, "the second oldest is gone");
+    }
+
+    /// What comes out of the cache is the track its shape gives, the first time and every time
+    /// after it.
+    #[test]
+    fn a_kept_shaped_cursor_is_the_one_its_shape_gives() {
+        let raw = moving_cursor();
+        let mut cache = ShapedCursors::default();
+        let shapes: [CursorShape; 3] = [
+            (vec![], vec![]),
+            (vec![2.0], vec![]),
+            (vec![2.0], vec![freeze(2.5, 3.0)]),
+        ];
+        for _ in 0..2 {
+            for shape in &shapes {
+                let expected = raw.shaped(0.5, &shape.0, &shape.1);
+                let got = cache.shaped(&raw, "a", 0.5, shape);
+                for t in [0.5f32, 2.0, 2.1, 2.75, 3.5] {
+                    assert_eq!(got.at(t), expected.at(t), "shape {shape:?} at {t}");
+                }
+            }
+        }
+        // They differ where it matters: right after the break the restarted spring is on the
+        // pointer and the unbroken one still trails it, and inside the section the cursor holds.
+        let unbroken = cache.shaped(&raw, "a", 0.5, &shapes[0]).at(2.0).unwrap();
+        let restarted = cache.shaped(&raw, "a", 0.5, &shapes[1]).at(2.0).unwrap();
+        assert!(restarted.0 - unbroken.0 > 0.01, "{restarted:?} against {unbroken:?}");
+        let moving = cache.shaped(&raw, "a", 0.5, &shapes[1]).at(2.75).unwrap();
+        let held = cache.shaped(&raw, "a", 0.5, &shapes[2]).at(2.75).unwrap();
+        assert!(moving.0 - held.0 > 0.01, "{moving:?} against {held:?}");
     }
 
     /// Le bug d'origine : en pause, un seul recompose par changement, donc le masque de

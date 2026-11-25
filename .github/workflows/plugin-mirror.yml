@@ -30,8 +30,10 @@ on:
       - ".github/workflows/plugin-mirror.yml"
   workflow_dispatch:
 
+# Publishing runs queue in one group; a PR's check gets a group of its own, so
+# it can never take the place of a pending publication.
 concurrency:
-  group: plugin-mirror
+  group: plugin-mirror-${{ github.event_name == 'pull_request' && github.ref || 'publish' }}
   cancel-in-progress: false
 
 permissions:
@@ -68,7 +70,7 @@ jobs:
           cp LICENSE "$RUNNER_TEMP/tree/LICENSE"
 
       - name: Push to getopenscreen/openscreen-plugin
-        if: github.event_name != 'pull_request' && github.repository == 'getopenscreen/openscreen'
+        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main' && github.repository == 'getopenscreen/openscreen'
         env:
           DEPLOY_KEY: ${{ secrets.PLUGIN_MIRROR_DEPLOY_KEY }}
         run: |

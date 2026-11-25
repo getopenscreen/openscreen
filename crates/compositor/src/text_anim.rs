@@ -106,6 +106,34 @@ pub fn text_animation_state(
     }
 }
 
+/// Detects whether a text string contains right-to-left script characters (Arabic, Hebrew, Syriac, Thaana, NKo).
+pub fn is_rtl_text(s: &str) -> bool {
+    s.chars().any(|c| {
+        matches!(
+            c as u32,
+            0x0590..=0x08FF | 0xFB1D..=0xFDFF | 0xFE70..=0xFEFF | 0x10E60..=0x10E7F | 0x1EE00..=0x1EEFF
+        )
+    })
+}
+
+/// Computes `(dst, src)` UV/quad rectangles for horizontal reveal (`typewriter`),
+/// revealing from Left-to-Right for LTR scripts and Right-to-Left (`1.0 - reveal .. 1.0`) for RTL scripts.
+pub fn reveal_quad(ax: f32, ay: f32, aw: f32, ah: f32, reveal: f32, is_rtl: bool) -> ([f32; 4], [f32; 4]) {
+    let r = clamp01(reveal);
+    if is_rtl && r < 1.0 {
+        let offset = 1.0 - r;
+        (
+            [ax + aw * offset, ay, aw * r, ah],
+            [offset, 0.0, r, 1.0],
+        )
+    } else {
+        (
+            [ax, ay, aw * r, ah],
+            [0.0, 0.0, r, 1.0],
+        )
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -244,5 +272,19 @@ mod tests {
     #[test]
     fn an_empty_region_does_not_divide_by_zero() {
         assert!(text_animation_state(Some("fade"), 0.0, 0.0).opacity.is_finite());
+    }
+
+    #[test]
+    fn arabic_rtl_text_is_detected_and_reveals_from_the_right() {
+        assert!(is_rtl_text("تسجيل الشاشة: الإصدار 2.2"));
+        assert!(!is_rtl_text("OpenScreen 2.2 — Release"));
+
+        let (dst_ltr, src_ltr) = reveal_quad(100.0, 50.0, 400.0, 80.0, 0.25, false);
+        assert!((dst_ltr[0] - 100.0).abs() < 1e-4 && (dst_ltr[2] - 100.0).abs() < 1e-4);
+        assert!((src_ltr[0] - 0.0).abs() < 1e-4 && (src_ltr[2] - 0.25).abs() < 1e-4);
+
+        let (dst_rtl, src_rtl) = reveal_quad(100.0, 50.0, 400.0, 80.0, 0.25, true);
+        assert!((dst_rtl[0] - 400.0).abs() < 1e-4 && (dst_rtl[2] - 100.0).abs() < 1e-4);
+        assert!((src_rtl[0] - 0.75).abs() < 1e-4 && (src_rtl[2] - 0.25).abs() < 1e-4);
     }
 }

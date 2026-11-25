@@ -2152,11 +2152,14 @@ impl Compositor {
                     if reveal <= 0.0 {
                         continue;
                     }
+                    let is_rtl = crate::text_anim::is_rtl_text(&text.content);
+                    let (reveal_dst, reveal_src) =
+                        crate::text_anim::reveal_quad(ax, ay, aw, ah, reveal, is_rtl);
                     enc.set_fragment_texture(2, Some(&tex));
                     self.draw_solid(enc, &LayerCB {
-                        dst: [ax, ay, aw * reveal, ah],
-                        src: [0.0, 0.0, reveal, 1.0],
-                        quad_px: [aw * reveal * rw, ah * rh],
+                        dst: reveal_dst,
+                        src: reveal_src,
+                        quad_px: [reveal_dst[2] * rw, ah * rh],
                         mode: 11.0,
                         color: [1.0, 1.0, 1.0, anim.opacity],
                         ..Default::default()

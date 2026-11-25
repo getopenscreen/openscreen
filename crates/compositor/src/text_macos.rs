@@ -139,6 +139,8 @@ const K_CF_STRING_ENCODING_UTF8: u32 = 0x0800_0100;
 const K_CF_NUMBER_S_INT32_TYPE: CFIndex = 3;
 /// `kCTParagraphStyleSpecifierAlignment`.
 const K_CT_PARAGRAPH_STYLE_SPECIFIER_ALIGNMENT: u32 = 0;
+/// `kCTParagraphStyleSpecifierBaseWritingDirection` (0 = LTR, 1 = RTL, -1 = Natural).
+const K_CT_PARAGRAPH_STYLE_SPECIFIER_BASE_WRITING_DIRECTION: u32 = 13;
 /// `CTFontSymbolicTraits` : italique / gras.
 const K_CT_FONT_TRAIT_ITALIC: u32 = 1 << 0;
 const K_CT_FONT_TRAIT_BOLD: u32 = 1 << 1;
@@ -661,13 +663,21 @@ impl TextRasterizer {
         let color = CFOwned::new(CGColorCreate(space, components.as_ptr()))
             .ok_or_else(|| anyhow!("CGColorCreate a renvoyé NULL"))?;
 
-        // --- alignement ---
+        // --- alignement + direction de base BiDi (arabe / hébreu -> RTL) ---
         let alignment: u8 = ct_alignment(&spec.align);
-        let settings = [CTParagraphStyleSetting {
-            spec: K_CT_PARAGRAPH_STYLE_SPECIFIER_ALIGNMENT,
-            value_size: std::mem::size_of::<u8>(),
-            value: &alignment as *const u8 as *const c_void,
-        }];
+        let base_dir: i8 = if crate::text_anim::is_rtl_text(&spec.content) { 1 } else { -1 };
+        let settings = [
+            CTParagraphStyleSetting {
+                spec: K_CT_PARAGRAPH_STYLE_SPECIFIER_ALIGNMENT,
+                value_size: std::mem::size_of::<u8>(),
+                value: &alignment as *const u8 as *const c_void,
+            },
+            CTParagraphStyleSetting {
+                spec: K_CT_PARAGRAPH_STYLE_SPECIFIER_BASE_WRITING_DIRECTION,
+                value_size: std::mem::size_of::<i8>(),
+                value: &base_dir as *const i8 as *const c_void,
+            },
+        ];
         let paragraph = CFOwned::new(CTParagraphStyleCreate(settings.as_ptr(), settings.len()));
 
         // --- soulignement ---

@@ -3251,7 +3251,9 @@ impl Compositor {
                         if reveal <= 0.0 {
                             continue;
                         }
-                        let anim_dst = [ax, ay, aw * reveal, ah];
+                        let is_rtl = crate::text_anim::is_rtl_text(&text.content);
+                        let (anim_dst, anim_src) =
+                            crate::text_anim::reveal_quad(ax, ay, aw, ah, reveal, is_rtl);
 
                         // PLAQUE DE FOND, dessinee AVANT les glyphes.
                         //
@@ -3278,15 +3280,17 @@ impl Compositor {
                             // `anim.scale` a pu agrandir).
                             let (box_w, box_h) =
                                 (spec.box_px[0].max(1) as f32, spec.box_px[1].max(1) as f32);
-                            let px = ax + (glyphs.plate[0] / box_w) * aw;
+                            let plate_x0 = ax + (glyphs.plate[0] / box_w) * aw;
+                            let plate_x1 = plate_x0 + (glyphs.plate[2] / box_w) * aw;
                             let py = ay + (glyphs.plate[1] / box_h) * ah;
                             let ph = (glyphs.plate[3] / box_h) * ah;
                             // Machine a ecrire : la plaque se decouvre avec le
-                            // texte, comme sur les backends qui la bakent dans la
-                            // texture — sinon l'aplat entier precede les glyphes.
-                            let pw = (((glyphs.plate[2] / box_w) * aw) + px)
-                                .min(ax + aw * reveal)
-                                - px;
+                            // texte (de gauche a droite en LTR, de droite a gauche
+                            // en RTL via `anim_dst`), comme sur les backends qui la
+                            // bakent dans la texture — sinon l'aplat entier precede
+                            // les glyphes.
+                            let px = plate_x0.max(anim_dst[0]);
+                            let pw = plate_x1.min(anim_dst[0] + anim_dst[2]) - px;
                             if pw > 0.0 && ph > 0.0 {
                                 let (pw_px, ph_px) = (pw * rw, ph * rh);
                                 let plate = LayerCB {
@@ -3318,7 +3322,7 @@ impl Compositor {
 
                         let cb = LayerCB {
                             dst: anim_dst,
-                            src: [0.0, 0.0, reveal, 1.0],
+                            src: anim_src,
                             quad_px: [anim_dst[2] * rw, anim_dst[3] * rh],
                             mode: 11.0,
                             color: [color[0], color[1], color[2], color[3] * anim.opacity],

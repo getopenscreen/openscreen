@@ -139,8 +139,6 @@ const K_CF_STRING_ENCODING_UTF8: u32 = 0x0800_0100;
 const K_CF_NUMBER_S_INT32_TYPE: CFIndex = 3;
 /// `kCTParagraphStyleSpecifierAlignment`.
 const K_CT_PARAGRAPH_STYLE_SPECIFIER_ALIGNMENT: u32 = 0;
-/// `kCTParagraphStyleSpecifierBaseWritingDirection` (0 = LTR, 1 = RTL, -1 = Natural).
-const K_CT_PARAGRAPH_STYLE_SPECIFIER_BASE_WRITING_DIRECTION: u32 = 13;
 /// `CTFontSymbolicTraits` : italique / gras.
 const K_CT_FONT_TRAIT_ITALIC: u32 = 1 << 0;
 const K_CT_FONT_TRAIT_BOLD: u32 = 1 << 1;
@@ -663,21 +661,16 @@ impl TextRasterizer {
         let color = CFOwned::new(CGColorCreate(space, components.as_ptr()))
             .ok_or_else(|| anyhow!("CGColorCreate a renvoyé NULL"))?;
 
-        // --- alignement + direction de base BiDi (arabe / hébreu -> RTL) ---
+        // --- alignement ---
+        // La direction de base reste au défaut CoreText (`kCTWritingDirectionNatural`), qui
+        // résout chaque paragraphe selon son premier caractère fort (UAX #9 P2/P3) sans forcer
+        // en RTL une légende anglaise contenant un mot arabe ou hébreu.
         let alignment: u8 = ct_alignment(&spec.align);
-        let base_dir: i8 = if crate::text_anim::is_rtl_text(&spec.content) { 1 } else { -1 };
-        let settings = [
-            CTParagraphStyleSetting {
-                spec: K_CT_PARAGRAPH_STYLE_SPECIFIER_ALIGNMENT,
-                value_size: std::mem::size_of::<u8>(),
-                value: &alignment as *const u8 as *const c_void,
-            },
-            CTParagraphStyleSetting {
-                spec: K_CT_PARAGRAPH_STYLE_SPECIFIER_BASE_WRITING_DIRECTION,
-                value_size: std::mem::size_of::<i8>(),
-                value: &base_dir as *const i8 as *const c_void,
-            },
-        ];
+        let settings = [CTParagraphStyleSetting {
+            spec: K_CT_PARAGRAPH_STYLE_SPECIFIER_ALIGNMENT,
+            value_size: std::mem::size_of::<u8>(),
+            value: &alignment as *const u8 as *const c_void,
+        }];
         let paragraph = CFOwned::new(CTParagraphStyleCreate(settings.as_ptr(), settings.len()));
 
         // --- soulignement ---
@@ -1158,6 +1151,27 @@ mod tests {
         assert!(
             (c1_bottom - c3_bottom).abs() > 1.0 && (c1_top - c3_top).abs() > 1.0,
             "le centrage devrait déplacer les deux arêtes"
+        );
+    }
+
+    #[test]
+    fn mixed_ltr_caption_with_rtl_word_keeps_ltr_trailing_punctuation() {
+        let mut base = spec("Welcome to مرحبا");
+        base.align = "left".into();
+        base.box_px = [900, 120];
+        let mut punctuated = base.clone();
+        punctuated.content = "Welcome to مرحبا.......".into();
+
+        let (Some((px_base, w, h)), Some((px_punct, _, _))) =
+            (raster_bgra(&base), raster_bgra(&punctuated))
+        else {
+            return;
+        };
+        let (x0_base, _, x1_base, _) = ink_bounds(&px_base, w, h);
+        let (x0_punct, _, x1_punct, _) = ink_bounds(&px_punct, w, h);
+        assert!(
+            (x0_base as isize - x0_punct as isize).abs() <= 2 && x1_punct > x1_base + 10,
+            "la ponctuation finale d'une phrase LTR doit s'ajouter à droite : ({x0_base}..{x1_base}) vs ({x0_punct}..{x1_punct})"
         );
     }
 }

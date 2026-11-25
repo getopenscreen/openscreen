@@ -18,7 +18,7 @@
 // test pins that: if npm ever changes how it formats a lockfile, a release
 // commit would otherwise silently become a 40k-line reformat.
 
-import { readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { argv } from "node:process";
 
@@ -31,6 +31,15 @@ import { argv } from "node:process";
 // semver: this is a gate on what may be written into a published manifest, and
 // build metadata or a leading "v" would be a caller bug, not a version to honour.
 const RELEASE_VERSION = /^\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?$/;
+
+// The Claude Code and Codex plugin manifests. Claude's plugin directory only
+// publishes a new plugin version when `version` goes up, so the plugin is
+// versioned with the app. Only stable versions reach them: the plugin is
+// mirrored from main, and a prerelease never lands there.
+const PLUGIN_MANIFESTS = ["plugin/.claude-plugin/plugin.json", "plugin/.codex-plugin/plugin.json"];
+// Both are hand-formatted (one-line objects and arrays) that JSON.stringify
+// would reflow, so only the version's own line is rewritten.
+const PLUGIN_VERSION_LINE = /^(\t"version": )"[^"]*"/m;
 
 export function setReleaseVersion(version, dir) {
 	if (!version) throw new Error("a version is required");
@@ -66,12 +75,27 @@ export function setReleaseVersion(version, dir) {
 		);
 	}
 
+	const plugins = /-/.test(version)
+		? []
+		: PLUGIN_MANIFESTS.map((name) => join(dir, name))
+				.filter((file) => existsSync(file))
+				.map((file) => {
+					const text = readFileSync(file, "utf8");
+					if (!PLUGIN_VERSION_LINE.test(text)) {
+						throw new Error(`${file} has no top-level "version" line to update`);
+					}
+					return { file, text: text.replace(PLUGIN_VERSION_LINE, `$1${JSON.stringify(version)}`) };
+				});
+
 	pkg.json.version = version;
 	lock.json.version = version;
 	lock.json.packages[""].version = version;
 
 	for (const { file, json } of [pkg, lock]) {
 		writeFileSync(file, `${JSON.stringify(json, null, "\t")}\n`);
+	}
+	for (const { file, text } of plugins) {
+		writeFileSync(file, text);
 	}
 }
 
@@ -83,5 +107,7 @@ if (import.meta.filename === argv[1]) {
 		process.exit(1);
 	}
 	setReleaseVersion(version, process.cwd());
-	console.log(`version ${version} set in package.json and package-lock.json`);
+	console.log(
+		`version ${version} set in package.json, package-lock.json and, for a stable version, the plugin manifests`,
+	);
 }

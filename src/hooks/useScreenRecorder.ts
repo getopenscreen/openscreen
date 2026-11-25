@@ -390,11 +390,17 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 			// window arrives (see startRecordCountdown's `startingCountdownOwner`). That
 			// take already captured its gain values in the `startRecording` closure, so
 			// applying the new gain here would move the slider away from what is about
-			// to be recorded. Defer only these two fields until the lock is released;
-			// every other preference field keeps applying live as before.
-			if (!startingCountdownOwner.current) {
-				setMicGainDb(prefs.micGainDb ?? 0);
-				setSystemAudioGainDb(prefs.systemAudioGainDb ?? 0);
+			// to be recorded. Stash the newest pair while locked and replay it when the
+			// owning countdown releases the lock; every other preference field keeps
+			// applying live as before.
+			const micGainDb = prefs.micGainDb ?? 0;
+			const systemAudioGainDb = prefs.systemAudioGainDb ?? 0;
+			if (startingCountdownOwner.current) {
+				pendingGainPrefs.current = { micGainDb, systemAudioGainDb };
+			} else {
+				pendingGainPrefs.current = null;
+				setMicGainDb(micGainDb);
+				setSystemAudioGainDb(systemAudioGainDb);
 			}
 			setCursorCaptureMode(prefs.cursorCaptureMode);
 			setRecordingPrefsLoaded(true);
@@ -474,6 +480,14 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 	 * release is gated on this token rather than `countdownStarting`.
 	 */
 	const startingCountdownOwner = useRef<object | null>(null);
+	/**
+	 * Newest gain snapshot received while `startingCountdownOwner` held the lock.
+	 * The take that held the lock already captured its own gains in the
+	 * `startRecording` closure, so applying the snapshot at once would desync the
+	 * sliders from that take. Replayed when the owning countdown releases the lock
+	 * so the following take sees the saved levels.
+	 */
+	const pendingGainPrefs = useRef<{ micGainDb: number; systemAudioGainDb: number } | null>(null);
 	const cursorAccessibilityWarningShown = useRef(false);
 	const [countdownActive, setCountdownActive] = useState(false);
 	const [startingCountdown, setStartingCountdown] = useState(false);
@@ -1828,6 +1842,16 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 			if (startingCountdownOwner.current === owner) {
 				startingCountdownOwner.current = null;
 				setStartingCountdown(false);
+				// Replay the newest gain snapshot received during the lock so a take
+				// that was cancelled (or a following take) uses the saved levels. The
+				// take that just unwound still used its own captured gains, so this
+				// only affects what is recorded next.
+				const pendingGains = pendingGainPrefs.current;
+				pendingGainPrefs.current = null;
+				if (pendingGains) {
+					setMicGainDb(pendingGains.micGainDb);
+					setSystemAudioGainDb(pendingGains.systemAudioGainDb);
+				}
 			}
 			if (countdownStarting.current === starting) {
 				countdownStarting.current = null;

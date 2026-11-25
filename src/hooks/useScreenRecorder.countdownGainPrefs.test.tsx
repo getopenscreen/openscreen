@@ -128,16 +128,54 @@ describe("countdown startup lock and gain preference snapshots", () => {
 		expect(view.result.current.micGainDb).toBe(0);
 		expect(view.result.current.systemAudioGainDb).toBe(0);
 
-		// Release the countdown; once the lock clears, a later snapshot applies.
+		// Release the countdown. The stashed -12/-6 must be replayed on lock release
+		// even though no new snapshot arrived — otherwise a cancelled take leaves the
+		// next recording on the stale captured gains.
 		await act(async () => {
 			releaseCountdown();
 			await vi.advanceTimersByTimeAsync(3_500);
 		});
 		expect(view.result.current.startingCountdown).toBe(false);
+		expect(view.result.current.micGainDb).toBe(-12);
+		expect(view.result.current.systemAudioGainDb).toBe(-6);
+
+		// A snapshot arriving after release still applies normally.
 		act(() => {
 			onChange?.(prefsWithGains(6, 3));
 		});
 		expect(view.result.current.micGainDb).toBe(6);
 		expect(view.result.current.systemAudioGainDb).toBe(3);
+	});
+
+	it("replays the newest stashed pair when several snapshots arrive during the lock", async () => {
+		const view = renderHook(() => useScreenRecorder());
+		await act(async () => {
+			await vi.advanceTimersByTimeAsync(0);
+		});
+
+		await act(async () => {
+			view.result.current.toggleRecording();
+		});
+		await act(async () => {
+			await vi.advanceTimersByTimeAsync(0);
+		});
+		expect(view.result.current.startingCountdown).toBe(true);
+
+		// Multiple saves mid-countdown: only the newest pair may be replayed.
+		act(() => {
+			onChange?.(prefsWithGains(-12, -6));
+		});
+		act(() => {
+			onChange?.(prefsWithGains(9, 4));
+		});
+		expect(view.result.current.micGainDb).toBe(0);
+		expect(view.result.current.systemAudioGainDb).toBe(0);
+
+		await act(async () => {
+			releaseCountdown();
+			await vi.advanceTimersByTimeAsync(3_500);
+		});
+		expect(view.result.current.micGainDb).toBe(9);
+		expect(view.result.current.systemAudioGainDb).toBe(4);
 	});
 });

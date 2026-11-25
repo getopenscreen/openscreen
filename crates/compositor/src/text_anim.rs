@@ -106,114 +106,10 @@ pub fn text_animation_state(
     }
 }
 
-/// Returns `true` when `c` has strong right-to-left directionality (`R` or `AL` in UAX #9).
-///
-/// Explicitly excludes `U+FEFF` (BOM / ZWNBSP), Arabic-Indic digits (`AN`/`EN`), and combining
-/// marks (`NSM`) so weak or neutral leading code points never force an RTL paragraph direction.
-fn is_strong_rtl_char(c: char) -> bool {
-    matches!(
-        c as u32,
-        0x0590
-            | 0x05BE
-            | 0x05C0
-            | 0x05C3
-            | 0x05C6
-            | 0x05C8..=0x05FF
-            | 0x0608
-            | 0x060B
-            | 0x060D
-            | 0x061B..=0x064A
-            | 0x066D..=0x066F
-            | 0x0671..=0x06D5
-            | 0x06E5..=0x06E6
-            | 0x06EE..=0x06EF
-            | 0x06FA..=0x0710
-            | 0x0712..=0x072F
-            | 0x074B..=0x07A5
-            | 0x07B1..=0x07EA
-            | 0x07F4..=0x07F5
-            | 0x07FA..=0x07FC
-            | 0x07FE..=0x0815
-            | 0x081A
-            | 0x0824
-            | 0x0828
-            | 0x082E..=0x0858
-            | 0x085C..=0x088F
-            | 0x0892..=0x0896
-            | 0x08A0..=0x08C9
-            | 0x200F
-            | 0xFB1D
-            | 0xFB1F..=0xFB28
-            | 0xFB2A..=0xFBC2
-            | 0xFBD3..=0xFD3D
-            | 0xFD50..=0xFD8F
-            | 0xFD92..=0xFDC7
-            | 0xFDF0..=0xFDFC
-            | 0xFE70..=0xFEFE
-            | 0x10800..=0x1091E
-            | 0x10920..=0x10A00
-            | 0x10A04
-            | 0x10A07..=0x10A0B
-            | 0x10A10..=0x10A37
-            | 0x10A3B..=0x10A3E
-            | 0x10A40..=0x10AE4
-            | 0x10AE7..=0x10B38
-            | 0x10B40..=0x10D23
-            | 0x10D28..=0x10D2F
-            | 0x10D3A..=0x10D3F
-            | 0x10D4A..=0x10D68
-            | 0x10D6F..=0x10E5F
-            | 0x10E7F..=0x10EAA
-            | 0x10EAD..=0x10ECF
-            | 0x10ED9..=0x10EF9
-            | 0x10F00..=0x10F45
-            | 0x10F51..=0x10F81
-            | 0x10F86..=0x10FFF
-            | 0x1E800..=0x1E8CF
-            | 0x1E8D7..=0x1E943
-            | 0x1E94B..=0x1EEEF
-            | 0x1EEF2..=0x1EFFF
-    )
-}
-
-fn is_strong_ltr_char(c: char) -> bool {
-    c == '\u{200E}'
-        || (!matches!(
-            c as u32,
-            0x0590..=0x08FF
-                | 0xFB1D..=0xFDFF
-                | 0xFE70..=0xFEFF
-                | 0x10800..=0x10FFF
-                | 0x1E800..=0x1EFFF
-        ) && c.is_alphabetic())
-}
-
-/// Resolves the base direction of `s` from its first strong directional character (Unicode BiDi
-/// UAX #9 rules P2/P3), ignoring explicit isolate spans (`U+2066..=U+2068` .. `U+2069`), BOM
-/// (`U+FEFF`), digits, and punctuation.
+/// Resolve the reveal direction from the first non-neutral paragraph (UAX #9 P2/P3).
+/// Isolated text does not determine the direction; captions without a strong character reveal LTR.
 pub fn is_rtl_text(s: &str) -> bool {
-    let mut isolate_depth: u32 = 0;
-    for c in s.chars() {
-        match c {
-            '\u{2066}'..='\u{2068}' => {
-                isolate_depth += 1;
-                continue;
-            }
-            '\u{2069}' => {
-                isolate_depth = isolate_depth.saturating_sub(1);
-                continue;
-            }
-            _ if isolate_depth > 0 => continue,
-            _ => {}
-        }
-        if is_strong_rtl_char(c) {
-            return true;
-        }
-        if is_strong_ltr_char(c) {
-            return false;
-        }
-    }
-    false
+    unicode_bidi::get_base_direction_full(s) == unicode_bidi::Direction::Rtl
 }
 
 /// Computes `(dst, src)` rectangles for horizontal reveal (`typewriter`), where `dst` is
@@ -373,6 +269,13 @@ mod tests {
     #[test]
     fn an_empty_region_does_not_divide_by_zero() {
         assert!(text_animation_state(Some("fade"), 0.0, 0.0).opacity.is_finite());
+    }
+
+    #[test]
+    fn reveal_direction_uses_unicode_bidi_classes() {
+        assert!(!is_rtl_text("१. مرحبا"), "U+0967 is strong L");
+        assert!(is_rtl_text("\u{0345}مرحبا"), "U+0345 is a nonspacing mark");
+        assert!(is_rtl_text("\u{2066}English\u{2069} مرحبا"), "skip isolated text");
     }
 
     #[test]

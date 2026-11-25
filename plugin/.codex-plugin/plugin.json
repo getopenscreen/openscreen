@@ -1,6 +1,6 @@
 {
 	"name": "openscreen",
-	"version": "2.3.0",
+	"version": "2.4.0",
 	"description": "Make a demo video from one sentence: record the screen, edit and export it with OpenScreen.",
 	"author": { "name": "Etienne Lescot", "url": "https://getopenscreen.com" },
 	"homepage": "https://getopenscreen.com/docs/ai-editing",

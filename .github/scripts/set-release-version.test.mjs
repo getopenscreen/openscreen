@@ -151,4 +151,47 @@ describe("setReleaseVersion", () => {
 		expect(JSON.parse(read("package.json")).version).toBe("1.9.0");
 		expect(JSON.parse(read("package-lock.json")).packages[""].version).toBe("1.9.0");
 	});
+	// Claude's plugin directory publishes a plugin version only when `version`
+	// goes up, so a stable release carries the plugin manifests with it.
+	describe("plugin manifests", () => {
+		const manifest = [
+			"{",
+			'\t"name": "openscreen",',
+			'\t"version": "1.8.0",',
+			'\t"author": { "name": "Etienne Lescot", "url": "https://getopenscreen.com" },',
+			'\t"keywords": ["demo video", "screen recording"]',
+			"}",
+			"",
+		].join("\n");
+		const files = ["plugin/.claude-plugin/plugin.json", "plugin/.codex-plugin/plugin.json"];
+
+		beforeEach(() => {
+			for (const name of files) {
+				mkdirSync(join(dir, name, ".."), { recursive: true });
+				writeFileSync(join(dir, name), manifest);
+			}
+		});
+
+		it("sets a stable version on the version line alone", () => {
+			setReleaseVersion("1.9.0", dir);
+
+			for (const name of files) {
+				expect(read(name)).toBe(manifest.replace('"version": "1.8.0"', '"version": "1.9.0"'));
+			}
+		});
+
+		it("leaves them alone for a prerelease", () => {
+			setReleaseVersion("1.9.0-rc.1", dir);
+
+			for (const name of files) expect(read(name)).toBe(manifest);
+		});
+
+		it("writes nothing when a manifest has no version line", () => {
+			writeFileSync(join(dir, files[1]), '{\n\t"name": "openscreen"\n}\n');
+
+			expect(() => setReleaseVersion("1.9.0", dir)).toThrow(/no top-level "version" line/);
+			expect(JSON.parse(read("package.json")).version).toBe("1.8.0");
+			expect(read(files[0])).toBe(manifest);
+		});
+	});
 });

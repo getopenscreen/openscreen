@@ -448,6 +448,17 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
 				() => null,
 			);
 			if (superseded()) return null;
+			// Rebase on the store's current document: an ordinary save (a rename) can land
+			// during the probe without bumping the epoch, and writing or installing the
+			// pre-probe `document` would revert it. The asset is not in the store yet unless
+			// the camera link installed it, so carry it over.
+			const current = get().document;
+			if (current) {
+				const imported = document.assets.find((a) => a.id === addedAsset.id) ?? addedAsset;
+				document = current.assets.some((a) => a.id === addedAsset.id)
+					? current
+					: { ...current, assets: [...current.assets, imported] };
+			}
 			if (durationSec != null && durationSec > 0) {
 				const next: AxcutDocument = {
 					...document,

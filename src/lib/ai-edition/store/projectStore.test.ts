@@ -182,6 +182,52 @@ describe("useProjectStore", () => {
 		expect(past).toHaveLength(0);
 	});
 
+	it("addAsset keeps an edit saved while the import duration probe runs (#1663)", async () => {
+		useProjectStore.setState({
+			projectId: "proj_test",
+			document: sampleDoc,
+			revision: 1,
+			status: "ready",
+			error: null,
+		});
+		let resolveProbe: (v: number) => void = () => {};
+		durationMocks.probeVideoDuration.mockReturnValue(
+			new Promise<number>((r) => {
+				resolveProbe = r;
+			}),
+		);
+		const videoDoc = {
+			...sampleDoc,
+			assets: [{ id: "clip_b", kind: "video", label: "clipB.mp4", originalPath: "/tmp/clipB.mp4" }],
+		};
+		bridgeMocks.addAsset.mockResolvedValue({ assetId: "clip_b", document: videoDoc });
+		bridgeMocks.save.mockImplementation((document: unknown) =>
+			Promise.resolve({ success: true, document }),
+		);
+		// biome-ignore lint/suspicious/noExplicitAny: test-only stub of the legacy contextBridge surface
+		(window as any).electronAPI.findRecordingCamera.mockResolvedValue({ success: false });
+
+		const pending = useProjectStore.getState().addAsset("/tmp/clipB.mp4");
+		await vi.waitFor(() => expect(durationMocks.probeVideoDuration).toHaveBeenCalled());
+		await useProjectStore.getState().saveDocument(
+			{
+				...sampleDoc,
+				project: { ...sampleDoc.project, title: "Renamed" },
+			},
+			{ history: true },
+		);
+		resolveProbe(15);
+		await pending;
+
+		const doc = useProjectStore.getState().document;
+		expect(doc?.project.title).toBe("Renamed");
+		expect(doc?.assets[0]?.durationSec).toBe(15);
+		expect(bridgeMocks.save.mock.lastCall?.[0]).toMatchObject({
+			project: { title: "Renamed" },
+			assets: [{ id: "clip_b", durationSec: 15 }],
+		});
+	});
+
 	it("addAsset resolves an independent camera for every asset added, not just the first", async () => {
 		useProjectStore.setState({
 			projectId: "proj_test",

@@ -157,7 +157,7 @@ Keep the rest as it is: the background, padding, shadow and cursor style are cho
 
 While you edit, you can call `getFrames` and `getContactSheet` with the `projectId` before exporting: without a current export they render the frames the export would show.
 
-If a tool named here is not in your tool list (`getContactSheet`, `getAudioReport`, or `region`, `startSec` and `endSec` on `getFrames`), the installed OpenScreen is older than this skill: <!-- full-plugin -->offer to update it as in step 1<!-- /full-plugin --><!-- directory-plugin ask the user to install the latest OpenScreen over the old one, as https://getopenscreen.com/docs/installation explains -->, or fall back to `getFrames` with `atSec`.
+If a tool named here is not in your tool list (`getContactSheet`, `getAudioReport`, or `region`, `startSec` and `endSec` on `getFrames`), the installed OpenScreen is older than this skill: <!-- full-plugin -->offer to update it as in step 1<!-- /full-plugin --><!-- directory-plugin ask the user to install the latest OpenScreen over the old one, as https://getopenscreen.com/docs/installation explains, then to start a new session -->, or fall back to `getFrames` with `atSec`.
 
 ## 8. Deliver
 

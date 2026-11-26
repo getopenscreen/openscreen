@@ -114,7 +114,12 @@ For staging, choreography and a take recorded with no window at all, use the `op
 
 **A video you already have** needs no recording: `createProject` with its absolute `videoPath` lays it out as a project, and returns a `projectId` and a `checkpointId` as `stopRecording` does. Check it as a take in step 5, its `videoPath` included, then go on from step 6.
 
+<!-- full-plugin -->
 **A web app captured headless** (frame by frame, so no window opens on the desktop): the `openscreen-capture` skill ships a script that does it at twice the display scale and writes the pointer log. Then `createProject` with the video, and `setPointerTrack` with `recordingStartedAt: 0` and each `at` in milliseconds into the video.
+<!-- /full-plugin -->
+<!-- directory-plugin
+**A web app captured headless** (frame by frame, so no window opens on the desktop) needs the capture script of the full OpenScreen plugin, from https://github.com/getopenscreen/openscreen (see its `plugin/` folder). Without it, record the page in a real window as above.
+-->
 
 ## 5. Check the take
 

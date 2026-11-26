@@ -2384,7 +2384,7 @@ impl Compositor {
         if self.seg_worker.borrow().is_none() && self.seg_sync.borrow().is_none() {
             let Some(path) = model_path else { return Ok(()) };
             if let Err(e) = self.enable_segmentation(std::path::Path::new(&path)) {
-                eprintln!("[segmentation] désactivée : {e}");
+                eprintln!("[segmentation] disabled: {e}");
                 // Une scène qui reste identique retenterait à chaque frame ; on lève le
                 // verrou plutôt que de journaliser 60 fois par seconde.
                 *self.seg_failed.borrow_mut() = true;
@@ -2443,7 +2443,7 @@ impl Compositor {
                             crate::segmentation::MODEL_HEIGHT,
                         )?;
                     }
-                    Err(e) => eprintln!("[segmentation] frame ignorée : {e}"),
+                    Err(e) => eprintln!("[segmentation] frame skipped: {e}"),
                 }
             }
         } else if let Some(w) = self.seg_worker.borrow().as_ref() {

@@ -1377,7 +1377,7 @@ unsafe fn atempo_drain(
         }
         if ret < 0 {
             eprintln!(
-                "[openscreen-compositor] atempo: av_buffersink_get_frame a échoué (ret={ret}), repli WSOLA"
+                "[openscreen-compositor] atempo: av_buffersink_get_frame failed (ret={ret}), falling back to WSOLA"
             );
             return None;
         }
@@ -1390,7 +1390,7 @@ unsafe fn atempo_drain(
             || channels != AUDIO_OUTPUT_CHANNELS
         {
             eprintln!(
-                "[openscreen-compositor] atempo: trame de sortie inattendue (format={} canaux={channels}), repli WSOLA",
+                "[openscreen-compositor] atempo: unexpected output frame (format={} channels={channels}), falling back to WSOLA",
                 (*frame).format
             );
             av_frame_unref(frame);
@@ -1478,7 +1478,7 @@ unsafe fn atempo_pass(
             );
             if ret < 0 {
                 eprintln!(
-                    "[openscreen-compositor] atempo: av_opt_set({name}.{key}={value}) a échoué (ret={ret}), négociation laissée libre"
+                    "[openscreen-compositor] atempo: av_opt_set({name}.{key}={value}) failed (ret={ret}), negotiation left open"
                 );
             }
         }
@@ -1491,7 +1491,7 @@ unsafe fn atempo_pass(
         let ret = avfilter_init_str(ctx, args_ptr);
         if ret < 0 {
             eprintln!(
-                "[openscreen-compositor] atempo: init_str({name}, {:?}) a échoué (ret={ret})",
+                "[openscreen-compositor] atempo: init_str({name}, {:?}) failed (ret={ret})",
                 args.unwrap_or("")
             );
             return None;
@@ -1521,17 +1521,17 @@ unsafe fn atempo_pass(
             &[],
         )?;
         if avfilter_link(previous, 0, stage, 0) < 0 {
-            eprintln!("[openscreen-compositor] atempo: avfilter_link a échoué au maillon {index}");
+            eprintln!("[openscreen-compositor] atempo: avfilter_link failed at stage {index}");
             return None;
         }
         previous = stage;
     }
     if avfilter_link(previous, 0, sink_ctx, 0) < 0 {
-        eprintln!("[openscreen-compositor] atempo: avfilter_link vers le sink a échoué");
+        eprintln!("[openscreen-compositor] atempo: avfilter_link to the sink failed");
         return None;
     }
     if avfilter_graph_config(graph, ptr::null_mut()) < 0 {
-        eprintln!("[openscreen-compositor] atempo: avfilter_graph_config a échoué");
+        eprintln!("[openscreen-compositor] atempo: avfilter_graph_config failed");
         return None;
     }
 
@@ -1556,7 +1556,7 @@ unsafe fn atempo_pass(
         let count = ATEMPO_FEED_CHUNK.min(total_input - offset);
         let mut frame = av_frame_alloc();
         if frame.is_null() {
-            eprintln!("[openscreen-compositor] atempo: av_frame_alloc (feed) a échoué");
+            eprintln!("[openscreen-compositor] atempo: av_frame_alloc (feed) failed");
             return None;
         }
         (*frame).format = AVSampleFormat::AV_SAMPLE_FMT_FLT as i32;
@@ -1564,7 +1564,7 @@ unsafe fn atempo_pass(
         (*frame).nb_samples = count as i32;
         av_channel_layout_default(&mut (*frame).ch_layout, AUDIO_OUTPUT_CHANNELS as i32);
         if av_frame_get_buffer(frame, 0) < 0 {
-            eprintln!("[openscreen-compositor] atempo: av_frame_get_buffer (feed) a échoué");
+            eprintln!("[openscreen-compositor] atempo: av_frame_get_buffer (feed) failed");
             av_frame_free(&mut frame);
             return None;
         }
@@ -1585,7 +1585,7 @@ unsafe fn atempo_pass(
         let ret = av_buffersrc_add_frame(src_ctx, frame);
         av_frame_free(&mut frame);
         if ret < 0 {
-            eprintln!("[openscreen-compositor] atempo: av_buffersrc_add_frame (offset={offset}) a échoué (ret={ret})");
+            eprintln!("[openscreen-compositor] atempo: av_buffersrc_add_frame (offset={offset}) failed (ret={ret})");
             return None;
         }
         offset += count;
@@ -1598,7 +1598,7 @@ unsafe fn atempo_pass(
     // EOF : le graphe vide alors ses derniers grains.
     if !drained_to_eof {
         if av_buffersrc_add_frame(src_ctx, ptr::null_mut()) < 0 {
-            eprintln!("[openscreen-compositor] atempo: flush du buffersrc a échoué, repli WSOLA");
+            eprintln!("[openscreen-compositor] atempo: buffersrc flush failed, falling back to WSOLA");
             return None;
         }
         atempo_drain(sink_ctx, sink_frame.0, stretched, keep, &mut produced)?;
@@ -1677,7 +1677,7 @@ unsafe fn avfilter_atempo_stretch(
     // `stretch_pcm_to_length` est un repli WSOLA sur échec.
     if stretched[0].len() < target_samples {
         eprintln!(
-            "[openscreen-compositor] atempo: sortie de {} échantillons pour une cible de {target_samples} (vitesse {speed}, {} étages), repli WSOLA",
+            "[openscreen-compositor] atempo: output of {} samples for a target of {target_samples} (speed {speed}, {} stages), falling back to WSOLA",
             stretched[0].len(),
             factors.len()
         );

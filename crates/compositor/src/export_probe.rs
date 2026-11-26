@@ -100,8 +100,8 @@ pub fn report(wall_s: f64, frames: u64) {
         return;
     }
     let total_ns: u64 = (0..N).map(|i| NANOS[i].load(Ordering::Relaxed)).sum();
-    eprintln!("[profile] {frames} frames en {wall_s:.3} s ({:.1} fps)", frames as f64 / wall_s.max(1e-9));
-    eprintln!("[profile] {:<16} {:>10} {:>9} {:>8} {:>7}", "étage", "total (s)", "µs/frame", "% mur", "appels");
+    eprintln!("[profile] {frames} frames in {wall_s:.3} s ({:.1} fps)", frames as f64 / wall_s.max(1e-9));
+    eprintln!("[profile] {:<16} {:>10} {:>9} {:>8} {:>7}", "stage", "total (s)", "µs/frame", "% wall", "calls");
     let mut rows: Vec<usize> = (0..N).collect();
     rows.sort_by_key(|&i| std::cmp::Reverse(NANOS[i].load(Ordering::Relaxed)));
     for i in rows {
@@ -121,14 +121,14 @@ pub fn report(wall_s: f64, frames: u64) {
     }
     eprintln!(
         "[profile] {:<16} {:>10.3} {:>9} {:>7.1}%",
-        "SOMME sondes",
+        "SUM of probes",
         total_ns as f64 / 1e9,
         "",
         100.0 * (total_ns as f64 / 1e9) / wall_s.max(1e-9)
     );
     eprintln!(
-        "[profile] {:<16} {:>10.3} {:>9} {:>7.1}%   <- ce que les sondes ne couvrent pas",
-        "non sondé",
+        "[profile] {:<16} {:>10.3} {:>9} {:>7.1}%   <- what the probes do not cover",
+        "unprobed",
         wall_s - total_ns as f64 / 1e9,
         "",
         100.0 * (wall_s - total_ns as f64 / 1e9) / wall_s.max(1e-9)

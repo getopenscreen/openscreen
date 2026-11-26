@@ -474,7 +474,7 @@ unsafe fn load_faces(files: &[PathBuf]) -> Vec<ShippedFace> {
         let Some(descriptors) =
             url.and_then(|url| CFOwned::new(CTFontManagerCreateFontDescriptorsFromURL(url.get())))
         else {
-            eprintln!("[text] police non chargée : {}", path.display());
+            eprintln!("[text] font not loaded: {}", path.display());
             continue;
         };
         for i in 0..CFArrayGetCount(descriptors.get()) {

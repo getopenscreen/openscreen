@@ -282,6 +282,7 @@ export function CaptionsPane({ onClose }: { onClose?: () => void } = {}) {
 					<span className={styles.label}>{t("captions.show")}</span>
 					<Toggle
 						checked={settings.enabled}
+						ariaLabel={t("captions.show")}
 						disabled={disabled || !hasTranscript}
 						onChange={(next) => void set({ enabled: next })}
 					/>

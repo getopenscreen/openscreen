@@ -153,4 +153,10 @@ describe("captions pane gating", () => {
 			screen.getByText("This media has no audio track — there is nothing to transcribe."),
 		).toBeInTheDocument();
 	});
+
+	it("names the Show captions switch for screen readers", () => {
+		load(documentWith(ASSET));
+		mount();
+		expect(screen.getByRole("button", { name: "Show captions" })).toBeInTheDocument();
+	});
 });

@@ -60,13 +60,13 @@ pub fn decode_and_stretch_clip_audio(
         }
         Ok(None) => {
             eprintln!(
-                "[pipeline] warning: clip #{clip_index} déclaré audio mais sans flux décodable; silence conservé"
+                "[pipeline] warning: clip #{clip_index} declared audio but has no decodable stream; keeping silence"
             );
             None
         }
         Err(error) => {
             eprintln!(
-                "[pipeline] warning: décodage audio du clip #{clip_index} échoué ({error:#}); silence conservé"
+                "[pipeline] warning: audio decode of clip #{clip_index} failed ({error:#}); keeping silence"
             );
             None
         }
@@ -124,7 +124,7 @@ impl<T: Send + 'static> ClipAudioJobs<T> {
             // Un panic dans un job audio ne doit pas emporter l'export : le clip sort
             // muet, comme il le faisait déjà quand `decode_clip_audio` échouait.
             Err(_) => eprintln!(
-                "[pipeline] warning: le job audio du clip #{clip_index} a paniqué; silence conservé"
+                "[pipeline] warning: the audio job of clip #{clip_index} panicked; keeping silence"
             ),
         }
     }
@@ -146,7 +146,7 @@ impl<T> Drop for ClipAudioJobs<T> {
         for (clip_index, handle) in std::mem::take(&mut self.inflight) {
             if handle.join().is_err() {
                 eprintln!(
-                    "[pipeline] warning: le job audio du clip #{clip_index} a paniqué pendant l'abandon de l'export"
+                    "[pipeline] warning: the audio job of clip #{clip_index} panicked while the export was aborted"
                 );
             }
         }

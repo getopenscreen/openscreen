@@ -413,14 +413,14 @@ unsafe fn walk_timeline(
         let webcam_available_duration = wdec.available_duration_sec();
         if screen_available_duration.is_none() || webcam_available_duration.is_none() {
             eprintln!(
-                "[pipeline] warning: clip #{}: durée de flux indéterminée (screen={}, webcam={}); la borne demandée {:.3}s ne peut pas être entièrement validée",
+                "[pipeline] warning: clip #{}: stream duration unknown (screen={}, webcam={}); the requested bound {:.3}s cannot be fully checked",
                 clip_index,
                 screen_available_duration
                     .map(|v| format!("{v:.3}s"))
-                    .unwrap_or_else(|| "inconnue".to_string()),
+                    .unwrap_or_else(|| "unknown".to_string()),
                 webcam_available_duration
                     .map(|v| format!("{v:.3}s"))
-                    .unwrap_or_else(|| "inconnue".to_string()),
+                    .unwrap_or_else(|| "unknown".to_string()),
                 clip.source_end_sec,
             );
         }
@@ -444,7 +444,7 @@ unsafe fn walk_timeline(
         }
         if source_end_sec + 1e-6 < clip.source_end_sec {
             eprintln!(
-                "[pipeline] warning: clip #{} raccourci de {:.3}s (fin demandée {:.3}s, fin disponible {:.3}s; screen=\"{}\", webcam=\"{}\")",
+                "[pipeline] warning: clip #{} shortened by {:.3}s (requested end {:.3}s, available end {:.3}s; screen=\"{}\", webcam=\"{}\")",
                 clip_index,
                 clip.source_end_sec - source_end_sec,
                 clip.source_end_sec,

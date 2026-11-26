@@ -182,7 +182,7 @@ impl TextRasterizer {
             // continue sur celles du système.
             let fonts = private_font_collection(&dwrite, &crate::text_fonts::embedded_font_files())
                 .unwrap_or_else(|e| {
-                    eprintln!("[text] polices embarquées non chargées ({e}) : polices du système");
+                    eprintln!("[text] bundled fonts not loaded ({e}): using system fonts");
                     None
                 });
             Ok(TextRasterizer { d2d, dwrite, fonts })

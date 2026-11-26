@@ -105,6 +105,7 @@ function makeDoc(
 		audioTracks: overrides.audioTracks ?? [],
 		...(overrides.shaderEffects ? { shaderEffects: overrides.shaderEffects } : {}),
 		...(overrides.shaderEffectRanges ? { shaderEffectRanges: overrides.shaderEffectRanges } : {}),
+		...(overrides.cursorMotionRanges ? { cursorMotionRanges: overrides.cursorMotionRanges } : {}),
 		legacyEditor: overrides.legacyEditor ?? null,
 	};
 }
@@ -3318,5 +3319,297 @@ describe("buildSceneDescription.rotationByClip", () => {
 		});
 		const scene = buildSceneDescription(makeDoc({ assets: [asset], clips: [clip] }));
 		expect(scene.rotationByClip).toEqual([0]);
+	});
+});
+
+describe("buildSceneDescription.cursor.motion", () => {
+	const asset = makeAsset({ id: "a", originalPath: "/a.mp4" });
+	const clip = makeClip({
+		id: "c1",
+		assetId: "a",
+		sourceStartSec: 100,
+		sourceEndSec: 110,
+		timelineStartSec: 0,
+		timelineEndSec: 10,
+	});
+
+	it("omits the key when the project has no cursor motion", () => {
+		const doc = makeDoc({ assets: [asset], clips: [clip] });
+		expect(buildSceneDescription(doc).cursor).not.toHaveProperty("motion");
+	});
+
+	it("sends each section in its clip's source seconds, on that clip", () => {
+		const doc = makeDoc({
+			assets: [asset],
+			clips: [clip],
+			cursorMotionRanges: [
+				{ id: "m1", startMs: 2000, endMs: 4500, mode: "straight", easing: "linear" },
+				{ id: "m2", startMs: 6000, endMs: 7000, mode: "smooth" },
+			],
+		});
+		expect(buildSceneDescription(doc).cursor.motion).toEqual([
+			{
+				clipIndex: 0,
+				startSec: 102,
+				endSec: 104.5,
+				mode: "straight",
+				strength: 0.5,
+				easing: "linear",
+			},
+			{
+				clipIndex: 0,
+				startSec: 106,
+				endSec: 107,
+				mode: "smooth",
+				strength: 0.5,
+				easing: "ease-in-out",
+			},
+		]);
+	});
+
+	it("says which edges of a fragment its section goes on past", () => {
+		// One section drawn over 3–7 s across the boundary at 5 s: stored as one row per clip.
+		const second = makeClip({
+			id: "c2",
+			assetId: "a",
+			sourceStartSec: 200,
+			sourceEndSec: 205,
+			timelineStartSec: 5,
+			timelineEndSec: 10,
+		});
+		const first = { ...clip, sourceEndSec: 105, timelineEndSec: 5 };
+		const doc = makeDoc({
+			assets: [asset],
+			clips: [first, second],
+			cursorMotionRanges: [
+				{
+					id: "m1",
+					clipId: "c1",
+					sourceStartSec: 103,
+					sourceEndSec: 105,
+					startMs: 3000,
+					endMs: 5000,
+					mode: "freeze",
+				},
+				{
+					id: "m2",
+					clipId: "c2",
+					sourceStartSec: 200,
+					sourceEndSec: 202,
+					startMs: 5000,
+					endMs: 7000,
+					mode: "freeze",
+				},
+			],
+		});
+		expect(buildSceneDescription(doc).cursor.motion).toEqual([
+			expect.objectContaining({ clipIndex: 0, startSec: 103, endSec: 105, continuesAfter: true }),
+			expect.objectContaining({ clipIndex: 1, startSec: 200, endSec: 202, continuesBefore: true }),
+		]);
+		const [head, tail] = buildSceneDescription(doc).cursor.motion ?? [];
+		expect(head).not.toHaveProperty("continuesBefore");
+		expect(tail).not.toHaveProperty("continuesAfter");
+		// Both clips are one recording: the two pieces are one rule.
+		expect(head).toMatchObject({
+			anchorStartSec: 103,
+			anchorEndSec: 202,
+			progressStart: 0,
+			progressEnd: 0.5,
+		});
+		expect(tail).toMatchObject({
+			anchorStartSec: 103,
+			anchorEndSec: 202,
+			progressStart: 0.5,
+			progressEnd: 1,
+		});
+	});
+
+	it("keeps a section a trim cuts as one rule, over the footage that is left", () => {
+		// The section covers 101–107 s of the recording; the trim removes 102–105 s of it.
+		const doc = makeDoc({
+			assets: [asset],
+			clips: [clip],
+			timeline: {
+				trimRanges: [
+					{ id: "t1", assetId: "a", startSec: 102, endSec: 105, reason: "", origin: "user" },
+				],
+			},
+			cursorMotionRanges: [
+				{
+					id: "m1",
+					clipId: "c1",
+					sourceStartSec: 101,
+					sourceEndSec: 107,
+					startMs: 1000,
+					endMs: 7000,
+					mode: "straight",
+				},
+			],
+		});
+		expect(buildSceneDescription(doc).cursor.motion).toEqual([
+			expect.objectContaining({
+				clipIndex: 0,
+				startSec: 101,
+				endSec: 102,
+				continuesAfter: true,
+				anchorStartSec: 101,
+				anchorEndSec: 107,
+				progressStart: 0,
+				progressEnd: 1 / 3,
+			}),
+			expect.objectContaining({
+				clipIndex: 1,
+				startSec: 105,
+				endSec: 107,
+				continuesBefore: true,
+				anchorStartSec: 101,
+				anchorEndSec: 107,
+				progressStart: 1 / 3,
+				progressEnd: 1,
+			}),
+		]);
+	});
+
+	it("keeps the anchors of the section as drawn when a trim removes its start", () => {
+		// Drawn over 101–107 s; the trim removes 100–103 s, so one piece is left: 103–107 s.
+		const doc = makeDoc({
+			assets: [asset],
+			clips: [clip],
+			timeline: {
+				trimRanges: [
+					{ id: "t1", assetId: "a", startSec: 100, endSec: 103, reason: "", origin: "user" },
+				],
+			},
+			cursorMotionRanges: [
+				{
+					id: "m1",
+					clipId: "c1",
+					sourceStartSec: 101,
+					sourceEndSec: 107,
+					startMs: 1000,
+					endMs: 7000,
+					mode: "freeze",
+				},
+			],
+		});
+		expect(buildSceneDescription(doc).cursor.motion).toEqual([
+			expect.objectContaining({
+				startSec: 103,
+				endSec: 107,
+				continuesBefore: true,
+				// Where the user put the section's start, not where the trim ends.
+				anchorStartSec: 101,
+				anchorEndSec: 107,
+				progressStart: 0,
+				progressEnd: 1,
+			}),
+		]);
+	});
+
+	it("keeps one rule per recording when the section goes on over another", () => {
+		// The section covers the end of recording a (106–110 s, with 107–108 s trimmed out) and
+		// the start of recording b (0–2 s).
+		const other = makeAsset({ id: "b", originalPath: "/b.mp4" });
+		const second = makeClip({
+			id: "c2",
+			assetId: "b",
+			sourceStartSec: 0,
+			sourceEndSec: 5,
+			timelineStartSec: 10,
+			timelineEndSec: 15,
+		});
+		const doc = makeDoc({
+			assets: [asset, other],
+			clips: [clip, second],
+			timeline: {
+				trimRanges: [
+					{ id: "t1", assetId: "a", startSec: 107, endSec: 108, reason: "", origin: "user" },
+				],
+			},
+			cursorMotionRanges: [
+				{
+					id: "m1",
+					clipId: "c1",
+					sourceStartSec: 106,
+					sourceEndSec: 110,
+					startMs: 6000,
+					endMs: 10000,
+					mode: "straight",
+				},
+				{
+					id: "m2",
+					clipId: "c2",
+					sourceStartSec: 0,
+					sourceEndSec: 2,
+					startMs: 10000,
+					endMs: 12000,
+					mode: "straight",
+				},
+			],
+		});
+		const motion = buildSceneDescription(doc).cursor.motion ?? [];
+		expect(motion).toHaveLength(3);
+		// Recording a keeps its rule across its trim, over its own three seconds of footage.
+		expect(motion[0]).toMatchObject({
+			startSec: 106,
+			endSec: 107,
+			anchorStartSec: 106,
+			anchorEndSec: 110,
+			progressStart: 0,
+			progressEnd: 1 / 3,
+		});
+		expect(motion[1]).toMatchObject({
+			startSec: 108,
+			endSec: 110,
+			anchorStartSec: 106,
+			anchorEndSec: 110,
+			progressStart: 1 / 3,
+			progressEnd: 1,
+		});
+		// Recording b is a rule of its own: one untouched piece, its own anchors.
+		expect(motion[2]).toMatchObject({ startSec: 0, endSec: 2, continuesBefore: true });
+		expect(motion[2]).not.toHaveProperty("anchorStartSec");
+	});
+
+	it("sends no anchors for a section in one piece", () => {
+		const doc = makeDoc({
+			assets: [asset],
+			clips: [clip],
+			cursorMotionRanges: [{ id: "m1", startMs: 1000, endMs: 2000, mode: "freeze" }],
+		});
+		const [only] = buildSceneDescription(doc).cursor.motion ?? [];
+		expect(only).not.toHaveProperty("anchorStartSec");
+		expect(only).not.toHaveProperty("progressStart");
+	});
+
+	it("indexes the scene's clips, which leave out a clip with no file", () => {
+		const fileless = makeAsset({ id: "b", originalPath: "" });
+		const first = makeClip({
+			id: "c0",
+			assetId: "b",
+			sourceStartSec: 0,
+			sourceEndSec: 5,
+			timelineStartSec: 0,
+			timelineEndSec: 5,
+		});
+		const second = { ...clip, timelineStartSec: 5, timelineEndSec: 15 };
+		const doc = makeDoc({
+			assets: [fileless, asset],
+			clips: [first, second],
+			cursorMotionRanges: [{ id: "m1", startMs: 6000, endMs: 7000, mode: "smooth" }],
+		});
+		const scene = buildSceneDescription(doc);
+		expect(scene.clips).toHaveLength(1);
+		expect(scene.cursor.motion).toEqual([expect.objectContaining({ clipIndex: 0, startSec: 101 })]);
+	});
+
+	it("drops a section on a clip whose asset has no file", () => {
+		const orphan = makeAsset({ id: "b", originalPath: "" });
+		const doc = makeDoc({
+			assets: [orphan],
+			clips: [{ ...clip, assetId: "b" }],
+			cursorMotionRanges: [{ id: "m1", startMs: 1000, endMs: 2000, mode: "freeze" }],
+		});
+		expect(buildSceneDescription(doc).cursor).not.toHaveProperty("motion");
 	});
 });

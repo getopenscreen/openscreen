@@ -7,7 +7,8 @@
 		"addTrim": "在当前时间添加删减区间，移除这段视频",
 		"addAnnotation": "在当前时间添加文字、箭头、图片或模糊效果",
 		"addSpeed": "在当前时间添加变速效果",
-		"addCameraFullscreen": "在此更改布局"
+		"addCameraFullscreen": "在此更改布局",
+		"addCursorMotion": "Add a cursor motion section at the current time"
 	},
 	"hints": {
 		"pressZoom": "按 {{key}} 添加缩放",
@@ -15,7 +16,8 @@
 		"pressAnnotation": "按 {{key}} 添加标注",
 		"pressAudio": "按 {{audioKey}} 添加音频，按 {{voiceoverKey}} 录制配音",
 		"pressSpeed": "按 {{key}} 添加速度",
-		"pressCameraFullscreen": "按 {{key}} 添加一个全屏摄像头片段"
+		"pressCameraFullscreen": "按 {{key}} 添加一个全屏摄像头片段",
+		"pressCursorMotion": "Press {{key}} to add cursor motion"
 	},
 	"labels": {
 		"pan": "平移",
@@ -31,7 +33,8 @@
 		"imageItem": "图片",
 		"emptyText": "空文本",
 		"cameraFullscreen": "全屏摄像头",
-		"cameraFullscreenItem": "全屏摄像头 {{index}}"
+		"cameraFullscreenItem": "全屏摄像头 {{index}}",
+		"cursorMotion": "Cursor motion"
 	},
 	"trails": {
 		"zoomIn": "放大过程：画面在缩放开始前逐渐放大",

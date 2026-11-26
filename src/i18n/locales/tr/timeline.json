@@ -7,7 +7,8 @@
 		"addTrim": "Kırpma ekle: videonun bir bölümünü şu anki zamanda çıkarır",
 		"addAnnotation": "Şu anki zamanda metin, ok, resim veya bulanıklık ekle",
 		"addSpeed": "Şu anki zamanda hız değişikliği ekle",
-		"addCameraFullscreen": "Yerleşimi burada değiştir"
+		"addCameraFullscreen": "Yerleşimi burada değiştir",
+		"addCursorMotion": "Add a cursor motion section at the current time"
 	},
 	"hints": {
 		"pressZoom": "Yakınlaştırma eklemek için {{key}} tuşuna basın",
@@ -15,7 +16,8 @@
 		"pressAnnotation": "Açıklama eklemek için {{key}} tuşuna basın",
 		"pressAudio": "Ses eklemek için {{audioKey}}, seslendirme kaydetmek için {{voiceoverKey}} tuşuna basın",
 		"pressSpeed": "Hız eklemek için {{key}} tuşuna basın",
-		"pressCameraFullscreen": "Tam Ekran Kamera bölümü eklemek için {{key}} tuşuna basın"
+		"pressCameraFullscreen": "Tam Ekran Kamera bölümü eklemek için {{key}} tuşuna basın",
+		"pressCursorMotion": "Press {{key}} to add cursor motion"
 	},
 	"labels": {
 		"pan": "Kaydır",
@@ -31,7 +33,8 @@
 		"imageItem": "Görüntü",
 		"emptyText": "Boş metin",
 		"cameraFullscreen": "Tam Ekran Kamera",
-		"cameraFullscreenItem": "Tam Ekran Kamera {{index}}"
+		"cameraFullscreenItem": "Tam Ekran Kamera {{index}}",
+		"cursorMotion": "Cursor motion"
 	},
 	"trails": {
 		"zoomIn": "Yakınlaşma: görüntü, yakınlaştırma başlayana kadar yaklaşır",

@@ -7,7 +7,8 @@
 		"addTrim": "トリムを追加：現在の再生位置で動画の一部を削除します",
 		"addAnnotation": "現在の再生位置にテキスト、矢印、画像、ぼかしを追加",
 		"addSpeed": "現在の再生位置に再生速度の変更を追加",
-		"addCameraFullscreen": "ここでレイアウトを変更"
+		"addCameraFullscreen": "ここでレイアウトを変更",
+		"addCursorMotion": "Add a cursor motion section at the current time"
 	},
 	"hints": {
 		"pressZoom": "{{key}}キーを押してズームを追加",
@@ -15,7 +16,8 @@
 		"pressAnnotation": "{{key}}キーを押して注釈を追加",
 		"pressAudio": "{{audioKey}} キーで音声を追加、{{voiceoverKey}} キーでナレーションを録音",
 		"pressSpeed": "{{key}}キーを押して再生速度を追加",
-		"pressCameraFullscreen": "{{key}}キーを押してフルスクリーンカメラのセグメントを追加"
+		"pressCameraFullscreen": "{{key}}キーを押してフルスクリーンカメラのセグメントを追加",
+		"pressCursorMotion": "Press {{key}} to add cursor motion"
 	},
 	"labels": {
 		"pan": "移動",
@@ -31,7 +33,8 @@
 		"imageItem": "画像",
 		"emptyText": "空のテキスト",
 		"cameraFullscreen": "フルスクリーンカメラ",
-		"cameraFullscreenItem": "フルスクリーンカメラ {{index}}"
+		"cameraFullscreenItem": "フルスクリーンカメラ {{index}}",
+		"cursorMotion": "Cursor motion"
 	},
 	"trails": {
 		"zoomIn": "ズームイン：ズームの開始まで画面が拡大していきます",

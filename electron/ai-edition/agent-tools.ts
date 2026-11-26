@@ -60,7 +60,10 @@ import {
 	type AxcutShaderEffect,
 	type AxcutShaderEffectRange,
 	blurDataSchema,
+	CURSOR_MOTION_EASINGS,
+	CURSOR_MOTION_MODES,
 	clipCropRegionSchema,
+	DEFAULT_CURSOR_MOTION_STRENGTH,
 	figureDataSchema,
 	shaderEffectKeyframeSchema,
 	shaderEffectParamSchema,
@@ -94,6 +97,7 @@ import {
 	coalesceRegionsForRuler,
 	replacePillSpan,
 	resolvePillIds,
+	wholePillOf,
 } from "../../src/lib/ai-edition/timeline/timelineMap";
 import {
 	trimAppliesToClip,
@@ -179,6 +183,8 @@ function modifierIds(document: AxcutDocument, kind: ModifierKind): string[] {
 			return [...new Set(document.audioTracks.map(trackGroupId))];
 		case "shaderEffect":
 			return (document.shaderEffectRanges ?? []).map((region) => region.id);
+		case "cursorMotion":
+			return (document.cursorMotionRanges ?? []).map((region) => region.id);
 	}
 }
 
@@ -640,6 +646,7 @@ function modifierIdsOf(document: AxcutDocument): string[] {
 		...speedRegions.map((r) => r.id),
 		...cameraFullscreenRegions.map((r) => r.id),
 		...(document.shaderEffectRanges ?? []).map((r) => r.id),
+		...(document.cursorMotionRanges ?? []).map((r) => r.id),
 	];
 }
 
@@ -944,6 +951,26 @@ export const setSpeedArgs = z.object({
 	speed: speedSchema.optional(),
 });
 
+const cursorMotionModeSchema = z.enum(CURSOR_MOTION_MODES);
+const cursorMotionEasingSchema = z.enum(CURSOR_MOTION_EASINGS);
+
+export const addCursorMotionArgs = z.object({
+	startSec: secondsSchema,
+	endSec: secondsSchema,
+	mode: cursorMotionModeSchema.default("smooth"),
+	strength: z.number().min(0).max(1).optional(),
+	easing: cursorMotionEasingSchema.optional(),
+});
+
+export const setCursorMotionArgs = z.object({
+	cursorMotionId: z.string().min(1),
+	startSec: secondsSchema.optional(),
+	endSec: secondsSchema.optional(),
+	mode: cursorMotionModeSchema.optional(),
+	strength: z.number().min(0).max(1).optional(),
+	easing: cursorMotionEasingSchema.optional(),
+});
+
 /** How a text annotation looks: the settings the editor's inspector offers for one. */
 const annotationLookArgs = {
 	fontSize: z
@@ -1184,6 +1211,8 @@ export const OPENSCREEN_TOOL_NAMES = [
 	"setZoom",
 	"addSpeed",
 	"setSpeed",
+	"addCursorMotion",
+	"setCursorMotion",
 	"addAnnotation",
 	"setAnnotation",
 	"addLayoutChange",
@@ -1269,6 +1298,8 @@ export const MUTATING_TOOL_NAMES: ReadonlySet<string> = new Set([
 	"setZoom",
 	"addSpeed",
 	"setSpeed",
+	"addCursorMotion",
+	"setCursorMotion",
 	"addAnnotation",
 	"setAnnotation",
 	"addLayoutChange",
@@ -1552,6 +1583,14 @@ export function documentSnapshotForModel(
 			startSec: roundSec(a.startMs),
 			endSec: roundSec(a.endMs),
 			...annotationForAgent(a),
+		})),
+		cursorMotionRegions: coalesceForAgent(document.cursorMotionRanges ?? []).map((r) => ({
+			id: r.id,
+			startSec: roundSec(r.startMs),
+			endSec: roundSec(r.endMs),
+			mode: r.mode,
+			...(r.mode === "smooth" ? { strength: r.strength ?? DEFAULT_CURSOR_MOTION_STRENGTH } : {}),
+			...(r.mode === "straight" ? { easing: r.easing ?? "ease-in-out" } : {}),
 		})),
 		cameraFullscreenRegions: coalesceForAgent(cameraFullscreenRegions).map((c) => ({
 			id: c.id,
@@ -3297,6 +3336,96 @@ export function executeAgentTool(
 			};
 		}
 
+		case "addCursorMotion": {
+			const parsed = addCursorMotionArgs.safeParse(args);
+			if (!parsed.success) return failure(parsed.error.message);
+			const startMs = toMs(Math.min(parsed.data.startSec, parsed.data.endSec));
+			const endMs = toMs(Math.max(parsed.data.startSec, parsed.data.endSec));
+			const { mode, strength, easing } = parsed.data;
+			const region = {
+				id: createId("curm"),
+				startMs,
+				endMs,
+				mode,
+				...(strength !== undefined ? { strength } : {}),
+				...(easing !== undefined ? { easing } : {}),
+			};
+			const placed = anchorForAgent(region, document, "curm");
+			const landing = landingOf(placed, document);
+			if (!landing.anchored) {
+				return coversNoClip("cursor motion section", startMs / 1000, endMs / 1000, document);
+			}
+			const next: AxcutDocument = {
+				...document,
+				cursorMotionRanges: [...(document.cursorMotionRanges ?? []), ...placed],
+			};
+			return {
+				ok: true,
+				document: next,
+				resultJson: JSON.stringify({
+					cursorMotionId: landing.ids[0],
+					mode,
+					...landingReport(landing, startMs / 1000, endMs / 1000),
+				}),
+				summary:
+					`added cursor motion (${mode}) ${formatSec(landing.startSec)} – ${formatSec(landing.endSec)}` +
+					landingSuffix(landing, startMs / 1000, endMs / 1000),
+			};
+		}
+
+		case "setCursorMotion": {
+			const parsed = setCursorMotionArgs.safeParse(args);
+			if (!parsed.success) return failure(parsed.error.message);
+			const prev = document.cursorMotionRanges ?? [];
+			const id = parsed.data.cursorMotionId;
+			const existing = prev.find((r) => r.id === id);
+			if (!existing) return failure(`Unknown cursor motion section: ${id}`);
+			const pill = new Set(resolvePillIds(prev, id));
+			// An edge the caller does not pass keeps the SECTION's edge, not the fragment's: a
+			// section across two clips is two stored rows, and `replacePillSpan` rebuilds the
+			// whole pill from the span it is given. Reading the span off the one row the id names
+			// cut the section back to that row on a strength-only edit.
+			const whole = wholePillOf(prev, id) ?? existing;
+			const { startMs, endMs } = resolveSpanMs(whole, parsed.data.startSec, parsed.data.endSec);
+			const blocked = refuseIfBlocked("cursor motion section", prev, id, { startMs, endMs });
+			if (blocked) return blocked;
+			const patch = {
+				...(parsed.data.mode !== undefined ? { mode: parsed.data.mode } : {}),
+				...(parsed.data.strength !== undefined ? { strength: parsed.data.strength } : {}),
+				...(parsed.data.easing !== undefined ? { easing: parsed.data.easing } : {}),
+			};
+			// The patch goes in as the payload patch, so the pill is found in the STORED rows.
+			// Patched first, a section that became identical to one it touches merged with it,
+			// and the rebuild then kept the edited span alone: the neighbour was deleted.
+			const rebuilt = replacePillSpan(
+				prev,
+				id,
+				startMs,
+				endMs,
+				document.timeline.clips,
+				() => createId("curm"),
+				undefined,
+				patch,
+			);
+			const landing = landingAfterPillEdit(prev, rebuilt, pill, document);
+			if (!landing.anchored) {
+				return coversNoClip("cursor motion section", startMs / 1000, endMs / 1000, document);
+			}
+			const mode = patch.mode ?? existing.mode;
+			return {
+				ok: true,
+				document: { ...document, cursorMotionRanges: rebuilt },
+				resultJson: JSON.stringify({
+					cursorMotionId: landing.ids[0] ?? id,
+					mode,
+					...landingReport(landing, startMs / 1000, endMs / 1000),
+				}),
+				summary:
+					`updated cursor motion (${mode}) over ${formatSec(landing.startSec)} – ${formatSec(landing.endSec)}` +
+					landingSuffix(landing, startMs / 1000, endMs / 1000),
+			};
+		}
+
 		case "addAnnotation": {
 			const parsed = addAnnotationArgs.safeParse(args);
 			if (!parsed.success) return failure(parsed.error.message);
@@ -4062,13 +4191,14 @@ export function executeAgentTool(
 			else if (cameraFullscreenRegions.some((c) => c.id === id)) kind = "cameraFullscreen";
 			else if (document.audioTracks.some((t) => trackGroupId(t) === id)) kind = "audio";
 			else if ((document.shaderEffectRanges ?? []).some((r) => r.id === id)) kind = "shaderEffect";
+			else if ((document.cursorMotionRanges ?? []).some((r) => r.id === id)) kind = "cursorMotion";
 			else if (layoutRuns(document).some((r) => r.ids.includes(id))) kind = "layout";
 			if (kind === "layout" && layoutRuns(document)[0]?.ids.includes(id)) {
 				return failure("The first layout cannot be removed. Change its preset instead.");
 			}
 			if (!kind) {
 				return failure(
-					`No zoom / speed / annotation / full-camera / audio / effect modifier with id ${id}. ` +
+					`No zoom / speed / annotation / full-camera / audio / effect / cursor-motion modifier with id ${id}. ` +
 						`For a trim use removeTrim; for a clip use removeClip.`,
 				);
 			}

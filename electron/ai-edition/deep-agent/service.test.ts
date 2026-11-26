@@ -88,6 +88,8 @@ const ARGS: Record<string, unknown> = {
 	setZoom: { zoomId: "zoom_nope" },
 	addSpeed: { startSec: 1, endSec: 2 },
 	setSpeed: { speedId: "speed_nope" },
+	addCursorMotion: { startSec: 1, endSec: 2 },
+	setCursorMotion: { cursorMotionId: "curm_nope" },
 	addAnnotation: { startSec: 1, endSec: 2, text: "hi" },
 	setAnnotation: { annotationId: "ann_nope" },
 	addCameraFullscreen: { startSec: 1, endSec: 2 },

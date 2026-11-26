@@ -27,7 +27,8 @@
 		"deleteSelected": "Selectie verwijderen",
 		"playPause": "Afspelen / Pauzeren",
 		"copySelected": "Selectie kopiëren",
-		"paste": "Plakken"
+		"paste": "Plakken",
+		"addCursorMotion": "Add Cursor Motion"
 	},
 	"fixedActions": {
 		"undo": "Ongedaan maken",

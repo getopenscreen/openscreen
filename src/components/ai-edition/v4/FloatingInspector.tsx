@@ -57,12 +57,16 @@ import {
 	TEXT_ANIMATION_VALUES,
 } from "@/lib/ai-edition/annotations/textAnimation";
 import { resolveAspectRatioValue } from "@/lib/ai-edition/document/outputFormat";
-import type {
-	AxcutAnnotationRegion,
-	AxcutClip,
-	AxcutShaderEffect,
-	AxcutShaderEffectParam,
-	AxcutShaderEffectRange,
+import {
+	type AxcutAnnotationRegion,
+	type AxcutClip,
+	type AxcutCursorMotionRegion,
+	type AxcutShaderEffect,
+	type AxcutShaderEffectParam,
+	type AxcutShaderEffectRange,
+	CURSOR_MOTION_EASINGS,
+	CURSOR_MOTION_MODES,
+	DEFAULT_CURSOR_MOTION_STRENGTH,
 } from "@/lib/ai-edition/schema";
 import { resolveShaderEffectValue } from "@/lib/ai-edition/shaderEffects";
 import { useProjectStore } from "@/lib/ai-edition/store/projectStore";
@@ -94,6 +98,11 @@ import {
 	zoomRecordingPaths,
 } from "../recordedCursorTypes";
 import { TextColorField } from "../TextColorField";
+import {
+	cursorMotionEasingLabel,
+	cursorMotionLabel,
+	cursorMotionModeLabel,
+} from "./cursorMotionLabels";
 import styles from "./EditorShellV4.module.css";
 import { LayoutPicker } from "./LayoutPicker";
 
@@ -657,6 +666,75 @@ export function SpeedControl({
 	);
 }
 
+/** What a cursor-motion section does to the pointer, and the one parameter its mode reads. */
+export function CursorMotionControl({
+	region,
+	tl,
+}: {
+	region: Pick<AxcutCursorMotionRegion, "id" | "mode" | "strength" | "easing">;
+	tl: Pick<
+		TimelineApi,
+		"updateCursorMotionSettings" | "updateCursorMotionLive" | "commitCursorMotionChange"
+	>;
+}) {
+	const ts = useScopedT("settings");
+	const strength = Math.round((region.strength ?? DEFAULT_CURSOR_MOTION_STRENGTH) * 100);
+	const description =
+		region.mode === "recorded"
+			? ts("cursorMotion.descriptions.recorded")
+			: region.mode === "smooth"
+				? ts("cursorMotion.descriptions.smooth")
+				: region.mode === "straight"
+					? ts("cursorMotion.descriptions.straight")
+					: ts("cursorMotion.descriptions.freeze");
+	return (
+		<>
+			{paneStack(
+				ts("cursorMotion.mode"),
+				<ChoiceRow
+					label={ts("cursorMotion.mode")}
+					options={CURSOR_MOTION_MODES.map((mode) => ({
+						value: mode,
+						label: cursorMotionModeLabel(mode, ts),
+					}))}
+					value={region.mode}
+					columns={2}
+					onChange={(mode) => void tl.updateCursorMotionSettings(region.id, { mode })}
+				/>,
+			)}
+			<p style={{ fontSize: 12, color: "var(--fg-3)", margin: 0 }}>{description}</p>
+			{region.mode === "smooth" ? (
+				<SliderCell
+					label={ts("cursorMotion.strength")}
+					value={strength}
+					min={0}
+					max={100}
+					suffix="%"
+					defaultValue={Math.round(DEFAULT_CURSOR_MOTION_STRENGTH * 100)}
+					onChange={(next) => tl.updateCursorMotionLive(region.id, { strength: next / 100 })}
+					onCommit={() => void tl.commitCursorMotionChange()}
+					full
+				/>
+			) : null}
+			{region.mode === "straight"
+				? paneStack(
+						ts("cursorMotion.easing"),
+						<ChoiceRow
+							label={ts("cursorMotion.easing")}
+							options={CURSOR_MOTION_EASINGS.map((easing) => ({
+								value: easing,
+								label: cursorMotionEasingLabel(easing, ts),
+							}))}
+							value={region.easing ?? "ease-in-out"}
+							columns={2}
+							onChange={(easing) => void tl.updateCursorMotionSettings(region.id, { easing })}
+						/>,
+					)
+				: null}
+		</>
+	);
+}
+
 // The sizes a text reaches for, in pixels at 1080 (`annotationScale.ts`): a caption-sized note,
 // the default, a heading and a title. Anything else, down to 8 and up to 200, is typed in the
 // field at the end of the row, the zoom level's pair.
@@ -981,6 +1059,28 @@ function SelectionPane({ tl, onClose }: { tl: TimelineApi; onClose: () => void }
 					<button type="button" onClick={deleteAndClose} className={PANE_BUTTON}>
 						<Trash2 size={16} style={{ color: "var(--danger)" }} />
 						{ts("speed.deleteRegion")}
+					</button>
+				</div>
+			</div>
+		);
+	}
+
+	if (selection.kind === "cursorMotion") {
+		const region = tl.cursorMotionRegions.find((r) => r.id === selection.id);
+		if (!region) return null;
+		return (
+			<div style={{ display: "flex", flexDirection: "column", minHeight: 0 }}>
+				{paneHeader(
+					<MousePointer2 size={16} />,
+					tt("labels.cursorMotion"),
+					onClose,
+					tc("actions.close"),
+				)}
+				<div style={bodyStyle} aria-label={cursorMotionLabel(region, ts)}>
+					<CursorMotionControl region={region} tl={tl} />
+					<button type="button" onClick={deleteAndClose} className={PANE_BUTTON}>
+						<Trash2 size={16} style={{ color: "var(--danger)" }} />
+						{ts("cursorMotion.deleteRegion")}
 					</button>
 				</div>
 			</div>

@@ -459,5 +459,29 @@
 		"dark": "Oscura",
 		"light": "Clara",
 		"custom": "Personalizada"
+	},
+	"cursorMotion": {
+		"mode": "Mode",
+		"strength": "Strength",
+		"easing": "Speed curve",
+		"deleteRegion": "Delete cursor motion",
+		"modes": {
+			"recorded": "As recorded",
+			"smooth": "Smooth",
+			"straight": "Straight",
+			"freeze": "Freeze"
+		},
+		"easings": {
+			"easeInOut": "Smooth",
+			"linear": "Linear",
+			"easeIn": "Speed up",
+			"easeOut": "Slow down"
+		},
+		"descriptions": {
+			"recorded": "The pointer exactly as it was recorded, without smoothing.",
+			"smooth": "Removes jitter and loops without lagging behind the pointer.",
+			"straight": "Moves in a straight line from where the pointer starts to where it ends or clicks.",
+			"freeze": "Holds the pointer where the section starts."
+		}
 	}
 }

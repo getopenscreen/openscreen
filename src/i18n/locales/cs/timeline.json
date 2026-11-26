@@ -7,7 +7,8 @@
 		"addTrim": "Přidat oříznutí: odstraní část videa v aktuálním čase",
 		"addAnnotation": "Přidat text, šipku, obrázek nebo rozmazání v aktuálním čase",
 		"addSpeed": "Přidat změnu rychlosti v aktuálním čase",
-		"addCameraFullscreen": "Změnit rozvržení zde"
+		"addCameraFullscreen": "Změnit rozvržení zde",
+		"addCursorMotion": "Add a cursor motion section at the current time"
 	},
 	"hints": {
 		"pressZoom": "Stiskněte {{key}} pro přidání přiblížení",
@@ -15,7 +16,8 @@
 		"pressAnnotation": "Stiskněte {{key}} pro přidání anotace",
 		"pressAudio": "Stiskněte {{audioKey}} pro přidání zvuku, {{voiceoverKey}} pro nahrání komentáře",
 		"pressSpeed": "Stiskněte {{key}} pro přidání rychlosti",
-		"pressCameraFullscreen": "Stiskněte {{key}} pro přidání segmentu celé kamery"
+		"pressCameraFullscreen": "Stiskněte {{key}} pro přidání segmentu celé kamery",
+		"pressCursorMotion": "Press {{key}} to add cursor motion"
 	},
 	"labels": {
 		"pan": "Posun",
@@ -31,7 +33,8 @@
 		"imageItem": "Obrázek",
 		"emptyText": "Prázdný text",
 		"cameraFullscreen": "Celá kamera",
-		"cameraFullscreenItem": "Celá kamera {{index}}"
+		"cameraFullscreenItem": "Celá kamera {{index}}",
+		"cursorMotion": "Cursor motion"
 	},
 	"trails": {
 		"zoomIn": "Najetí: pohled se přibližuje až do začátku přiblížení",

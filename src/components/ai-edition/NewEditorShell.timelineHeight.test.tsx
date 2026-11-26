@@ -103,7 +103,7 @@ describe("NewEditorShell timeline height", () => {
 	});
 
 	it("exports expected constants allowing all lanes to fit without vertical clipping", () => {
-		expect(DEFAULT_TIMELINE_HEIGHT_PX).toBe(392);
+		expect(DEFAULT_TIMELINE_HEIGHT_PX).toBe(421);
 		expect(MIN_TIMELINE_HEIGHT_PX).toBe(160);
 		expect(MAX_TIMELINE_HEIGHT_PX).toBe(560);
 	});

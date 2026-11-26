@@ -197,6 +197,8 @@ describe("the mutating-tool table", () => {
 				"addAnnotation",
 				"addAudio",
 				"addCameraFullscreen",
+				"addCursorMotion",
+				"setCursorMotion",
 				"addEffect",
 				"addLayoutChange",
 				"addSpeed",
@@ -847,6 +849,90 @@ describe("executeAgentTool", () => {
 		const regions = legacy.speedRegions as Array<{ startMs: number; endMs: number; speed: number }>;
 		expect(regions.at(-1)).toMatchObject({ startMs: 5000, endMs: 9000, speed: 2 });
 		expect(() => documentSchema.parse(result.document)).not.toThrow();
+	});
+
+	it("addCursorMotion / setCursorMotion / removeModifier round-trip a cursor motion section", () => {
+		const added = executeAgentTool(
+			fixtureDocument(),
+			"addCursorMotion",
+			JSON.stringify({ startSec: 2, endSec: 4, mode: "straight" }),
+		);
+		expect(added.ok).toBe(true);
+		const id = JSON.parse(added.resultJson).cursorMotionId as string;
+		expect(added.document?.cursorMotionRanges).toEqual([
+			expect.objectContaining({ id, startMs: 2000, endMs: 4000, mode: "straight" }),
+		]);
+		expect(() => documentSchema.parse(added.document)).not.toThrow();
+		const snapshot = documentSnapshotForModel(added.document as AxcutDocument) as {
+			cursorMotionRegions: unknown[];
+		};
+		expect(snapshot.cursorMotionRegions).toEqual([
+			{ id, startSec: 2, endSec: 4, mode: "straight", easing: "ease-in-out" },
+		]);
+
+		const set = executeAgentTool(
+			added.document as AxcutDocument,
+			"setCursorMotion",
+			JSON.stringify({ cursorMotionId: id, mode: "smooth", strength: 0.8 }),
+		);
+		expect(set.ok).toBe(true);
+		expect(set.document?.cursorMotionRanges?.[0]).toMatchObject({ mode: "smooth", strength: 0.8 });
+
+		const removed = executeAgentTool(
+			set.document as AxcutDocument,
+			"removeModifier",
+			JSON.stringify({ id }),
+		);
+		expect(removed.ok).toBe(true);
+		expect(JSON.parse(removed.resultJson).kind).toBe("cursorMotion");
+		expect(removed.document?.cursorMotionRanges).toEqual([]);
+	});
+
+	it("setCursorMotion keeps a section that crosses two clips whole on a strength-only edit", () => {
+		// clip_1 ends at 30 s: the section is stored as one row per clip, shown as one pill.
+		const added = executeAgentTool(
+			fixtureDocument(),
+			"addCursorMotion",
+			JSON.stringify({ startSec: 25, endSec: 35 }),
+		);
+		expect(added.document?.cursorMotionRanges).toHaveLength(2);
+		const id = JSON.parse(added.resultJson).cursorMotionId as string;
+		const set = executeAgentTool(
+			added.document as AxcutDocument,
+			"setCursorMotion",
+			JSON.stringify({ cursorMotionId: id, strength: 0.9 }),
+		);
+		expect(set.ok).toBe(true);
+		const rows = set.document?.cursorMotionRanges ?? [];
+		expect(rows.map((r) => [r.startMs, r.endMs, r.strength])).toEqual([
+			[25000, 30000, 0.9],
+			[30000, 35000, 0.9],
+		]);
+	});
+
+	it("setCursorMotion leaves a touching section alone when a mode change makes them alike", () => {
+		const first = executeAgentTool(
+			fixtureDocument(),
+			"addCursorMotion",
+			JSON.stringify({ startSec: 1, endSec: 3, mode: "smooth" }),
+		);
+		const second = executeAgentTool(
+			first.document as AxcutDocument,
+			"addCursorMotion",
+			JSON.stringify({ startSec: 3, endSec: 5, mode: "freeze" }),
+		);
+		const id = JSON.parse(first.resultJson).cursorMotionId as string;
+		const set = executeAgentTool(
+			second.document as AxcutDocument,
+			"setCursorMotion",
+			JSON.stringify({ cursorMotionId: id, mode: "freeze" }),
+		);
+		expect(set.ok).toBe(true);
+		const rows = (set.document?.cursorMotionRanges ?? []).map((r) => [r.startMs, r.endMs, r.mode]);
+		expect(rows.sort()).toEqual([
+			[1000, 3000, "freeze"],
+			[3000, 5000, "freeze"],
+		]);
 	});
 
 	it("refuses a speed outside the range every reader plays", () => {

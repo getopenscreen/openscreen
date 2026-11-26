@@ -7,7 +7,8 @@
 		"addTrim": "Trim toevoegen: verwijdert een deel van de video op het huidige tijdstip",
 		"addAnnotation": "Tekst, pijl, afbeelding of blur toevoegen op het huidige tijdstip",
 		"addSpeed": "Snelheidswijziging toevoegen op het huidige tijdstip",
-		"addCameraFullscreen": "Full Camera toevoegen: toont de camera op volledig scherm op het huidige tijdstip"
+		"addCameraFullscreen": "Full Camera toevoegen: toont de camera op volledig scherm op het huidige tijdstip",
+		"addCursorMotion": "Add a cursor motion section at the current time"
 	},
 	"hints": {
 		"pressZoom": "Druk op {{key}} om zoom toe te voegen",
@@ -15,7 +16,8 @@
 		"pressAnnotation": "Druk op {{key}} om een annotatie toe te voegen",
 		"pressAudio": "Druk op {{audioKey}} om audio toe te voegen, op {{voiceoverKey}} om een voice-over op te nemen",
 		"pressSpeed": "Druk op {{key}} om snelheid toe te voegen",
-		"pressCameraFullscreen": "Druk op {{key}} om een Full Camera-segment toe te voegen"
+		"pressCameraFullscreen": "Druk op {{key}} om een Full Camera-segment toe te voegen",
+		"pressCursorMotion": "Press {{key}} to add cursor motion"
 	},
 	"labels": {
 		"pan": "Pan",
@@ -31,7 +33,8 @@
 		"imageItem": "Afbeelding",
 		"emptyText": "Lege tekst",
 		"cameraFullscreen": "Full Camera",
-		"cameraFullscreenItem": "Full Camera {{index}}"
+		"cameraFullscreenItem": "Full Camera {{index}}",
+		"cursorMotion": "Cursor motion"
 	},
 	"trails": {
 		"zoomIn": "Inzoomen: het beeld beweegt naar binnen tot de zoom begint",

@@ -27,7 +27,8 @@
 		"deleteSelected": "Auswahl löschen",
 		"playPause": "Wiedergabe / Pause",
 		"copySelected": "Auswahl kopieren",
-		"paste": "Einfügen"
+		"paste": "Einfügen",
+		"addCursorMotion": "Add Cursor Motion"
 	},
 	"fixedActions": {
 		"undo": "Rückgängig",

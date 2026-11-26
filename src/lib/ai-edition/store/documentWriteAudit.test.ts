@@ -166,6 +166,7 @@ const DECLARED: WritePath[] = [
 	w("src/components/ai-edition/NewEditorShell.tsx", "pasteRegion", "save", "gesture"),
 	w("src/components/ai-edition/NewEditorShell.tsx", "pasteRegion", "save", "gesture"),
 	w("src/components/ai-edition/NewEditorShell.tsx", "pasteRegion", "save", "gesture"),
+	w("src/components/ai-edition/NewEditorShell.tsx", "pasteRegion", "save", "gesture"),
 	// The window is closing and the user answered "save".
 	w("src/components/ai-edition/NewEditorShell.tsx", "unsubSaveBeforeClose", "save", "gesture"),
 	// Changing a passage from the Layout pane is an explicit edit.
@@ -261,6 +262,7 @@ const DECLARED: WritePath[] = [
 	w("src/lib/ai-edition/store/useTimeline.ts", "addCameraFullscreen", "save", "gesture"),
 	w("src/lib/ai-edition/store/useTimeline.ts", "addLayoutChange", "save", "gesture"),
 	w("src/lib/ai-edition/store/useTimeline.ts", "addSpeed", "save", "gesture"),
+	w("src/lib/ai-edition/store/useTimeline.ts", "addCursorMotion", "save", "gesture"),
 	w("src/lib/ai-edition/store/useTimeline.ts", "addTrim", "save", "gesture"),
 	w("src/lib/ai-edition/store/useTimeline.ts", "addZoom", "save", "gesture"),
 	w("src/lib/ai-edition/store/useTimeline.ts", "addZoomsBulk", "save", "gesture"),
@@ -276,6 +278,8 @@ const DECLARED: WritePath[] = [
 	// The effect inspector's sliders and colours, committed as the annotations' are.
 	w("src/lib/ai-edition/store/useTimeline.ts", "commitShaderEffectChange", "save", "gesture"),
 	w("src/lib/ai-edition/store/useTimeline.ts", "commitShaderEffectChange", "state", "unrecorded"),
+	w("src/lib/ai-edition/store/useTimeline.ts", "commitCursorMotionChange", "save", "gesture"),
+	w("src/lib/ai-edition/store/useTimeline.ts", "commitCursorMotionChange", "state", "unrecorded"),
 	w("src/lib/ai-edition/store/useTimeline.ts", "commitZoomFocus", "save", "gesture"),
 	w("src/lib/ai-edition/store/useTimeline.ts", "commitZoomFocus", "state", "unrecorded"),
 	w("src/lib/ai-edition/store/useTimeline.ts", "duplicateClip", "save", "gesture"),
@@ -308,6 +312,9 @@ const DECLARED: WritePath[] = [
 	w("src/lib/ai-edition/store/useTimeline.ts", "updateAnnotationLive", "set", "automatic"),
 	w("src/lib/ai-edition/store/useTimeline.ts", "updateAnnotationSpan", "save", "gesture"),
 	w("src/lib/ai-edition/store/useTimeline.ts", "updateCameraFullscreenSpan", "save", "gesture"),
+	w("src/lib/ai-edition/store/useTimeline.ts", "updateCursorMotionLive", "set", "automatic"),
+	w("src/lib/ai-edition/store/useTimeline.ts", "updateCursorMotionSettings", "save", "gesture"),
+	w("src/lib/ai-edition/store/useTimeline.ts", "updateCursorMotionSpan", "save", "gesture"),
 	w("src/lib/ai-edition/store/useTimeline.ts", "updateShaderEffect", "save", "gesture"),
 	w("src/lib/ai-edition/store/useTimeline.ts", "updateShaderEffectLive", "set", "automatic"),
 	w("src/lib/ai-edition/store/useTimeline.ts", "updateShaderEffectSpan", "save", "gesture"),

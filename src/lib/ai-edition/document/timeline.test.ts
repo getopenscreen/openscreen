@@ -2199,6 +2199,32 @@ describe("removeClip — delete a clip, close the gap, drop its pills", () => {
 		expect(gone.shaderEffects).toEqual([]);
 	});
 
+	// The gap the closed cursor-choreography PR (#556) left: its sections were not in the clip
+	// walk, so a clip edit left them on the wrong place and a removed clip left phantoms behind.
+	it("moves a cursor motion section with its clip and drops it with the clip", () => {
+		const section = (id: string, clipId: string, startMs: number) => ({
+			id,
+			clipId,
+			sourceStartSec: 2,
+			sourceEndSec: 4,
+			startMs,
+			endMs: startMs + 2000,
+			mode: "smooth" as const,
+		});
+		const next = removeClip(
+			{
+				...doc(),
+				cursorMotionRanges: [section("m_a", "clip_a", 2000), section("m_b", "clip_b", 12000)],
+			},
+			"clip_a",
+		);
+		expect(next.cursorMotionRanges).toEqual([
+			expect.objectContaining({ id: "m_b", startMs: 2000, endMs: 4000 }),
+		]);
+		// A document that never had any keeps no key.
+		expect(removeClip(doc(), "clip_a")).not.toHaveProperty("cursorMotionRanges");
+	});
+
 	it("preserves a bare clipId that is not a complete source anchor", () => {
 		const before = doc();
 		before.zoomRanges.push(

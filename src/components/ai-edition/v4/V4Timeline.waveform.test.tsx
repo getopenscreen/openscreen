@@ -121,6 +121,7 @@ function renderBars(atGainDb: number): string[] {
 		speedRegions: [],
 		cameraFullscreenRegions: [],
 		shaderEffectRanges: [],
+		cursorMotionRegions: [],
 		shaderEffects: [],
 		layoutSegments: [],
 		hasDoc: true,

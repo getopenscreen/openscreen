@@ -27,7 +27,8 @@
 		"deleteSelected": "Usuń zaznaczone",
 		"playPause": "Odtwórz / Wstrzymaj",
 		"copySelected": "Kopiuj zaznaczone",
-		"paste": "Wklej"
+		"paste": "Wklej",
+		"addCursorMotion": "Add Cursor Motion"
 	},
 	"fixedActions": {
 		"undo": "Cofnij",

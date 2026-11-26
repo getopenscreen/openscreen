@@ -52,6 +52,7 @@ import {
 import type {
 	AxcutAudioTrack,
 	AxcutClipCropRegion,
+	AxcutCursorMotionRegion,
 	AxcutDocument,
 	AxcutShaderEffectRange,
 } from "../schema";
@@ -152,6 +153,11 @@ function playheadSec(): number {
 	return useProjectStore.getState().currentTimeSec;
 }
 
+/** What the inspector changes on a cursor-motion region. */
+export type CursorMotionPatch = Partial<
+	Pick<AxcutCursorMotionRegion, "mode" | "strength" | "easing">
+>;
+
 /** What the inspector changes on an effect region: its parameter values, or its target. */
 export interface ShaderEffectPatch {
 	values?: Record<string, unknown>;
@@ -224,6 +230,8 @@ export function useTimeline() {
 	const annotationLiveRef = useRef<AxcutDocument | null>(null);
 	const shaderEffectRollbackRef = useRef<AxcutDocument | null>(null);
 	const shaderEffectLiveRef = useRef<AxcutDocument | null>(null);
+	const cursorMotionRollbackRef = useRef<AxcutDocument | null>(null);
+	const cursorMotionLiveRef = useRef<AxcutDocument | null>(null);
 
 	// A drag does not always end in a commit: `ZoomFocusOverlay` unmounts the moment
 	// `focusMode` flips to "auto", so `endDrag` never runs and the snapshot outlives the
@@ -240,6 +248,8 @@ export function useTimeline() {
 		annotationLiveRef.current = null;
 		shaderEffectRollbackRef.current = null;
 		shaderEffectLiveRef.current = null;
+		cursorMotionRollbackRef.current = null;
+		cursorMotionLiveRef.current = null;
 	}, [projectId]);
 
 	const hasDoc = document !== null && projectId !== null;
@@ -1267,6 +1277,105 @@ export function useTimeline() {
 		}
 	}, [saveDocument]);
 
+	// --- Cursor motion: per-section overrides of the cursor's path --------------------------
+	// Plain top-level collection, clip-anchored like a zoom; the ops mirror speed's.
+	const addCursorMotion = useCallback(
+		async (durationSec = DEFAULT_NEW_REGION_SEC): Promise<string | null> => {
+			if (!document) return null;
+			const timeMs = Math.round(playheadSec() * 1000);
+			const endMs = timeMs + Math.round(durationSec * 1000);
+			const id = createId("curm");
+			const added = anchorRegionsWithDerivedMs(
+				[{ id, startMs: timeMs, endMs, mode: "smooth" as const }],
+				document.timeline.clips,
+				() => createId("curm"),
+			) as AxcutCursorMotionRegion[];
+			if (added.length === 0) return null;
+			const next: AxcutDocument = {
+				...document,
+				cursorMotionRanges: [...(document.cursorMotionRanges ?? []), ...added],
+			};
+			if (!(await saveDocument(next, { history: true }))) return null;
+			const firstId = added[0].id;
+			setClipSelection(null);
+			setMultiSelection([{ kind: "cursorMotion", id: firstId }]);
+			setSelection({ kind: "cursorMotion", id: firstId });
+			return firstId;
+		},
+		[document, saveDocument],
+	);
+
+	const updateCursorMotionSpan = useCallback(
+		async (id: string, startMs: number, endMs: number) => {
+			if (!document) return;
+			const s = finiteMs(startMs);
+			const e = finiteMs(endMs);
+			const next: AxcutDocument = {
+				...document,
+				cursorMotionRanges: replacePillSpan(
+					document.cursorMotionRanges ?? [],
+					id,
+					Math.min(s, e),
+					Math.max(s, e),
+					document.timeline.clips,
+					() => createId("curm"),
+				),
+			};
+			await saveDocument(next, { history: true });
+		},
+		[document, saveDocument],
+	);
+
+	const updateCursorMotionSettings = useCallback(
+		async (id: string, patch: CursorMotionPatch) => {
+			if (!document) return;
+			const next: AxcutDocument = {
+				...document,
+				cursorMotionRanges: patchRegionById<AxcutCursorMotionRegion>(
+					document.cursorMotionRanges ?? [],
+					id,
+					patch,
+				),
+			};
+			await saveDocument(next, { history: true });
+		},
+		[document, saveDocument],
+	);
+
+	// A slider: local writes while it lasts, then one save and one undo step from
+	// `commitCursorMotionChange`. The shader effects' live path.
+	const updateCursorMotionLive = useCallback(
+		(id: string, patch: CursorMotionPatch) => {
+			const doc = useProjectStore.getState().document;
+			if (!doc?.cursorMotionRanges) return;
+			const next: AxcutDocument = {
+				...doc,
+				cursorMotionRanges: patchRegionById<AxcutCursorMotionRegion>(
+					doc.cursorMotionRanges,
+					id,
+					patch,
+				),
+			};
+			if (cursorMotionLiveRef.current !== doc) cursorMotionRollbackRef.current = doc;
+			setDocument(next, { history: false });
+			cursorMotionLiveRef.current = next;
+		},
+		[setDocument],
+	);
+
+	const commitCursorMotionChange = useCallback(async () => {
+		const doc = useProjectStore.getState().document;
+		if (!doc) return;
+		const rollback = cursorMotionLiveRef.current === doc ? cursorMotionRollbackRef.current : null;
+		cursorMotionRollbackRef.current = null;
+		cursorMotionLiveRef.current = null;
+		if (!(await saveDocument(doc, { history: true, historyBase: rollback })) && rollback) {
+			useProjectStore.setState((state) =>
+				state.document === doc ? { document: rollback, revision: state.revision + 1 } : {},
+			);
+		}
+	}, [saveDocument]);
+
 	const updateSpeedValue = useCallback(
 		async (id: string, speed: number) => {
 			if (!document) return;
@@ -1318,6 +1427,9 @@ export function useTimeline() {
 			const shaderEffectIds = new Set(
 				handles.filter((h) => h.kind === "shaderEffect").map((h) => h.id),
 			);
+			const cursorMotionIds = new Set(
+				handles.filter((h) => h.kind === "cursorMotion").map((h) => h.id),
+			);
 			const legacy = (document.legacyEditor as Record<string, unknown>) ?? {};
 			const prevSpeed = dropPillsByIds(
 				(legacy.speedRegions as Array<{ id: string; startMs: number; endMs: number }>) ?? [],
@@ -1337,6 +1449,14 @@ export function useTimeline() {
 							shaderEffectRanges: dropPillsByIds(
 								document.shaderEffectRanges ?? [],
 								shaderEffectIds,
+							),
+						}
+					: {}),
+				...(cursorMotionIds.size > 0
+					? {
+							cursorMotionRanges: dropPillsByIds(
+								document.cursorMotionRanges ?? [],
+								cursorMotionIds,
 							),
 						}
 					: {}),
@@ -1669,6 +1789,7 @@ export function useTimeline() {
 	// One region per effect, never two at once; each names its definition.
 	const shaderEffectRanges = hasDoc ? (document.shaderEffectRanges ?? []) : [];
 	const shaderEffects = hasDoc ? (document.shaderEffects ?? []) : [];
+	const cursorMotionRegions = hasDoc ? (document.cursorMotionRanges ?? []) : [];
 
 	// --- Timeline audio tracks (issue #350) -------------------------------------
 	// CLIP-ANCHORED like every region above: one user-visible track is one pill
@@ -1866,6 +1987,7 @@ export function useTimeline() {
 		cameraFullscreenRegions,
 		shaderEffectRanges,
 		shaderEffects,
+		cursorMotionRegions,
 		layoutSegments,
 		addLayoutChange,
 		setLayoutPreset,
@@ -1927,6 +2049,11 @@ export function useTimeline() {
 		updateShaderEffect,
 		updateShaderEffectLive,
 		commitShaderEffectChange,
+		addCursorMotion,
+		updateCursorMotionSpan,
+		updateCursorMotionSettings,
+		updateCursorMotionLive,
+		commitCursorMotionChange,
 		// T19 — drives the preview video during trim-edge resize.
 		setCurrentTime: useProjectStore((s) => s.setCurrentTime),
 	};

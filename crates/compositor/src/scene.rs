@@ -771,6 +771,64 @@ pub struct SceneCursor {
     /// `#[serde(default)]` : champ ajouté après coup, absent des JSON de test existants.
     #[serde(default)]
     pub cursor_sprites: std::collections::HashMap<String, SceneCursorSprite>,
+    /// Per-section path overrides (`SceneCursorMotionRegion` app-side). `#[serde(default)]`: the
+    /// app omits the key when there are none.
+    #[serde(default)]
+    pub motion: Vec<SceneCursorMotionRegion>,
+}
+
+/// One fragment of a cursor-motion section, in the SOURCE time of the clip `clip_index` (an
+/// index into `Scene::clips`). It belongs to that clip: another clip over the same footage is
+/// not touched by it (`Scene::cursor_motion_for_clip`).
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SceneCursorMotionRegion {
+    pub clip_index: usize,
+    pub start_sec: f32,
+    pub end_sec: f32,
+    pub mode: SceneCursorMotionMode,
+    #[serde(default)]
+    pub strength: f32,
+    #[serde(default)]
+    pub easing: SceneCursorMotionEasing,
+    /// The section goes on before this fragment's start (another clip, or footage a trim
+    /// removed): no crossfade at that edge, the clip opens inside the section.
+    #[serde(default)]
+    pub continues_before: bool,
+    /// Same, after its end.
+    #[serde(default)]
+    pub continues_after: bool,
+    /// Where the WHOLE section starts and ends on this recording, when a trim or a clip boundary
+    /// cut it into several pieces of it (`cursor::MotionRegion::anchor_start`). Absent for a
+    /// section in one piece.
+    #[serde(default)]
+    pub anchor_start_sec: Option<f32>,
+    #[serde(default)]
+    pub anchor_end_sec: Option<f32>,
+    /// The part of the section's visible time this piece covers, 0..1. Absent: all of it.
+    #[serde(default)]
+    pub progress_start: Option<f32>,
+    #[serde(default)]
+    pub progress_end: Option<f32>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum SceneCursorMotionMode {
+    Recorded,
+    Smooth,
+    Straight,
+    Freeze,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum SceneCursorMotionEasing {
+    #[default]
+    EaseInOut,
+    Linear,
+    EaseIn,
+    EaseOut,
 }
 
 /// Un sprite de curseur : image + point de pivot.
@@ -1001,6 +1059,125 @@ pub struct Scene {
 }
 
 impl Scene {
+    /// Whether clip `index` goes on exactly where the clip before it stopped, on the same file:
+    /// a split with nothing removed between the two.
+    fn continues_previous_clip(&self, index: usize) -> bool {
+        let (Some(previous), Some(clip)) =
+            (index.checked_sub(1).and_then(|i| self.clips.get(i)), self.clips.get(index))
+        else {
+            return false;
+        };
+        previous.screen_path.eq_ignore_ascii_case(&clip.screen_path)
+            && (previous.source_end_sec - clip.source_start_sec).abs() < 1e-3
+    }
+
+    /// The first clip of the chain clip `clip_index` belongs to: the run of clips that play one
+    /// unbroken stretch of one file. A cut (footage removed, or another file) starts a new chain;
+    /// a plain split does not.
+    pub fn cursor_chain_start(&self, clip_index: usize) -> Option<usize> {
+        self.clips.get(clip_index)?;
+        let mut start = clip_index;
+        while self.continues_previous_clip(start) {
+            start -= 1;
+        }
+        Some(start)
+    }
+
+    /// The whole chain of clip `clip_index` (`cursor_chain_start`), as clip indices. One cursor
+    /// track is shaped per chain: its clips share it.
+    pub fn cursor_chain(&self, clip_index: usize) -> Option<std::ops::Range<usize>> {
+        let start = self.cursor_chain_start(clip_index)?;
+        let mut end = clip_index + 1;
+        while self.continues_previous_clip(end) {
+            end += 1;
+        }
+        Some(start..end)
+    }
+
+    /// Where the cursor spring restarts while clip `clip_index` plays (`CursorTrack::shaped`):
+    /// the source start of its chain (`cursor_chain_start`), and nothing else. Every clip of a
+    /// chain gets the same restart, so a plain split neither resets the cursor nor forgets the
+    /// cut the chain started at; another clip's start on the same file is no cut in this one and
+    /// never resets it mid-window. The clips are addressed by index, as everywhere else in the
+    /// scene, so no path comparison picks the clip.
+    pub fn cursor_break_for_clip(&self, clip_index: usize) -> Option<f32> {
+        let start = self.cursor_chain_start(clip_index)?;
+        Some(self.clips[start].source_start_sec as f32)
+    }
+
+    /// The cursor-motion sections of clip `clip_index`'s chain, for `CursorTrack::shaped`. Only
+    /// the chain's own fragments: a section on another clip over the same footage does not apply
+    /// here. Fragments a plain split cut apart are one section again (same settings, touching in
+    /// source time), so a Freeze or a Straight keeps one start point across the split.
+    pub fn cursor_motion_for_clip(&self, clip_index: usize) -> Vec<crate::cursor::MotionRegion> {
+        use crate::cursor::{MotionEasing, MotionMode, MotionRegion};
+        let Some(chain) = self.cursor_chain(clip_index) else {
+            return Vec::new();
+        };
+        // Each piece with the anchors the app gave it, if it gave any: two pieces merge only
+        // when they agree on them.
+        let mut regions: Vec<(MotionRegion, Option<(f32, f32)>)> = self
+            .cursor
+            .motion
+            .iter()
+            .filter(|region| chain.contains(&region.clip_index) && region.end_sec > region.start_sec)
+            .map(|region| {
+                let anchors = region.anchor_start_sec.zip(region.anchor_end_sec);
+                let (anchor_start, anchor_end) = anchors.unwrap_or((region.start_sec, region.end_sec));
+                let motion = MotionRegion {
+                start: region.start_sec,
+                end: region.end_sec,
+                mode: match region.mode {
+                    SceneCursorMotionMode::Recorded => MotionMode::Recorded,
+                    SceneCursorMotionMode::Smooth => MotionMode::Smooth,
+                    SceneCursorMotionMode::Straight => MotionMode::Straight,
+                    SceneCursorMotionMode::Freeze => MotionMode::Freeze,
+                },
+                strength: region.strength.clamp(0.0, 1.0),
+                easing: match region.easing {
+                    SceneCursorMotionEasing::EaseInOut => MotionEasing::EaseInOut,
+                    SceneCursorMotionEasing::Linear => MotionEasing::Linear,
+                    SceneCursorMotionEasing::EaseIn => MotionEasing::EaseIn,
+                    SceneCursorMotionEasing::EaseOut => MotionEasing::EaseOut,
+                },
+                blend_start: !region.continues_before,
+                blend_end: !region.continues_after,
+                anchor_start,
+                anchor_end,
+                progress: (
+                    region.progress_start.unwrap_or(0.0),
+                    region.progress_end.unwrap_or(1.0),
+                ),
+                };
+                (motion, anchors)
+            })
+            .collect();
+        regions.sort_by(|a, b| a.0.start.partial_cmp(&b.0.start).unwrap());
+        let mut merged: Vec<(MotionRegion, Option<(f32, f32)>)> = Vec::with_capacity(regions.len());
+        for (region, anchors) in regions {
+            match merged.last_mut() {
+                Some((last, last_anchors))
+                    if (last.end - region.start).abs() < 1e-3
+                        && last.mode == region.mode
+                        && last.strength == region.strength
+                        && last.easing == region.easing
+                        && *last_anchors == anchors =>
+                {
+                    last.end = region.end;
+                    last.blend_end = region.blend_end;
+                    match anchors {
+                        // Pieces of one anchored section: the line goes on where it was.
+                        Some(_) => last.progress.1 = region.progress.1,
+                        // A section the app did not anchor is its own anchors, merged or not.
+                        None => last.anchor_end = region.end,
+                    }
+                }
+                _ => merged.push((region, anchors)),
+            }
+        }
+        merged.into_iter().map(|(region, _)| region).collect()
+    }
+
     pub fn layout_at(&self, t: f32) -> Option<SampledLayout<'_>> {
         self.layout_regions.iter().find(|r| r.clip_index == self.active_clip_index
             && t >= r.start_sec && t < r.end_sec).map(|r| r.sample(t))
@@ -1454,5 +1631,157 @@ mod annotation_tests {
             filtered.annotations.iter().map(|a| a.id.as_str()).collect::<Vec<_>>(),
             vec!["in-window"]
         );
+    }
+}
+
+#[cfg(test)]
+mod cursor_chain_tests {
+    use super::*;
+
+    /// Clips as `(path, source start, source end)`, motion as the JSON of `cursor.motion`.
+    fn scene_with(clips: &[(&str, f64, f64)], motion: &str) -> Scene {
+        let clips: Vec<String> = clips
+            .iter()
+            .map(|(path, start, end)| {
+                format!(
+                    r#"{{"screenPath":"{path}","webcamPath":"","sourceStartSec":{start},"sourceEndSec":{end},"webcamOffsetSec":0}}"#
+                )
+            })
+            .collect();
+        let json = format!(
+            r##"{{"clips":[{}],"layout":{{"preset":"no-webcam","webcamSize":1,"webcamShape":"rectangle","webcamMirror":false,"webcamPosition":null,"webcamReactiveZoom":false}},"effects":{{"padding":0,"blur":false,"shadow":0,"roundnessFrac":0,"motionBlur":0}},"background":{{"kind":"color","color":"#000000"}},"zoomRegions":[],"cursor":{{"show":false,"size":1,"smoothing":0,"motionBlur":0,"clickBounce":0,"clipToBounds":false,"theme":"default","motion":{motion}}},"cropByClip":[],"output":{{"width":1920,"height":1080,"fps":30}}}}"##,
+            clips.join(",")
+        );
+        Scene::from_json(&json).expect("scene")
+    }
+
+    #[test]
+    fn a_scene_without_motion_parses_with_none() {
+        let scene = scene_with(&[("a.mp4", 0.0, 4.0)], "[]");
+        assert!(scene.cursor.motion.is_empty());
+        let json = r##"{"show":true,"size":1,"smoothing":0.3,"motionBlur":0,"clickBounce":1,"clipToBounds":false,"theme":"default"}"##;
+        let cursor: SceneCursor = serde_json::from_str(json).expect("a cursor written before the field");
+        assert!(cursor.motion.is_empty());
+    }
+
+    #[test]
+    fn each_clip_restarts_at_its_own_start_only() {
+        // A = [0, 6] and B = [2, 4] on one file: B's start is no cut inside A.
+        let scene = scene_with(&[("a.mp4", 0.0, 6.0), ("a.mp4", 2.0, 4.0)], "[]");
+        assert_eq!(scene.cursor_break_for_clip(0), Some(0.0));
+        assert_eq!(scene.cursor_break_for_clip(1), Some(2.0));
+        assert_eq!(scene.cursor_break_for_clip(2), None, "no such clip");
+    }
+
+    #[test]
+    fn a_clip_that_continues_the_one_before_it_does_not_restart() {
+        // A trim removed 4..6: the segment after the cut restarts, a plain split at 2 does not.
+        let scene = scene_with(
+            &[
+                ("C:/Capture.mp4", 0.0, 2.0),
+                ("c:/capture.mp4", 2.0, 4.0),
+                ("C:/Capture.mp4", 6.0, 9.0),
+                ("other.mp4", 9.0, 12.0),
+            ],
+            "[]",
+        );
+        assert_eq!(scene.cursor_break_for_clip(1), Some(0.0), "same file, source runs on");
+        assert_eq!(scene.cursor_break_for_clip(2), Some(6.0), "footage was removed before it");
+        assert_eq!(scene.cursor_break_for_clip(3), Some(9.0), "another file");
+        assert_eq!(scene.cursor_chain(0), Some(0..2));
+        assert_eq!(scene.cursor_chain(1), Some(0..2));
+        assert_eq!(scene.cursor_chain(2), Some(2..3));
+    }
+
+    #[test]
+    fn a_split_after_a_cut_keeps_the_restart_of_the_cut() {
+        // [0, 1], then a cut to 2, then a plain split at 2.05: the third clip must keep the
+        // restart at 2, or it falls back on a spring that crossed the removed footage.
+        let scene =
+            scene_with(&[("a.mp4", 0.0, 1.0), ("a.mp4", 2.0, 2.05), ("a.mp4", 2.05, 4.0)], "[]");
+        assert_eq!(scene.cursor_chain_start(2), Some(1));
+        assert_eq!(scene.cursor_break_for_clip(1), Some(2.0));
+        assert_eq!(scene.cursor_break_for_clip(2), Some(2.0), "the chain's restart, not none");
+    }
+
+    #[test]
+    fn a_section_belongs_to_its_clip_not_to_the_file() {
+        // Two clips over the same footage: the Freeze on the first is not the second's.
+        let scene = scene_with(
+            &[("a.mp4", 0.0, 6.0), ("a.mp4", 0.0, 6.0)],
+            r#"[{"clipIndex":0,"startSec":1.0,"endSec":2.0,"mode":"freeze"}]"#,
+        );
+        let first = scene.cursor_motion_for_clip(0);
+        assert_eq!(first.len(), 1);
+        assert_eq!(first[0].mode, crate::cursor::MotionMode::Freeze);
+        assert_eq!(first[0].easing, crate::cursor::MotionEasing::EaseInOut, "absent easing defaults");
+        assert!(first[0].blend_start && first[0].blend_end);
+        assert!(scene.cursor_motion_for_clip(1).is_empty(), "the other copy of the recording");
+    }
+
+    #[test]
+    fn fragments_a_plain_split_cut_apart_are_one_section_again() {
+        // One Straight drawn over [1, 3], the clip split at 2: two fragments, flagged as going on
+        // across the split. The chain sees one section with its two real edges.
+        let scene = scene_with(
+            &[("a.mp4", 0.0, 2.0), ("a.mp4", 2.0, 4.0)],
+            r#"[
+              {"clipIndex":1,"startSec":2.0,"endSec":3.0,"mode":"straight","strength":0.5,"easing":"linear","continuesBefore":true},
+              {"clipIndex":0,"startSec":1.0,"endSec":2.0,"mode":"straight","strength":0.5,"easing":"linear","continuesAfter":true},
+              {"clipIndex":1,"startSec":3.5,"endSec":3.5,"mode":"recorded"}
+            ]"#,
+        );
+        for clip in [0, 1] {
+            let regions = scene.cursor_motion_for_clip(clip);
+            assert_eq!(regions.len(), 1, "merged, and the empty span left out");
+            assert!((regions[0].start - 1.0).abs() < 1e-6 && (regions[0].end - 3.0).abs() < 1e-6);
+            assert!(regions[0].blend_start && regions[0].blend_end);
+            assert_eq!(regions[0].easing, crate::cursor::MotionEasing::Linear);
+        }
+    }
+
+    #[test]
+    fn the_pieces_of_a_section_a_trim_cut_carry_its_anchors() {
+        // A Straight over 1–5 s with 2–3 s trimmed out: one rule, read from the section's ends.
+        let scene = scene_with(
+            &[("a.mp4", 0.0, 2.0), ("a.mp4", 3.0, 6.0)],
+            r#"[
+              {"clipIndex":0,"startSec":1.0,"endSec":2.0,"mode":"straight","continuesAfter":true,
+               "anchorStartSec":1.0,"anchorEndSec":5.0,"progressStart":0.0,"progressEnd":0.3333},
+              {"clipIndex":1,"startSec":3.0,"endSec":5.0,"mode":"straight","continuesBefore":true,
+               "anchorStartSec":1.0,"anchorEndSec":5.0,"progressStart":0.3333,"progressEnd":1.0}
+            ]"#,
+        );
+        let after = scene.cursor_motion_for_clip(1);
+        assert_eq!(after.len(), 1);
+        assert!((after[0].anchor_start - 1.0).abs() < 1e-6 && (after[0].anchor_end - 5.0).abs() < 1e-6);
+        assert!((after[0].progress.0 - 0.3333).abs() < 1e-6 && (after[0].progress.1 - 1.0).abs() < 1e-6);
+        assert!(!after[0].blend_start && after[0].blend_end);
+        // A section in one piece is its own anchors.
+        let whole = scene_with(
+            &[("a.mp4", 0.0, 6.0)],
+            r#"[{"clipIndex":0,"startSec":1.0,"endSec":2.0,"mode":"freeze"}]"#,
+        )
+        .cursor_motion_for_clip(0);
+        assert!((whole[0].anchor_start - 1.0).abs() < 1e-6 && (whole[0].anchor_end - 2.0).abs() < 1e-6);
+        assert_eq!(whole[0].progress, (0.0, 1.0));
+    }
+
+    #[test]
+    fn a_section_that_goes_on_past_a_cut_does_not_fade_at_it() {
+        // A trim removed 2..3 inside a Smooth section: each side keeps the section to the cut.
+        let scene = scene_with(
+            &[("a.mp4", 0.0, 2.0), ("a.mp4", 3.0, 5.0)],
+            r#"[
+              {"clipIndex":0,"startSec":1.0,"endSec":2.0,"mode":"smooth","strength":0.7,"continuesAfter":true},
+              {"clipIndex":1,"startSec":3.0,"endSec":4.0,"mode":"smooth","strength":0.7,"continuesBefore":true}
+            ]"#,
+        );
+        let before = scene.cursor_motion_for_clip(0);
+        assert_eq!(before.len(), 1);
+        assert!(before[0].blend_start && !before[0].blend_end);
+        assert!((before[0].strength - 0.7).abs() < 1e-6);
+        let after = scene.cursor_motion_for_clip(1);
+        assert!(!after[0].blend_start && after[0].blend_end);
     }
 }

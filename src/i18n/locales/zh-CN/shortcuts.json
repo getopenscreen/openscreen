@@ -27,7 +27,8 @@
 		"deleteSelected": "删除所选",
 		"playPause": "播放 / 暂停",
 		"copySelected": "复制所选",
-		"paste": "粘贴"
+		"paste": "粘贴",
+		"addCursorMotion": "Add Cursor Motion"
 	},
 	"fixedActions": {
 		"undo": "撤销",

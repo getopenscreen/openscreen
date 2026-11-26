@@ -7,7 +7,8 @@
 		"addTrim": "Dodaj przycięcie: usuwa fragment wideo w bieżącym czasie",
 		"addAnnotation": "Dodaj tekst, strzałkę, obraz lub rozmycie w bieżącym czasie",
 		"addSpeed": "Dodaj zmianę prędkości w bieżącym czasie",
-		"addCameraFullscreen": "Zmień układ tutaj"
+		"addCameraFullscreen": "Zmień układ tutaj",
+		"addCursorMotion": "Add a cursor motion section at the current time"
 	},
 	"hints": {
 		"pressZoom": "Naciśnij {{key}}, aby dodać powiększenie",
@@ -15,7 +16,8 @@
 		"pressAnnotation": "Naciśnij {{key}}, aby dodać adnotację",
 		"pressAudio": "Naciśnij {{audioKey}}, aby dodać dźwięk, {{voiceoverKey}}, aby nagrać lektora",
 		"pressSpeed": "Naciśnij {{key}}, aby dodać zmianę prędkości",
-		"pressCameraFullscreen": "Naciśnij {{key}}, aby dodać segment Pełnej kamery"
+		"pressCameraFullscreen": "Naciśnij {{key}}, aby dodać segment Pełnej kamery",
+		"pressCursorMotion": "Press {{key}} to add cursor motion"
 	},
 	"labels": {
 		"pan": "Przesuń",
@@ -31,7 +33,8 @@
 		"imageItem": "Obraz",
 		"emptyText": "Pusty tekst",
 		"cameraFullscreen": "Pełna kamera",
-		"cameraFullscreenItem": "Pełna kamera {{index}}"
+		"cameraFullscreenItem": "Pełna kamera {{index}}",
+		"cursorMotion": "Cursor motion"
 	},
 	"trails": {
 		"zoomIn": "Najazd: widok przybliża się aż do początku powiększenia",

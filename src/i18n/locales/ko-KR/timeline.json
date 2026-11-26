@@ -7,7 +7,8 @@
 		"addTrim": "트림 추가: 현재 시점에서 영상의 한 구간을 제거합니다",
 		"addAnnotation": "현재 시점에 텍스트, 화살표, 이미지 또는 블러 추가",
 		"addSpeed": "현재 시점에 속도 변경 추가",
-		"addCameraFullscreen": "여기서 레이아웃 변경"
+		"addCameraFullscreen": "여기서 레이아웃 변경",
+		"addCursorMotion": "Add a cursor motion section at the current time"
 	},
 	"hints": {
 		"pressZoom": "{{key}}를 눌러 줌 추가",
@@ -15,7 +16,8 @@
 		"pressAnnotation": "{{key}}를 눌러 주석 추가",
 		"pressAudio": "{{audioKey}} 키로 오디오 추가, {{voiceoverKey}} 키로 보이스오버 녹음",
 		"pressSpeed": "{{key}}를 눌러 속도 추가",
-		"pressCameraFullscreen": "{{key}}를 눌러 전체 화면 카메라 구간을 추가하세요"
+		"pressCameraFullscreen": "{{key}}를 눌러 전체 화면 카메라 구간을 추가하세요",
+		"pressCursorMotion": "Press {{key}} to add cursor motion"
 	},
 	"labels": {
 		"pan": "이동",
@@ -31,7 +33,8 @@
 		"imageItem": "이미지",
 		"emptyText": "빈 텍스트",
 		"cameraFullscreen": "전체 화면 카메라",
-		"cameraFullscreenItem": "전체 화면 카메라 {{index}}"
+		"cameraFullscreenItem": "전체 화면 카메라 {{index}}",
+		"cursorMotion": "Cursor motion"
 	},
 	"trails": {
 		"zoomIn": "줌 인: 줌이 시작될 때까지 화면이 확대됩니다",

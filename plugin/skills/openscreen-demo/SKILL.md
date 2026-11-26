@@ -78,6 +78,10 @@ Write a storyboard as a short table and show it to the user, then carry on unles
 
 ## 3. Set the stage
 
+<!-- directory-plugin
+**A web app captured headless** (frame by frame, so no window opens on the desktop) needs a capture script that this edition of the plugin does not carry. Say so, and ask the user whether a recording in a real window, which shows the page on their screen, will do. Stage and record it as below only once they agree.
+-->
+
 - Start the app and open it on the starting state of the first beat.
 - Give it one clean window of about 1600×1000. For a web app, open it in an app window without browser chrome: `chrome --app=http://localhost:3000 --window-size=1600,1000 --user-data-dir=<temp folder>`. Its title is the page's `<title>`.
 - Call `listSources` and pick a unique part of the window's title.
@@ -102,9 +106,6 @@ For staging, choreography and a take recorded with no window at all, use the `op
 <!-- full-plugin -->
 **A web app captured headless** (frame by frame, so no window opens on the desktop): the `openscreen-capture` skill ships a script that does it at twice the display scale and writes the pointer log. Then `createProject` with the video, and `setPointerTrack` with `recordingStartedAt: 0` and each `at` in milliseconds into the video.
 <!-- /full-plugin -->
-<!-- directory-plugin
-**A web app captured headless** (frame by frame, so no window opens on the desktop) needs a capture script that this edition of the plugin does not carry. Say so, and ask the user whether a recording in a real window, which shows the page on their screen, will do. Record it as above only once they agree.
--->
 
 ## 5. Check the take
 

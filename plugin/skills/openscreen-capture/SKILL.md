@@ -13,11 +13,11 @@ A take is cheaper to redo than to repair. Aim for one that needs no cut: the fir
 |---|---|---|
 | A desktop app, a native window, anything a browser cannot show | `startRecording`, real mouse | Recorded with the take |
 | A web app the user wants filmed as they use it | `startRecording`, real mouse | Recorded with the take |
-| A web app, a repeatable take, nothing on the user's screen | Headless script (below) | `setPointerTrack` from the script's log |
+| A web app, a repeatable take, nothing on the user's screen | <!-- full-plugin -->Headless script (below)<!-- /full-plugin --><!-- directory-plugin A headless script, with the full plugin (below) --> | `setPointerTrack` from the script's log |
 | A web app shown in a real window, driven by Playwright or CDP | `startRecording`, script drives the page | `setPointerTrack` from the script's log |
 | A video file that already exists | `createProject` with its `videoPath` | `setPointerTrack` if you know the clicks |
 
-**Prefer a real recording** when the thing to show is not a web page, needs the user's real data or session, involves sound from the app (`startRecording` with `systemAudio: true`), needs the webcam (`camera`) or a narration (`microphone: true`), or when the user wants to drive it themselves. Everything else in a browser is cleaner headless: same timing on every run, no hesitation, the user's screen untouched.
+**Prefer a real recording** when the thing to show is not a web page, needs the user's real data or session, involves sound from the app (`startRecording` with `systemAudio: true`), needs the webcam (`camera`) or a narration (`microphone: true`), or when the user wants to drive it themselves. <!-- full-plugin -->Everything else in a browser is cleaner headless: same timing on every run, no hesitation, the user's screen untouched.<!-- /full-plugin -->
 
 ## Stage the app
 

@@ -84,4 +84,12 @@ describe("applyDirectoryEdition", () => {
 			),
 		).toBe("ac\nd\ne");
 	});
+
+	it("unwraps inline directory text, as in a table cell", () => {
+		expect(
+			applyDirectoryEdition(
+				"| <!-- full-plugin -->x<!-- /full-plugin --><!-- directory-plugin y --> |\n",
+			),
+		).toBe("| y |\n");
+	});
 });

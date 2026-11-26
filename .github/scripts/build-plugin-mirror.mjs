@@ -16,6 +16,7 @@
 //   <!-- directory-plugin
 //   text of the directory edition only
 //   -->
+//   <!-- directory-plugin inline text, for a table cell -->
 //
 // The full plugin is installed straight from plugin/, where the directory text stays
 // an HTML comment. The directory edition drops the full-only text and unwraps the
@@ -35,7 +36,8 @@ import { join, relative } from "node:path";
 import { argv } from "node:process";
 
 const FULL = /<!-- full-plugin -->([\s\S]*?)<!-- \/full-plugin -->\n?/g;
-const DIRECTORY = /<!-- directory-plugin\n([\s\S]*?)-->\n?/g;
+// A block on its own lines, or inline on one line: <!-- directory-plugin text -->.
+const DIRECTORY = /<!-- directory-plugin(?:\n([\s\S]*?)-->\n?| (.*?) -->)/g;
 const MARKER = /<!-- \/?(full-plugin|directory-plugin)\b/;
 
 // What the directory accepts from an organization that is not Verified.
@@ -59,7 +61,7 @@ function checkMarkers(file, text) {
 }
 
 export function applyDirectoryEdition(text) {
-	return text.replace(FULL, "").replace(DIRECTORY, "$1");
+	return text.replace(FULL, "").replace(DIRECTORY, (_, block, inline) => block ?? inline);
 }
 
 /**

@@ -61,6 +61,7 @@ Log where each move starts and ends, and each click; OpenScreen glides between t
 
 For a page shown in a real window, the tool's description gives the formula from a page point (`clientX`, `clientY`) to window fractions. `setPointerTrack` replaces the pointer the take had, then plans zooms on the new clicks (`autoZoomsAdded`). On a project not open in the editor it needs a checkpoint, which `stopRecording` and `createProject` make; `restoreCheckpoint` undoes it.
 
+<!-- full-plugin -->
 ## The headless recipe
 
 `scripts/capture.mjs` captures a web page in a browser with no window: a screenshot loop at twice the display scale (2560×1440 from a 1280×720 viewport, about 20 frames a second, enough for an interface), encoded to an H.264 MP4 at 30 fps, plus the pointer log in video time. Twice the scale is what keeps text sharp under a 1.5× to 2.2× zoom.
@@ -82,6 +83,13 @@ Never write a `.cursor.json` file yourself: `setPointerTrack` writes it, and a c
 - Timers inside the page run on the real clock while frames arrive at their own pace: an on-screen clock or counter can look faster or slower than real time. Keep them out of the shot.
 - A 3× scale (3840×2160) is worth it only for an effect that magnifies a detail, and costs frame rate.
 
+<!-- /full-plugin -->
+<!-- directory-plugin
+## The headless recipe
+
+Capturing a web page in a browser with no window needs a capture script that comes with the full OpenScreen plugin, from https://github.com/getopenscreen/openscreen (see its `plugin/` folder). Without it, record the page in a real window with `startRecording` as above.
+
+-->
 ## Check the take before editing
 
 Look at the whole take in one image: `getContactSheet` with the `videoPath` as `path` and `count: 12`. If that tool is not listed, use `getFrames` with `path` and `count: 6`. Then:

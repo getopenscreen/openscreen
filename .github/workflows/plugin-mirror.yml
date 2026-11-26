@@ -21,12 +21,14 @@ on:
       - "plugin/**"
       - "LICENSE"
       - "package.json"
+      - ".github/scripts/build-plugin-mirror.mjs"
       - ".github/workflows/plugin-mirror.yml"
   pull_request:
     branches: [main]
     paths:
       - "plugin/**"
       - "package.json"
+      - ".github/scripts/build-plugin-mirror.mjs"
       - ".github/workflows/plugin-mirror.yml"
   workflow_dispatch:
 
@@ -65,14 +67,16 @@ jobs:
             process.exit(bad.length ? 1 : 0);
           '
 
+      # The directory edition carries the skills alone: the directory accepts a
+      # local MCP server and script files only from Verified organizations, which
+      # getopenscreen is not yet. Set PLUGIN_MIRROR_EDITION to "full" (a repository
+      # variable) once it is. The script says what it drops and why.
       - name: Build the mirror's tree
+        env:
+          EDITION: ${{ vars.PLUGIN_MIRROR_EDITION || 'directory' }}
         run: |
-          mkdir -p "$RUNNER_TEMP/mirror" "$RUNNER_TEMP/tree"
-          # evals/ is development tooling (prompts, graders, mocks) and does not
-          # ship to users.
-          cp -a plugin/. "$RUNNER_TEMP/tree/"
-          rm -rf "$RUNNER_TEMP/tree/evals"
-          cp LICENSE "$RUNNER_TEMP/tree/LICENSE"
+          mkdir -p "$RUNNER_TEMP/mirror"
+          node .github/scripts/build-plugin-mirror.mjs plugin "$RUNNER_TEMP/tree" --edition "$EDITION" --license LICENSE
 
       - name: Push to getopenscreen/openscreen-plugin
         if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main' && github.repository == 'getopenscreen/openscreen'

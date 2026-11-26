@@ -134,6 +134,7 @@ fn ffmpeg_dir(root: &Path) -> PathBuf {
     root.join("../../../crates/thirdparty/ffmpeg-linux64-lgpl-shared")
 }
 
+/// Configures Cargo link directives and bindgen for the vendored FFmpeg libraries.
 fn link_ffmpeg(dir: &Path) {
     let include = dir.join("include");
     let lib = dir.join("lib");
@@ -171,6 +172,7 @@ fn link_ffmpeg(dir: &Path) {
     // of the repo. `--disable-new-dtags` is what makes these RUNPATH entries
     // apply to the transitive ffmpeg libs too; with the default DT_RUNPATH they
     // would not.
+    println!("cargo:rustc-link-arg=-Wl,--export-dynamic");
     println!("cargo:rustc-link-arg=-Wl,--disable-new-dtags");
     println!("cargo:rustc-link-arg=-Wl,-rpath,$ORIGIN/helper-ffmpeg");
     println!("cargo:rustc-link-arg=-Wl,-rpath,{}", lib.display());

@@ -165,15 +165,21 @@ pub fn prepare_environment() {
 /// against, and what matters is what is loadable here and now.
 fn vaapi_is_safe_to_probe() -> bool {
     // SAFETY: dlopen/dlsym with a literal name; every pointer is checked before
-    // use and the handle is closed on both paths.
+    // use and the handle is closed on both paths. csrc/ffmpeg_accessors.c
+    // provides a vaMapBuffer2 -> vaMapBuffer compatibility bridge for libva < 2.22.
     unsafe {
         let handle = dlopen(c"libva.so.2".as_ptr(), RTLD_LAZY | RTLD_LOCAL);
         if handle.is_null() {
             return false;
         }
         let symbol = dlsym(handle, c"vaMapBuffer2".as_ptr());
+        let fallback = if symbol.is_null() {
+            dlsym(handle, c"vaMapBuffer".as_ptr())
+        } else {
+            symbol
+        };
         dlclose(handle);
-        !symbol.is_null()
+        !fallback.is_null()
     }
 }
 

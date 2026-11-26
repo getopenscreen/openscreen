@@ -14,7 +14,10 @@ function write(rel, text) {
 
 beforeEach(() => {
 	dir = mkdtempSync(join(tmpdir(), "plugin-mirror-"));
-	write(".claude-plugin/plugin.json", '{ "name": "openscreen", "version": "2.4.0" }\n');
+	write(
+		".claude-plugin/plugin.json",
+		'{ "name": "openscreen", "version": "2.4.0", "network": { "hosts": ["github.com"] } }\n',
+	);
 	write(".mcp.json", '{ "mcpServers": {} }\n');
 	write("scripts/server.mjs", "#!/usr/bin/env node\n");
 	write("evals/README.md", "graders\n");
@@ -40,6 +43,10 @@ describe("buildPluginMirror", () => {
 		const out = join(dir, "out");
 		const files = buildPluginMirror(join(dir, "plugin"), out, { license: join(dir, "LICENSE") });
 		expect(files).toEqual([".claude-plugin/plugin.json", "LICENSE", "skills/demo/SKILL.md"]);
+		expect(JSON.parse(readFileSync(join(out, ".claude-plugin/plugin.json"), "utf8"))).toEqual({
+			name: "openscreen",
+			version: "2.4.0",
+		});
 		expect(readFileSync(join(out, "skills/demo/SKILL.md"), "utf8")).toBe(
 			"Setup. Register it by hand.\nEnd.\n",
 		);

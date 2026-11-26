@@ -20,6 +20,7 @@ namespace {
 
 const CLSID CLSID_SampleGrabberLocal = {0xC1F400A0, 0x3F08, 0x11D3, {0x9F, 0x0B, 0x00, 0x60, 0x08, 0x03, 0x9E, 0x37}};
 const CLSID CLSID_NullRendererLocal = {0xC1F400A4, 0x3F08, 0x11D3, {0x9F, 0x0B, 0x00, 0x60, 0x08, 0x03, 0x9E, 0x37}};
+const CLSID CLSID_ObsVirtualCamera = {0xA3FCE0F5, 0x3493, 0x419F, {0x95, 0x8A, 0xAB, 0xA1, 0x25, 0x0E, 0xC2, 0x0B}};
 
 MIDL_INTERFACE("6B652FFF-11FE-4FCE-92AD-0266B5D7C78F")
 ISampleGrabber : public IUnknown {
@@ -341,6 +342,17 @@ bool DirectShowWebcamCapture::initialize(
 
     impl_->sampleGrabber->SetBufferSamples(TRUE);
     impl_->sampleGrabber->SetOneShot(FALSE);
+    // The OBS virtual camera can stall after its first sample when the null
+    // renderer schedules against a graph reference clock. The recorder assigns
+    // camera and screen timestamps from its own shared clock.
+    if (selectedClsid == CLSID_ObsVirtualCamera) {
+        Microsoft::WRL::ComPtr<IMediaFilter> mediaFilter;
+        if (!succeeded(impl_->graph.As(&mediaFilter), "QueryInterface(OBS Virtual Camera graph clock)") ||
+            !succeeded(mediaFilter->SetSyncSource(nullptr), "SetSyncSource(OBS Virtual Camera)")) {
+            return false;
+        }
+        std::cerr << "INFO: OBS Virtual Camera DirectShow graph clock disabled" << std::endl;
+    }
     if (!succeeded(impl_->graph.As(&impl_->mediaControl), "QueryInterface(IMediaControl)")) {
         return false;
     }

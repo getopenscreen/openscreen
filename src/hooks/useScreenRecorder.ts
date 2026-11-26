@@ -1267,6 +1267,16 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 		}
 	};
 
+	// Best-effort like every overlay call: a marquee that fails to play must not fail the
+	// take — the hide below still runs, and recording starts as it always did.
+	const safeRunRecordingMarquee = async (runId: number) => {
+		try {
+			await window.electronAPI.runRecordingMarquee(runId);
+		} catch (error) {
+			console.warn("Failed to play the recording marquee:", error);
+		}
+	};
+
 	const isCountdownRunActive = (runId?: number) =>
 		runId === undefined || countdownRunId.current === runId;
 
@@ -1932,6 +1942,18 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 
 			if (countdownRunId.current !== runId) {
 				return;
+			}
+
+			// After the last digit, the marquee sweeps the display about to be recorded —
+			// the user's cue for which screen the take lands on. It resolves once the sweep
+			// has faded; the capture arms only after the hide below, so the ring cannot
+			// reach the video.
+			if (overlayShown) {
+				await safeRunRecordingMarquee(runId);
+
+				if (countdownRunId.current !== runId) {
+					return;
+				}
 			}
 
 			setCountdownActive(false);

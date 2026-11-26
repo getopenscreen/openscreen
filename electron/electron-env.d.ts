@@ -550,6 +550,9 @@ interface Window {
 		showCountdownOverlay: (value: number, runId: number) => Promise<void>;
 		setCountdownOverlayValue: (value: number, runId: number) => Promise<void>;
 		hideCountdownOverlay: (runId: number) => Promise<void>;
+		/** Resolves after the one-shot marquee has swept the recorded display. */
+		runRecordingMarquee: (runId: number) => Promise<void>;
+		onCountdownOverlayMarquee: (callback: (runId: number) => void) => () => void;
 		onCountdownOverlayValue: (
 			callback: (value: number | null, runId: number) => void,
 		) => () => void;

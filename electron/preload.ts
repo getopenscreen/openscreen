@@ -612,6 +612,14 @@ contextBridge.exposeInMainWorld("electronAPI", {
 	hideCountdownOverlay: (runId: number) => {
 		return ipcRenderer.invoke("countdown-overlay-hide", runId);
 	},
+	runRecordingMarquee: (runId: number) => {
+		return ipcRenderer.invoke("countdown-overlay-marquee", runId);
+	},
+	onCountdownOverlayMarquee: (callback: (runId: number) => void) => {
+		const listener = (_event: unknown, runId: number) => callback(runId);
+		ipcRenderer.on("countdown-overlay-marquee", listener);
+		return () => ipcRenderer.removeListener("countdown-overlay-marquee", listener);
+	},
 	onCountdownOverlayValue: (callback: (value: number | null, runId: number) => void) => {
 		const listener = (_event: unknown, value: number | null, runId: number) =>
 			callback(value, runId);

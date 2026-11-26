@@ -45,6 +45,9 @@ const ALLOWED = /\.(md|txt|json|ya?ml|png|jpe?g|gif|webp|ico)$/i;
 const ALLOWED_NAMES = new Set(["LICENSE", ".gitignore"]);
 // Paths the directory edition leaves out: the server's launcher and every script.
 const DIRECTORY_DROPS = [".mcp.json", "scripts"];
+// Manifest fields the directory refuses from an unverified organization. Claude Code
+// reads `network` (the hosts the plugin reaches), but the directory does not list it.
+const DIRECTORY_MANIFEST_DROPS = ["network"];
 // Words that would point Claude at something the directory edition does not ship.
 const DANGLING = [/\.mjs\b/, /openscreenSetup/, /\/reload-plugins/, /\b(the|plugin.s) launcher\b/];
 
@@ -84,6 +87,12 @@ export function buildPluginMirror(pluginDir, outDir, { edition = "directory", li
 	if (edition === "full") return walk(outDir).sort();
 
 	for (const drop of DIRECTORY_DROPS) rmSync(join(outDir, drop), { recursive: true, force: true });
+	const manifest = join(outDir, ".claude-plugin", "plugin.json");
+	if (existsSync(manifest)) {
+		const json = JSON.parse(readFileSync(manifest, "utf8"));
+		for (const field of DIRECTORY_MANIFEST_DROPS) delete json[field];
+		writeFileSync(manifest, `${JSON.stringify(json, null, "\t")}\n`);
+	}
 	const skills = join(outDir, "skills");
 	if (existsSync(skills)) {
 		for (const skill of readdirSync(skills)) {

@@ -290,7 +290,7 @@ function setupApplicationMenu() {
 				{ type: "separator" as const },
 				{
 					label: mainT("common", "actions.saveDiagnostics") || "Save Diagnostics",
-					click: runSaveDiagnostics,
+					click: () => runSaveDiagnostics(),
 				},
 				// Permanent and unconditional, unlike the update check below: a link to the repo
 				// is the one thing every channel may show, the Store included. Not in the tray,
@@ -460,7 +460,7 @@ function setupApplicationMenu() {
 				{ type: "separator" as const },
 				{
 					label: mainT("common", "actions.saveDiagnostics") || "Save Diagnostics",
-					click: runSaveDiagnostics,
+					click: () => runSaveDiagnostics(),
 				},
 				{
 					label: mainT("common", "actions.starOnGithub") || "Star on GitHub",
@@ -529,12 +529,15 @@ function channelAllowsUpdateCheck(): boolean {
  *  Mirrors what ipc/handlers.ts already does for its own dialogs. On macOS the HUD is
  *  skipped as an owner (see messageBox.ts). */
 function showMessageBox(options: Electron.MessageBoxOptions) {
+	return showMessageBoxOver(dialogParent(), options);
+}
+
+function dialogParent() {
 	const visible = (win: BrowserWindow | null) =>
 		win && !win.isDestroyed() && win.isVisible() ? win : null;
 	// A modal owned by a hidden window may never be drawn, so an unowned dialog is the safer
 	// fallback when the HUD has been closed to the tray.
-	const parent = visible(BrowserWindow.getFocusedWindow()) ?? visible(mainWindow);
-	return showMessageBoxOver(parent, options);
+	return visible(BrowserWindow.getFocusedWindow()) ?? visible(mainWindow);
 }
 
 function aboutFacts(): AboutFacts {
@@ -647,8 +650,8 @@ function runApplyUpdate() {
  * open project is left out on purpose: a bundle may be attached to a public
  * issue, and a project carries its transcripts.
  */
-function runSaveDiagnostics() {
-	exportDiagnosticFile({ error: "Manual diagnostic export", projectState: null, logs: [] })
+function runSaveDiagnostics(parent: BrowserWindow | null = dialogParent()) {
+	exportDiagnosticFile({ error: "Manual diagnostic export", projectState: null, logs: [] }, parent)
 		.then((result) => {
 			if (result.canceled) return;
 			if (!result.success) {
@@ -1093,7 +1096,7 @@ function updateTrayMenu(recording: boolean = false) {
 				// lines this exports are worth the most (getopenscreen/openscreen#460).
 				{
 					label: mainT("common", "actions.saveDiagnostics") || "Save Diagnostics",
-					click: runSaveDiagnostics,
+					click: () => runSaveDiagnostics(),
 				},
 				...(isMac
 					? [
@@ -1512,8 +1515,8 @@ appReady?.then(async () => {
 
 	// The editor's wordmark menu: the same Save Diagnostics as the tray and the app menu, which
 	// the editor has no bar for on Windows and Linux. Not awaited, like About above.
-	ipcMain.handle("save-diagnostics", () => {
-		runSaveDiagnostics();
+	ipcMain.handle("save-diagnostics", (event) => {
+		runSaveDiagnostics(BrowserWindow.fromWebContents(event.sender));
 	});
 
 	ipcMain.handle("check-for-updates", async () => {

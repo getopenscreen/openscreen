@@ -84,8 +84,14 @@ jobs:
             exit 0
           fi
           install -m 700 -d ~/.ssh
-          printf '%s\n' "$DEPLOY_KEY" > ~/.ssh/mirror_key
+          # A key pasted into the secret from Windows carries CRLF line ends,
+          # which OpenSSH refuses ("error in libcrypto").
+          printf '%s\n' "$DEPLOY_KEY" | tr -d '\r' > ~/.ssh/mirror_key
           chmod 600 ~/.ssh/mirror_key
+          if ! ssh-keygen -y -f ~/.ssh/mirror_key > /dev/null; then
+            echo "::error::PLUGIN_MIRROR_DEPLOY_KEY is not a readable private key. Paste the whole private key file, from its BEGIN line to its END line."
+            exit 1
+          fi
           ssh-keyscan github.com >> ~/.ssh/known_hosts 2>/dev/null
           export GIT_SSH_COMMAND="ssh -i ~/.ssh/mirror_key -o IdentitiesOnly=yes"
 

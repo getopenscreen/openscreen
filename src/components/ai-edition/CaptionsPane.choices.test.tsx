@@ -55,15 +55,18 @@ describe("caption choices", () => {
 		expect(stored().language).toBe("fr");
 	});
 
-	it("shows each font as a specimen of itself and writes the one clicked", () => {
+	it.each([
+		"Lora",
+		"Vazirmatn",
+	])("shows %s as a specimen of itself and saves the choice", (family) => {
 		show();
-		const lora = within(screen.getByRole("group", { name: "Font", hidden: true })).getByRole(
+		const font = within(screen.getByRole("group", { name: "Font", hidden: true })).getByRole(
 			"button",
-			{ name: "Lora", hidden: true },
+			{ name: family, hidden: true },
 		);
-		expect(lora.querySelector("span")).toHaveStyle({ fontFamily: "Lora" });
-		fireEvent.click(lora);
-		expect(stored().fontFamily).toBe("Lora");
+		expect(font.querySelector("span")).toHaveStyle({ fontFamily: family });
+		fireEvent.click(font);
+		expect(stored().fontFamily).toBe(family);
 	});
 
 	it("never lets the minimum words per line pass the maximum", () => {

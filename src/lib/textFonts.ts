@@ -10,7 +10,14 @@
 
 import { getAssetPath } from "./assetPath";
 
-export const TEXT_FONT_FAMILIES = ["Inter", "Lora", "Oswald", "Caveat", "IBM Plex Mono"] as const;
+export const TEXT_FONT_FAMILIES = [
+	"Inter",
+	"Lora",
+	"Oswald",
+	"Caveat",
+	"IBM Plex Mono",
+	"Vazirmatn",
+] as const;
 
 export type TextFontFamily = (typeof TEXT_FONT_FAMILIES)[number];
 

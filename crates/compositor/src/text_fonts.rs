@@ -54,8 +54,8 @@ pub(crate) fn repo_fonts_dir() -> PathBuf {
 /// Les familles embarquées, telles que l'app les stocke. Miroir de `TEXT_FONT_FAMILIES`
 /// (`src/lib/textFonts.ts`), dont le test vérifie que chaque fichier porte bien ce nom.
 #[cfg(test)]
-pub(crate) const SHIPPED_FAMILIES: [&str; 5] =
-    ["Inter", "Lora", "Oswald", "Caveat", "IBM Plex Mono"];
+pub(crate) const SHIPPED_FAMILIES: [&str; 6] =
+    ["Inter", "Lora", "Oswald", "Caveat", "IBM Plex Mono", "Vazirmatn"];
 
 /// Chaque famille se voit : deux familles se confondent quand elles dessinent le même bloc,
 /// même largeur ET même hauteur à 2 % près, et un repli commun les confondrait toutes. La

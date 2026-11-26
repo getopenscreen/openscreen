@@ -41,7 +41,8 @@
 			"increaseFontSize": "글꼴 크기 늘리기",
 			"mirror": "좌우 반전",
 			"mirrorTip": "텍스트를 좌우로 뒤집어 거울로 읽을 수 있게 합니다"
-		}
+		},
+		"addTimelineMarker": "타임라인 마커 추가"
 	},
 	"audio": {
 		"systemAudio": "시스템 오디오",

@@ -41,7 +41,8 @@
 			"increaseFontSize": "Increase font size",
 			"mirror": "Mirror horizontally",
 			"mirrorTip": "Flip the text left to right, to read it in a mirror"
-		}
+		},
+		"addTimelineMarker": "Add a timeline marker"
 	},
 	"audio": {
 		"systemAudio": "System audio",

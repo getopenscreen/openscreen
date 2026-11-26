@@ -41,7 +41,8 @@
 			"increaseFontSize": "Aumentar tamanho da fonte",
 			"mirror": "Espelhar horizontalmente",
 			"mirrorTip": "Espelha o texto para lê-lo em um espelho"
-		}
+		},
+		"addTimelineMarker": "Adicionar um marcador na linha do tempo"
 	},
 	"audio": {
 		"systemAudio": "Áudio do sistema",

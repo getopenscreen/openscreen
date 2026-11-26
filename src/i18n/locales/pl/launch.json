@@ -41,7 +41,8 @@
 			"increaseFontSize": "Zwiększ rozmiar czcionki",
 			"mirror": "Odbicie poziome",
 			"mirrorTip": "Odwróć tekst w poziomie, aby czytać go w lustrze"
-		}
+		},
+		"addTimelineMarker": "Dodaj znacznik na osi czasu"
 	},
 	"audio": {
 		"systemAudio": "Dźwięk systemowy",

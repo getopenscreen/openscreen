@@ -253,6 +253,9 @@ contextBridge.exposeInMainWorld("electronAPI", {
 	storeRecordedSession: (payload: StoreRecordedSessionInput) => {
 		return ipcRenderer.invoke("store-recorded-session", payload);
 	},
+	addRecordingMarker: (recording: boolean, tMs?: number) => {
+		return ipcRenderer.invoke("add-recording-marker", recording, tMs);
+	},
 	openRecordingStream: (fileName: string) => {
 		return ipcRenderer.invoke("open-recording-stream", fileName);
 	},
@@ -368,6 +371,9 @@ contextBridge.exposeInMainWorld("electronAPI", {
 	},
 	getCursorTelemetry: (videoPath?: string) => {
 		return ipcRenderer.invoke("get-cursor-telemetry", videoPath);
+	},
+	getRecordingMarkers: (videoPath: string) => {
+		return ipcRenderer.invoke("get-recording-markers", videoPath);
 	},
 	discardCursorTelemetry: (recordingId: number) => {
 		return ipcRenderer.invoke("discard-cursor-telemetry", recordingId);

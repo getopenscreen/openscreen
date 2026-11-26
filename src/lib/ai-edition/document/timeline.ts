@@ -270,6 +270,27 @@ export function readSpeedRegions<T extends PlaybackSpeedRegion = PlaybackSpeedRe
 }
 
 /**
+ * A marker pressed during recording, in raw recording-time ms. The recorder
+ * stamps them mid-take (HUD button or M) and the import reads them from the
+ * `<video>.markers.json` sidecar onto this envelope, the same as speed regions:
+ * raw ruler coordinates, no schema, dropped when not a usable finite number.
+ */
+export interface TimelineMarker {
+	tMs: number;
+}
+
+export function readTimelineMarkers(
+	document: Pick<AxcutDocument, "legacyEditor">,
+): TimelineMarker[] {
+	const stored = (document.legacyEditor as { timelineMarkers?: unknown } | null | undefined)
+		?.timelineMarkers;
+	if (!Array.isArray(stored)) return [];
+	return (stored as TimelineMarker[]).filter(
+		(m) => typeof m?.tMs === "number" && Number.isFinite(m.tMs) && m.tMs >= 0,
+	);
+}
+
+/**
  * Output seconds a raw interval `[fromSec, toSec)` occupies once the speed
  * regions covering it are applied: a 2x stretch of raw time takes half as long
  * to play, so it contributes half its raw length to the programme.

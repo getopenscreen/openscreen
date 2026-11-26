@@ -30,6 +30,7 @@ import {
 	HudLanguageButton,
 	HudLanguageMenu,
 	HudLayoutProvider,
+	HudMarkerButton,
 	HudMicButton,
 	HudNotesButton,
 	HudNotice,
@@ -126,6 +127,8 @@ export function LaunchWindow() {
 		paused,
 		saving,
 		elapsedSeconds,
+		markerCount,
+		addTimelineMarker,
 		toggleRecording,
 		togglePaused,
 		canPauseRecording,
@@ -1401,6 +1404,15 @@ export function LaunchWindow() {
 								onTogglePause={togglePaused}
 								onRestart={restartRecording}
 								onCancel={cancelRecording}
+							/>
+						)}
+
+						{recording && (
+							<HudMarkerButton
+								disabled={saving || paused}
+								label={t("tooltips.addTimelineMarker")}
+								count={markerCount}
+								onClick={addTimelineMarker}
 							/>
 						)}
 

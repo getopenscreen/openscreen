@@ -817,6 +817,13 @@ const MAX_CURSOR_SAMPLES = 60 * 60 * 30; // 1 hour @ 30Hz
 
 let cursorRecordingSession: CursorRecordingSession | null = null;
 let pendingCursorRecordingData: CursorRecordingData | null = null;
+/**
+ * Timeline markers pressed during the current take (`add-recording-marker`),
+ * in recording-time ms (the renderer's pause-excluded clock). Written beside
+ * the screen video as `<video>.markers.json` by every stop path, mirroring the
+ * cursor telemetry sidecar; cleared when a new take starts.
+ */
+let pendingRecordingMarkers: number[] = [];
 let nativeWindowsCaptureProcess: ChildProcessWithoutNullStreams | null = null;
 let nativeWindowsCaptureOutput = "";
 let nativeWindowsCaptureTargetPath: string | null = null;
@@ -1448,6 +1455,14 @@ async function writePendingCursorTelemetry(videoPath: string) {
 		await fs.writeFile(telemetryPath, JSON.stringify(pendingCursorRecordingData, null, 2), "utf-8");
 	}
 	pendingCursorRecordingData = null;
+}
+
+async function writePendingRecordingMarkers(videoPath: string) {
+	if (pendingRecordingMarkers.length > 0) {
+		const markers = pendingRecordingMarkers.slice().sort((a, b) => a - b);
+		await fs.writeFile(`${videoPath}.markers.json`, JSON.stringify({ markers }, null, 2), "utf-8");
+	}
+	pendingRecordingMarkers = [];
 }
 
 // P4 — proactively seeds the media-links registry for a fresh recording so
@@ -3896,6 +3911,11 @@ export function registerIpcHandlers(
 				shiftPendingCursorTelemetry(nativeWindowsCursorOffsetMs);
 				await writePendingCursorTelemetry(screenVideoPath);
 			}
+			// Best-effort: the take is already finalized, so a marker-write failure
+			// must not fail the stop.
+			await writePendingRecordingMarkers(screenVideoPath).catch((error) => {
+				console.warn("[recording] could not write the markers sidecar:", error);
+			});
 			let webcamVideoPath: string | undefined;
 			if (preferredWebcamPath) {
 				try {
@@ -4080,6 +4100,9 @@ export function registerIpcHandlers(
 					writePendingCursorTelemetry(screenVideoPath),
 				);
 			}
+			await writePendingRecordingMarkers(screenVideoPath).catch((error) => {
+				console.warn("[recording] could not write the markers sidecar:", error);
+			});
 
 			const session: RecordingSession = {
 				screenVideoPath,
@@ -4367,6 +4390,9 @@ export function registerIpcHandlers(
 		// is indistinguishable from a take with no click, so the zooms are silently
 		// skipped.
 		await writePendingCursorTelemetry(screenVideoPath);
+		await writePendingRecordingMarkers(screenVideoPath).catch((error) => {
+			console.warn("[recording] could not write the markers sidecar:", error);
+		});
 		setCurrentRecordingSessionState(session);
 		currentProjectPath = null;
 
@@ -4450,6 +4476,11 @@ export function registerIpcHandlers(
 			}
 			const normalizedCursorCaptureMode =
 				normalizeCursorCaptureMode(cursorCaptureMode) ?? "editable-overlay";
+			// Start only: drop presses left by a discarded take. Stop keeps them
+			// for the save path, which drains the list when it writes the sidecar.
+			if (recording) {
+				pendingRecordingMarkers = [];
+			}
 			if (recording && normalizedCursorCaptureMode === "editable-overlay") {
 				await startCursorRecording(recordingId);
 			} else {
@@ -4461,6 +4492,17 @@ export function registerIpcHandlers(
 		},
 	);
 
+	// Timeline markers pressed during the current take. The renderer owns the
+	// recording clock (pause-excluded, so marker time matches media time) and
+	// pushes each press as it happens; every stop path flushes the pending
+	// list to `<video>.markers.json` beside the take.
+	ipcMain.handle("add-recording-marker", async (_, recording: boolean, tMs?: number) => {
+		if (recording && typeof tMs === "number" && Number.isFinite(tMs)) {
+			pendingRecordingMarkers.push(Math.max(0, Math.round(tMs)));
+		}
+		return { success: true, count: pendingRecordingMarkers.length };
+	});
+
 	ipcMain.handle("get-cursor-telemetry", async (_, videoPath?: string) => {
 		const targetVideoPath = resolveApprovedVideoPath(
 			videoPath ?? currentRecordingSession?.screenVideoPath,
@@ -4470,6 +4512,30 @@ export function registerIpcHandlers(
 		}
 
 		return readCursorTelemetryFile(targetVideoPath);
+	});
+
+	// Renderer's door onto the markers a take stamped mid-recording. Same
+	// allow-list rule as the cursor sidecar above: the path is derived from a
+	// document-controlled string, so it must resolve through the video loaders'
+	// approval before anything reads beside it.
+	ipcMain.handle("get-recording-markers", async (_, videoPath: string) => {
+		const targetVideoPath = resolveApprovedVideoPath(videoPath);
+		if (!targetVideoPath) {
+			return { success: true, markers: [] };
+		}
+		try {
+			const raw = await fs.readFile(`${targetVideoPath}.markers.json`, "utf-8");
+			const parsed = JSON.parse(raw) as { markers?: unknown };
+			const markers = Array.isArray(parsed.markers)
+				? parsed.markers.filter(
+						(m): m is number => typeof m === "number" && Number.isFinite(m) && m >= 0,
+					)
+				: [];
+			return { success: true, markers };
+		} catch {
+			// No sidecar (nothing was pressed) reads as an empty marker list.
+			return { success: true, markers: [] };
+		}
 	});
 
 	// Protocol allowlist. `shell.openExternal` hands the string to the OS handler,

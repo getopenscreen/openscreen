@@ -136,5 +136,6 @@
 		"vertical-stack": "Top / bottom",
 		"camera-only": "Camera only",
 		"no-webcam": "Screen only"
-	}
+	},
+	"markerTitle": "Marker at {{time}}"
 }

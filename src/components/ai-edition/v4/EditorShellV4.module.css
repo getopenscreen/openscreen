@@ -1586,6 +1586,17 @@
 	white-space: nowrap;
 	pointer-events: none;
 }
+/* A marker pressed mid-take: a full-height hairline in the accent colour, so it
+   reads as "something to find here" against the neutral ruler ticks. */
+.tlMarker {
+	position: absolute;
+	top: 0;
+	width: 2px;
+	height: 100%;
+	background: var(--accent);
+	border-radius: 1px;
+	opacity: 0.75;
+}
 .tlLane {
 	position: relative;
 	height: 24px;

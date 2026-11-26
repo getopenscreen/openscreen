@@ -400,6 +400,38 @@ export async function importPendingRecording(
 		if (cursorCaptureMode !== "system") {
 			markFreshRecordingAutoZoomPending(screenPath);
 		}
+		// Markers pressed mid-take ride the same sidecar convention as the cursor
+		// telemetry; landing them on the document now means the editor opens with
+		// them already on the ruler.
+		// Markers ride the same sidecar convention as the cursor telemetry. The
+		// read is awaited, so re-check whose document is loaded before writing:
+		// another window's import may have replaced it while this fetch was out.
+		try {
+			const markerResult = await window.electronAPI.getRecordingMarkers(screenPath);
+			if (markerResult.success && markerResult.markers.length > 0) {
+				const store = useProjectStore.getState();
+				if (store.document?.project.id === created.project.id) {
+					const docForMarkers = store.document;
+					const legacy = ((docForMarkers.legacyEditor as Record<string, unknown> | null) ??
+						{}) as Record<string, unknown>;
+					// saveDocument, not setDocument: nothing downstream is
+					// guaranteed to persist after this point, and markers that
+					// survive only in memory die with the session.
+					await store.saveDocument(
+						{
+							...docForMarkers,
+							legacyEditor: {
+								...legacy,
+								timelineMarkers: markerResult.markers.map((tMs) => ({ tMs })),
+							},
+						},
+						{ history: false },
+					);
+				}
+			}
+		} catch (error) {
+			console.warn("Failed to load the recording's timeline markers:", error);
+		}
 		// Consumed: the recording now lives in a project. Cleared here rather than
 		// after the timeline seed below so a failure down there can't hand the same
 		// recording to the next editor window.

@@ -41,7 +41,8 @@
 			"increaseFontSize": "增大字体",
 			"mirror": "水平镜像",
 			"mirrorTip": "左右翻转文字，便于通过镜面阅读"
-		}
+		},
+		"addTimelineMarker": "添加时间轴标记"
 	},
 	"audio": {
 		"systemAudio": "系统音频",

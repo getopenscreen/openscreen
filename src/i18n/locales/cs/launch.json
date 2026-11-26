@@ -41,7 +41,8 @@
 			"increaseFontSize": "Zvětšit písmo",
 			"mirror": "Zrcadlit vodorovně",
 			"mirrorTip": "Otočí text zrcadlově, aby se dal číst v zrcadle"
-		}
+		},
+		"addTimelineMarker": "Přidat značku na časové ose"
 	},
 	"audio": {
 		"systemAudio": "Systémový zvuk",

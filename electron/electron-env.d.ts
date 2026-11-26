@@ -146,6 +146,10 @@ interface Window {
 			message?: string;
 			error?: string;
 		}>;
+		addRecordingMarker: (
+			recording: boolean,
+			tMs?: number,
+		) => Promise<{ success: boolean; count: number }>;
 		openRecordingStream: (fileName: string) => Promise<{ success: boolean; error?: string }>;
 		appendRecordingChunk: (
 			fileName: string,
@@ -310,6 +314,10 @@ interface Window {
 			clicks: number[];
 			message?: string;
 			error?: string;
+		}>;
+		getRecordingMarkers: (videoPath: string) => Promise<{
+			success: boolean;
+			markers: number[];
 		}>;
 		onStopRecordingFromTray: (callback: () => void) => () => void;
 		openExternalUrl: (url: string) => Promise<{ success: boolean; error?: string }>;

@@ -41,7 +41,8 @@
 			"increaseFontSize": "Aumenta dimensione carattere",
 			"mirror": "Specchia orizzontalmente",
 			"mirrorTip": "Specchia il testo per leggerlo in uno specchio"
-		}
+		},
+		"addTimelineMarker": "Aggiungi un marcatore della timeline"
 	},
 	"audio": {
 		"systemAudio": "Audio di sistema",

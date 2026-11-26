@@ -271,6 +271,38 @@ impl Gpu {
         probe()
     }
 
+    /// Le noeud DRM render du GPU sur lequel ce device rend (`/dev/dri/renderDN`),
+    /// lu par `VK_EXT_physical_device_drm`. C'est celui ou l'encodeur VAAPI doit
+    /// importer les dmabufs du compositeur. `None` si le pilote ne l'expose pas
+    /// (lavapipe, instance Vulkan 1.0) : l'appelant balaie alors les noeuds.
+    pub fn render_node(&self) -> Option<String> {
+        use ash::vk;
+        unsafe {
+            self.device.as_hal::<wgpu_hal::api::Vulkan, _, _>(|dev| {
+                let dev = dev?;
+                let shared = dev.shared_instance();
+                // `vkGetPhysicalDeviceProperties2` est du coeur 1.1.
+                if shared.instance_api_version() < vk::API_VERSION_1_1 {
+                    return None;
+                }
+                let instance = shared.raw_instance();
+                let phys = dev.raw_physical_device();
+                let exts = instance.enumerate_device_extension_properties(phys).ok()?;
+                if !exts
+                    .iter()
+                    .any(|e| e.extension_name_as_c_str() == Ok(ash::ext::physical_device_drm::NAME))
+                {
+                    return None;
+                }
+                let mut drm = vk::PhysicalDeviceDrmPropertiesEXT::default();
+                let mut props = vk::PhysicalDeviceProperties2::default().push_next(&mut drm);
+                instance.get_physical_device_properties2(phys, &mut props);
+                (drm.has_render == vk::TRUE)
+                    .then(|| format!("/dev/dri/renderD{}", drm.render_minor))
+            })
+        }
+    }
+
     /// Le device de TOUS les tests unitaires du crate : cree une fois par `create_auto`,
     /// jamais detruit. `None` (et le test se saute) sans adaptateur Vulkan.
     ///

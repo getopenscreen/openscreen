@@ -61,6 +61,10 @@ const DANGLING = [
 	/openscreenSetup/,
 	/\/reload-plugins/,
 	/\b(the|plugin.s) launcher\b/,
+	// Pointing at a local server, or at the full plugin that carries one, counts as adding it.
+	/`openscreen mcp`/,
+	/\bfull (OpenScreen )?plugin\b/,
+	/\bconnect OpenScreen\b/,
 ];
 
 function walk(dir, root = dir) {

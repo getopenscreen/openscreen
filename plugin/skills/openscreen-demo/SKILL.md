@@ -56,7 +56,7 @@ This edition of the plugin carries the skills only. If you have the tools, go to
 
 **Hand over to the next session.** Write the user's request, and anything already decided, to `openscreen-demo-plan.md` in the working directory. Then ask the user to start a new session and say *continue the OpenScreen demo*. In that session, read the file and carry on from step 2.
 
-<!-- full-plugin -->The tools are missing right after the plugin, the app or the server is added: an agent loads its MCP servers when a session starts, or in Claude Code on `/reload-plugins`. Say so in plain words;<!-- /full-plugin --><!-- directory-plugin When the tools are missing, say so in plain words; --> when a reload is not possible, hand over as above, with the storyboard in the file if you have made one. Never stand in for the missing tools by driving OpenScreen's window with computer use or a mouse tool: it takes over the user's mouse and screen while they may be working.
+<!-- full-plugin -->The tools are missing right after the plugin, the app or the server is added: an agent loads its MCP servers when a session starts, or in Claude Code on `/reload-plugins`. Say so in plain words; when a reload is not possible, hand over as above, with the storyboard in the file if you have made one.<!-- /full-plugin --><!-- directory-plugin When the tools are missing, say so in plain words and stop, as above. --> Never stand in for the missing tools by driving OpenScreen's window with computer use or a mouse tool: it takes over the user's mouse and screen while they may be working.
 
 ## 2. Plan before recording
 
@@ -103,7 +103,7 @@ For staging, choreography and a take recorded with no window at all, use the `op
 **A web app captured headless** (frame by frame, so no window opens on the desktop): the `openscreen-capture` skill ships a script that does it at twice the display scale and writes the pointer log. Then `createProject` with the video, and `setPointerTrack` with `recordingStartedAt: 0` and each `at` in milliseconds into the video.
 <!-- /full-plugin -->
 <!-- directory-plugin
-**A web app captured headless** (frame by frame, so no window opens on the desktop) needs a capture script that this edition of the plugin does not carry. Without it, record the page in a real window as above.
+**A web app captured headless** (frame by frame, so no window opens on the desktop) needs a capture script that this edition of the plugin does not carry. Say so, and ask the user whether a recording in a real window, which shows the page on their screen, will do. Record it as above only once they agree.
 -->
 
 ## 5. Check the take

@@ -334,6 +334,33 @@ describe("SttManager", () => {
 		expect(languages.slice(1).every((l) => l === "en")).toBe(true);
 	});
 
+	// Issue #1664: room noise in the first chunk resolved to Korean at a low
+	// probability, and the pin wrote the English speech after it in Korean.
+	it("pins on the first confident chunk, not on a speechless first chunk", async () => {
+		fakeWhisperServer.transcribe
+			.mockResolvedValueOnce({
+				segments: [],
+				wordSegments: [],
+				detectedLanguage: "ko",
+				languageProbability: 0.2,
+				backend: "whispercpp-cpu",
+			})
+			.mockResolvedValue({
+				segments: [{ text: "hello", startSec: 0, endSec: 0.5 }],
+				wordSegments: [{ word: "hello", startSec: 0, endSec: 0.5 }],
+				detectedLanguage: "en",
+				languageProbability: 0.95,
+				backend: "whispercpp-cpu",
+			});
+		const mgr = new SttManager();
+		await mgr.init({ modelsBaseDir: "/tmp/fake-stt-models" });
+		const result = await mgr.transcribe({ samples: new Float32Array(300 * 16000) });
+		const languages = fakeWhisperServer.transcribe.mock.calls.map(([req]) => req.language);
+		expect(languages.slice(0, 2)).toEqual([undefined, undefined]);
+		expect(languages.slice(2).every((l) => l === "en")).toBe(true);
+		expect(result.detectedLanguage).toBe("en");
+	});
+
 	it("hands the names and terms to every chunk, not only the first", async () => {
 		const mgr = new SttManager();
 		await mgr.init({ modelsBaseDir: "/tmp/fake-stt-models" });

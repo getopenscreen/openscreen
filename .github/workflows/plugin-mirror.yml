@@ -30,10 +30,11 @@ on:
       - ".github/workflows/plugin-mirror.yml"
   workflow_dispatch:
 
-# Publishing runs queue in one group; a PR's check gets a group of its own, so
-# it can never take the place of a pending publication.
+# Publishing runs (pushes and dispatches on main) queue in one group; every
+# other run gets a group of its own, so it can never take the place of a
+# pending publication.
 concurrency:
-  group: plugin-mirror-${{ github.event_name == 'pull_request' && github.ref || 'publish' }}
+  group: plugin-mirror-${{ github.event_name != 'pull_request' && github.ref == 'refs/heads/main' && 'publish' || github.ref }}
   cancel-in-progress: false
 
 permissions:
@@ -44,7 +45,11 @@ jobs:
     name: Check and mirror the plugin
     runs-on: ubuntu-latest
     steps:
+      # A publishing run builds from main's tip, not from the commit that queued
+      # it, so a run that starts late can never put older content back.
       - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event_name != 'pull_request' && github.ref == 'refs/heads/main' && 'main' || '' }}
 
       # The directory only publishes a new version when `version` goes up, so
       # the plugin's version follows the app's, released together.

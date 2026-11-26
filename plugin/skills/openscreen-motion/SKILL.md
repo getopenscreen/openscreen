@@ -10,7 +10,7 @@ them time to read it, and get out of the way. Every rule below serves that. Appl
 place zooms, callouts and speed changes, and when you review an edit that looks busy or cheap.
 
 If a tool this skill names is not in your tool list, the installed OpenScreen is older than this
-skill: <!-- full-plugin -->offer to update it (see the `openscreen-demo` skill, step 1)<!-- /full-plugin --><!-- directory-plugin ask the user to install the latest OpenScreen over the old one, as https://getopenscreen.com/docs/installation explains, then to start a new session (if no OpenScreen tool is listed at all, OpenScreen is not connected: say so, link https://getopenscreen.com/docs/ai-editing and stop) -->, or use `getFrames` with
+skill: <!-- full-plugin -->offer to update it (see the `openscreen-demo` skill, step 1)<!-- /full-plugin --><!-- directory-plugin ask the user to quit OpenScreen, install the latest one over it, as https://getopenscreen.com/docs/installation explains, then to start a new session (if no OpenScreen tool is listed at all, OpenScreen is not connected: say so, link https://getopenscreen.com/docs/ai-editing and stop) -->, or use `getFrames` with
 `atSec` where this skill says `getContactSheet`.
 
 ## 1. One focus per shot

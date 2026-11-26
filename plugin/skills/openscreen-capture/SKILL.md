@@ -7,6 +7,10 @@ description: Gets a clean, repeatable take for an OpenScreen video. Covers stagi
 
 A take is cheaper to redo than to repair. Aim for one that needs no cut: the first frame already shows the result, every action happens once, and every result stays on screen about 1 s before the next action.
 
+<!-- directory-plugin
+This edition of the plugin carries the skills only. If `startRecording` and OpenScreen's other tools are not in your tool list, they are not available in this session: say so in plain words, point the user to OpenScreen's documentation, https://getopenscreen.com/docs/ai-editing, and stop. Never install anything or change the agent's settings for it yourself.
+
+-->
 ## Choose how to capture
 
 | Situation | Capture | Cursor and zooms |
@@ -87,7 +91,7 @@ Never write a `.cursor.json` file yourself: `setPointerTrack` writes it, and a c
 <!-- directory-plugin
 ## The headless recipe
 
-Capturing a web page in a browser with no window needs a capture script that this edition of the plugin does not carry. Without it, record the page in a real window with `startRecording` as above.
+Capturing a web page in a browser with no window needs a capture script that this edition of the plugin does not carry. Say so, and ask the user whether a recording in a real window, which shows the page on their screen, will do. Record it with `startRecording` as above only once they agree.
 
 -->
 ## Check the take before editing

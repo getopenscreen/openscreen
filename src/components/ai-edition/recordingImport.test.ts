@@ -104,7 +104,7 @@ describe("importPendingRecording", () => {
 
 	it("does nothing when no recording is waiting", async () => {
 		stubElectronApi(null);
-		await expect(importPendingRecording()).resolves.toBe(false);
+		await expect(importPendingRecording()).resolves.toBeNull();
 		expect(createProject).not.toHaveBeenCalled();
 	});
 
@@ -118,7 +118,7 @@ describe("importPendingRecording", () => {
 		);
 		const onWarning = vi.fn();
 
-		await expect(importPendingRecording(onWarning)).resolves.toBe(true);
+		await expect(importPendingRecording(onWarning)).resolves.toBe("proj_stub");
 
 		expect(onWarning).toHaveBeenCalledTimes(1);
 		expect(onWarning).toHaveBeenCalledWith(
@@ -138,7 +138,7 @@ describe("importPendingRecording", () => {
 	it("imports the recording into a new project and consumes the hand-off", async () => {
 		const api = stubElectronApi("C:\\recordings\\recording-1.mp4");
 
-		await expect(importPendingRecording()).resolves.toBe(true);
+		await expect(importPendingRecording()).resolves.toBe("proj_stub");
 
 		expect(createProject).toHaveBeenCalledTimes(1);
 		expect(addAsset).toHaveBeenCalledWith("C:\\recordings\\recording-1.mp4", "recording-1.mp4");
@@ -153,7 +153,7 @@ describe("importPendingRecording", () => {
 		stubElectronApi("C:\\recordings\\recording-1.mp4");
 
 		await importPendingRecording();
-		await expect(importPendingRecording()).resolves.toBe(false);
+		await expect(importPendingRecording()).resolves.toBeNull();
 
 		expect(createProject).toHaveBeenCalledTimes(1);
 		expect(addAsset).toHaveBeenCalledTimes(1);

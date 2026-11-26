@@ -248,6 +248,8 @@ export class DocumentService {
 	private readonly writeQueues = new Map<string, Promise<void>>();
 	/** Bumped as each read or save of a project starts — see saveProjectIfUnchanged. */
 	private readonly generations = new Map<string, number>();
+	/** Projects deleted in this process, so a save queued from an earlier read cannot recreate them. */
+	private readonly deletedProjectIds = new Set<string>();
 
 	// `mediaRegistryDir` is where the media-links registry file lives
 	// (RECORDINGS_DIR in production) — see getProject. Injected for the same
@@ -521,6 +523,7 @@ export class DocumentService {
 	async createProject(title: string): Promise<AxcutDocument> {
 		await this.ensureProjectsDir();
 		const projectId = createId("proj");
+		this.deletedProjectIds.delete(projectId);
 		// Every new project comes through here — the New dialog, the empty state and a finished
 		// recording alike — so this is the one place it takes the user's look.
 		const doc: AxcutDocument = {
@@ -534,7 +537,13 @@ export class DocumentService {
 	async saveProject(document: AxcutDocument): Promise<AxcutDocument> {
 		const stamped = stampForSave(document);
 		this.touch(stamped.project.id);
-		await this.writeProject(stamped);
+		const written = await this.writeProject(
+			stamped,
+			async () => !this.deletedProjectIds.has(stamped.project.id),
+		);
+		if (!written) {
+			throw new DocumentNotFoundError(stamped.project.id);
+		}
 		// After the write, never before: a derived file is not worth delaying the user's edit
 		// reaching disk, and a failure to generate one must not fail the save.
 		await ensureDocumentExtensions(stamped);
@@ -574,7 +583,7 @@ export class DocumentService {
 		return stamped;
 	}
 
-	async deleteProject(projectId: string): Promise<void> {
+	private async unlinkProjectFiles(projectId: string): Promise<void> {
 		// Remove the canonical file and any lingering legacy `.axcut` for this id.
 		for (const filePath of [this.fileFor(projectId), this.legacyFileFor(projectId)]) {
 			try {
@@ -585,6 +594,11 @@ export class DocumentService {
 				}
 			}
 		}
+		this.deletedProjectIds.add(projectId);
+	}
+
+	async deleteProject(projectId: string): Promise<void> {
+		return this.enqueue(projectId, () => this.unlinkProjectFiles(projectId));
 	}
 
 	/**
@@ -593,20 +607,22 @@ export class DocumentService {
 	 * `removeMedia` throws.
 	 */
 	async deleteProjectAfter(projectId: string, removeMedia: () => Promise<void>): Promise<void> {
-		const filePath = this.fileFor(projectId);
-		const parked = `${filePath}.deleting`;
-		await renameWithRetry(filePath, parked);
-		try {
-			await removeMedia();
-		} catch (error) {
-			await renameWithRetry(parked, filePath);
-			throw error;
-		}
-		// The project is gone from every list already: a parked file left behind is only clutter.
-		await fs
-			.rm(parked, { force: true })
-			.catch((error) => console.warn(`[ai-edition] could not remove ${parked}:`, error));
-		await this.deleteProject(projectId);
+		return this.enqueue(projectId, async () => {
+			const filePath = this.fileFor(projectId);
+			const parked = `${filePath}.deleting`;
+			await renameWithRetry(filePath, parked);
+			try {
+				await removeMedia();
+			} catch (error) {
+				await renameWithRetry(parked, filePath);
+				throw error;
+			}
+			// The project is gone from every list already: a parked file left behind is only clutter.
+			await fs
+				.rm(parked, { force: true })
+				.catch((error) => console.warn(`[ai-edition] could not remove ${parked}:`, error));
+			await this.unlinkProjectFiles(projectId);
+		});
 	}
 
 	async addAsset(projectId: string, input: AddAssetInput): Promise<AxcutDocument> {

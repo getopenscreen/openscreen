@@ -956,4 +956,47 @@ describe("DocumentService", () => {
 			expect(service.storedProjectId(path.join(tempDir, "proj_a.json"))).toBeUndefined();
 		});
 	});
+
+	describe("deleteProject queue ordering", () => {
+		it("runs after an in-flight saveProject for the same project", async () => {
+			const doc = await service.createProject("Queued delete");
+			const savePromise = service.saveProject({
+				...doc,
+				project: { ...doc.project, title: "Updated" },
+			});
+			const deletePromise = service.deleteProject(doc.project.id);
+			await Promise.all([savePromise, deletePromise]);
+
+			await expect(service.getProject(doc.project.id)).rejects.toThrow();
+		});
+
+		it("rejects a late saveProject after deleteProject without recreating the file", async () => {
+			const doc = await service.createProject("Deleted before save");
+			await service.deleteProject(doc.project.id);
+
+			await expect(
+				service.saveProject({
+					...doc,
+					project: { ...doc.project, title: "Stale write" },
+				}),
+			).rejects.toThrow();
+			await expect(service.getProject(doc.project.id)).rejects.toThrow();
+		});
+
+		it("allows subsequent saves when deleteProject fails to unlink", async () => {
+			const doc = await service.createProject("Locked file");
+			const unlinkSpy = vi
+				.spyOn(fs, "unlink")
+				.mockRejectedValueOnce(Object.assign(new Error("EACCES"), { code: "EACCES" }));
+
+			await expect(service.deleteProject(doc.project.id)).rejects.toThrow("EACCES");
+			unlinkSpy.mockRestore();
+
+			const saved = await service.saveProject({
+				...doc,
+				project: { ...doc.project, title: "Still writable" },
+			});
+			expect(saved.project.title).toBe("Still writable");
+		});
+	});
 });

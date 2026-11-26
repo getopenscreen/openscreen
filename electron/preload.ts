@@ -603,6 +603,9 @@ contextBridge.exposeInMainWorld("electronAPI", {
 	setHasUnsavedChanges: (hasChanges: boolean) => {
 		ipcRenderer.send("set-has-unsaved-changes", hasChanges);
 	},
+	setHasDiscardableProject: (discardable: boolean) => {
+		ipcRenderer.send("set-has-discardable-project", discardable);
+	},
 	showCountdownOverlay: (value: number, runId: number) => {
 		return ipcRenderer.invoke("countdown-overlay-show", value, runId);
 	},
@@ -638,7 +641,17 @@ contextBridge.exposeInMainWorld("electronAPI", {
 		ipcRenderer.on("request-close-confirm", listener);
 		return () => ipcRenderer.removeListener("request-close-confirm", listener);
 	},
-	sendCloseConfirmResponse: (choice: "save" | "discard" | "cancel") => {
+	sendCloseConfirmResponse: (
+		choice:
+			| "save"
+			| "discard"
+			| "cancel"
+			| {
+					choice: "discard-project";
+					projectId: string;
+					recordings: import("../src/native/contracts").AiEditionRecordingsDisposal;
+			  },
+	) => {
 		ipcRenderer.send("close-confirm-response", choice);
 	},
 	// ponytail: forward renderer console output to main-process stdout so

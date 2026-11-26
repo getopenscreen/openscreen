@@ -96,5 +96,18 @@
 		"captureInterrupted": "The screen capture stopped unexpectedly after {{duration}}. The part recorded until then was saved.",
 		"captureLost": "The screen capture stopped unexpectedly, and nothing usable was recorded.",
 		"audioLost": "Some of the audio could not be recorded, so the recording was saved without it."
+	},
+	"closeProject": {
+		"title": "Keep or discard this recording?",
+		"body": "You haven't exported or saved this recording yet. Keep the project for later or discard it now.",
+		"titleDirty": "Keep or discard this recording?",
+		"bodyDirty": "This recording has unsaved changes. Save and keep it, or discard the project now.",
+		"keepAndClose": "Keep & Close",
+		"discardProject": "Discard Project",
+		"keepProject": "Keep Project",
+		"discardErrorTitle": "Could not discard project",
+		"trashFailed": "Couldn't move the recordings to the Trash. Delete them permanently?",
+		"recycleFailed": "Couldn't move the recordings to the Recycle Bin. Delete them permanently?",
+		"deletePermanently": "Delete permanently"
 	}
 }

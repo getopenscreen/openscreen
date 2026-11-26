@@ -356,9 +356,9 @@ export async function maybeSaveFreshRecordingAutoZooms(
  * Imports the recording the HUD handed over into a new project, and consumes the
  * hand-off so it is imported exactly once.
  *
- * Returns false when there is nothing pending — the caller then falls back to
- * reopening the most recent project. Throws if the import itself fails, leaving
- * the session in place so a later mount can retry it.
+ * Returns the created project ID, or `null` when there is nothing pending — the caller
+ * then falls back to reopening the most recent project. Throws if the import itself fails,
+ * leaving the session in place so a later mount can retry it.
  */
 export async function importPendingRecording(
 	/**
@@ -367,13 +367,13 @@ export async function importPendingRecording(
 	 * the editor is the only window left to say it.
 	 */
 	onWarning?: (message: string) => void,
-): Promise<boolean> {
+): Promise<string | null> {
 	const api = window.electronAPI;
-	if (!api) return false;
+	if (!api) return null;
 
 	const result = await api.getCurrentRecordingSession();
 	const screenPath = result.success ? result.session?.screenVideoPath : undefined;
-	if (!screenPath) return false;
+	if (!screenPath) return null;
 	const pending: typeof pendingCompletion = result.session
 		? { session: result.session, projectId: null }
 		: null;
@@ -430,7 +430,7 @@ export async function importPendingRecording(
 		if (warning) {
 			onWarning?.(warning);
 		}
-		return true;
+		return created.project.id;
 	} catch (error) {
 		if (pendingCompletion === pending) pendingCompletion = null;
 		if (pending) {

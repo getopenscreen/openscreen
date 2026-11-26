@@ -96,5 +96,18 @@
 		"captureInterrupted": "A captura de tela parou inesperadamente após {{duration}}. A parte gravada até então foi salva.",
 		"captureLost": "A captura de tela parou inesperadamente e nada utilizável foi gravado.",
 		"audioLost": "Não foi possível gravar parte do áudio, então a gravação foi salva sem ele."
+	},
+	"closeProject": {
+		"title": "Manter ou descartar esta gravação?",
+		"body": "Você ainda não exportou nem salvou esta gravação. Mantenha o projeto para depois ou descarte-o agora.",
+		"titleDirty": "Manter ou descartar esta gravação?",
+		"bodyDirty": "Esta gravação tem alterações não salvas. Salve e mantenha o projeto, ou descarte-o agora.",
+		"keepAndClose": "Manter e fechar",
+		"discardProject": "Descartar projeto",
+		"keepProject": "Manter projeto",
+		"discardErrorTitle": "Não foi possível descartar o projeto",
+		"trashFailed": "Não foi possível mover as gravações para a Lixeira. Excluí-las permanentemente?",
+		"recycleFailed": "Não foi possível mover as gravações para a Lixeira. Excluí-las permanentemente?",
+		"deletePermanently": "Excluir permanentemente"
 	}
 }

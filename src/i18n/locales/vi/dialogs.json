@@ -96,5 +96,18 @@
 		"captureInterrupted": "Quá trình ghi màn hình đã dừng đột ngột sau {{duration}}. Phần đã ghi đến lúc đó đã được lưu.",
 		"captureLost": "Quá trình ghi màn hình đã dừng đột ngột và không ghi được gì có thể dùng.",
 		"audioLost": "Không ghi được một phần âm thanh, nên bản ghi đã được lưu mà không có phần đó."
+	},
+	"closeProject": {
+		"title": "Giữ lại hay hủy bản ghi này?",
+		"body": "Bạn chưa xuất hoặc lưu bản ghi này. Hãy giữ lại dự án để dùng sau hoặc hủy bỏ ngay bây giờ.",
+		"titleDirty": "Giữ lại hay hủy bản ghi này?",
+		"bodyDirty": "Bản ghi này có thay đổi chưa lưu. Lưu và giữ lại hoặc hủy dự án ngay bây giờ.",
+		"keepAndClose": "Giữ & Đóng",
+		"discardProject": "Hủy dự án",
+		"keepProject": "Giữ dự án",
+		"discardErrorTitle": "Không thể hủy dự án",
+		"trashFailed": "Không thể chuyển các bản ghi vào Thùng rác. Xóa vĩnh viễn?",
+		"recycleFailed": "Không thể chuyển các bản ghi vào Thùng rác. Xóa vĩnh viễn?",
+		"deletePermanently": "Xóa vĩnh viễn"
 	}
 }

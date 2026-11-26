@@ -1,5 +1,9 @@
 import { BrowserWindow, ipcMain, shell } from "electron";
-import type { AiEditionChatEvent } from "../../src/native/contracts";
+import type {
+	AiEditionChatEvent,
+	AiEditionDeleteResult,
+	AiEditionRecordingsDisposal,
+} from "../../src/native/contracts";
 import {
 	NATIVE_BRIDGE_CHANNEL,
 	NATIVE_BRIDGE_VERSION,
@@ -212,7 +216,15 @@ function buildChatEventSink(
 	};
 }
 
-export function registerNativeBridgeHandlers(context: NativeBridgeContext) {
+export interface NativeBridgeHandle {
+	deleteProject: (
+		projectId: string,
+		disposal?: AiEditionRecordingsDisposal,
+	) => Promise<AiEditionDeleteResult>;
+	destroyViewsForSender: (senderId: number) => void;
+}
+
+export function registerNativeBridgeHandlers(context: NativeBridgeContext): NativeBridgeHandle {
 	ipcMain.removeHandler(NATIVE_BRIDGE_CHANNEL);
 
 	const platform = normalizePlatform(context.getPlatform());
@@ -272,6 +284,15 @@ export function registerNativeBridgeHandlers(context: NativeBridgeContext) {
 
 	const exportJobs = new ExportJobs();
 	const chatRuns = new ChatRuns<Electron.WebContents>();
+	const viewsBySender = new Map<number, Set<number>>();
+	const destroyViewsForSender = (senderId: number) => {
+		const ids = viewsBySender.get(senderId);
+		if (!ids) return;
+		viewsBySender.delete(senderId);
+		for (const id of ids) {
+			compositorViewService.destroyView(id);
+		}
+	};
 	ipcMain.handle(NATIVE_BRIDGE_CHANNEL, async (event, request: unknown) => {
 		if (!isBridgeRequest(request)) {
 			return createErrorResponse(undefined, "INVALID_REQUEST", "Invalid native bridge request.");
@@ -384,6 +405,16 @@ export function registerNativeBridgeHandlers(context: NativeBridgeContext) {
 								webcamPath: request.payload.webcamPath,
 								cursorPath: request.payload.cursorPath,
 							});
+							const senderId = event.sender.id;
+							let ids = viewsBySender.get(senderId);
+							if (!ids) {
+								ids = new Set();
+								viewsBySender.set(senderId, ids);
+								if (typeof event.sender.once === "function") {
+									event.sender.once("destroyed", () => destroyViewsForSender(senderId));
+								}
+							}
+							ids.add(id);
 							return createSuccessResponse(requestId, { id });
 						}
 						case "probeBackend":
@@ -458,6 +489,7 @@ export function registerNativeBridgeHandlers(context: NativeBridgeContext) {
 							);
 							return createSuccessResponse(requestId, { ok: true });
 						case "destroyView":
+							viewsBySender.get(event.sender.id)?.delete(request.payload.id);
 							compositorViewService.destroyView(request.payload.id);
 							return createSuccessResponse(requestId, { ok: true });
 						case "exportMulti": {
@@ -943,4 +975,9 @@ export function registerNativeBridgeHandlers(context: NativeBridgeContext) {
 			);
 		}
 	});
+
+	return {
+		deleteProject: (projectId, disposal) => aiEditionService.deleteProject(projectId, disposal),
+		destroyViewsForSender,
+	};
 }

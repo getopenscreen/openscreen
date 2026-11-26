@@ -96,5 +96,18 @@
 		"captureInterrupted": "屏幕捕获在 {{duration}} 后意外停止。此前录制的部分已保存。",
 		"captureLost": "屏幕捕获意外停止，未录制到可用的内容。",
 		"audioLost": "部分音频无法录制，因此录制内容已在不含该音频的情况下保存。"
+	},
+	"closeProject": {
+		"title": "保留还是丢弃此录制？",
+		"body": "您尚未导出或保存此录制。保留项目以便稍后编辑，或立即丢弃。",
+		"titleDirty": "保留还是丢弃此录制？",
+		"bodyDirty": "此录制有未保存的更改。保存并保留，或立即丢弃该项目。",
+		"keepAndClose": "保留并关闭",
+		"discardProject": "丢弃项目",
+		"keepProject": "保留项目",
+		"discardErrorTitle": "无法丢弃项目",
+		"trashFailed": "无法将录制文件移到废纸篓。要永久删除吗？",
+		"recycleFailed": "无法将录制文件移到回收站。要永久删除吗？",
+		"deletePermanently": "永久删除"
 	}
 }

@@ -474,8 +474,6 @@ impl Capture {
             // reallocating a plane vector on every frame.
             let nv12 = match importer.import(
                 &crate::dmabuf_import::DmabufFrame {
-                    width: desc.width,
-                    height: desc.height,
                     drm_fourcc: desc.drm_fourcc,
                     modifier: desc.modifier,
                     planes: &desc.planes,
@@ -635,6 +633,7 @@ impl Capture {
         self.audio.as_ref().map(AudioMix::dropped).unwrap_or_default()
     }
 
+    #[cfg(test)]
     pub fn is_paused(&self) -> bool {
         self.paused_at.is_some()
     }
@@ -780,7 +779,6 @@ mod tests {
             width,
             height,
             video_format: format,
-            pts_ns: -1,
             crop: shim::CropRect { x: 0, y: 0, width, height },
             has_crop: false,
             dmabuf: None,
@@ -1025,7 +1023,7 @@ mod tests {
     fn a_stable_odd_sized_window_is_not_reported_as_resized() {
         let output = std::env::temp_dir().join("openscreen-capture-odd.mp4");
         // 321x241 rounds to the 320x240 the encoder is opened at.
-        let (mut capture, _) =
+        let (capture, _) =
             Capture::start(&output, 320, 240, 30, Some(1_000_000), Some(Backend::Software), Vec::new(), None)
                 .expect("start");
 
@@ -1044,7 +1042,7 @@ mod tests {
     #[test]
     fn an_uncropped_frame_reports_no_divergence() {
         let output = std::env::temp_dir().join("openscreen-capture-nocrop.mp4");
-        let (mut capture, _) =
+        let (capture, _) =
             Capture::start(&output, 320, 240, 30, Some(1_000_000), Some(Backend::Software), Vec::new(), None)
                 .expect("start");
 

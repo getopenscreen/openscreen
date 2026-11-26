@@ -43,8 +43,6 @@ unsafe extern "C" fn drm_descriptor_free(_opaque: *mut std::ffi::c_void, data: *
 /// copies. The fds are borrowed for the duration of [`DmabufImporter::import`]
 /// only: VAAPI dups them during surface creation, so the caller may close after.
 pub struct DmabufFrame<'a> {
-    pub width: i32,
-    pub height: i32,
     pub drm_fourcc: u32,
     pub modifier: u64,
     pub planes: &'a [crate::shim::DmabufPlane],

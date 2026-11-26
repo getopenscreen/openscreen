@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { toastText } from "@/i18n/toastText";
+import { loadUserPreferences } from "@/lib/userPreferences";
 import type { AxcutDocument, AxcutTranscript } from "../schema";
 import { answerMcpHostRequest } from "./mcpDocumentHost";
 import { useProjectStore } from "./projectStore";
@@ -107,6 +108,7 @@ function loadDocument(document: AxcutDocument) {
 describe("useTranscriptionStore", () => {
 	beforeEach(() => {
 		useTranscriptionStore.getState().reset();
+		useTranscriptionStore.setState({ autoTranscribe: true });
 		useProjectStore.getState().clear();
 		bridgeMocks.save.mockReset();
 		// The bridge echoes back whatever it was handed, like a successful save.
@@ -126,6 +128,7 @@ describe("useTranscriptionStore", () => {
 		vi.clearAllMocks();
 		// biome-ignore lint/suspicious/noExplicitAny: test-only stub of the preload bridge
 		delete (window as any).electronAPI;
+		localStorage.clear();
 	});
 
 	it("transcribes every asset that has no transcript, one at a time", async () => {
@@ -526,6 +529,131 @@ describe("useTranscriptionStore", () => {
 		loadDocument(makeDoc(["asset_1"]));
 
 		await useTranscriptionStore.getState().request("asset_1");
+
+		expect(useProjectStore.getState().document?.transcripts).toHaveLength(1);
+	});
+
+	describe("with automatic transcription off (#1419)", () => {
+		beforeEach(() => {
+			useTranscriptionStore.setState({ autoTranscribe: false });
+		});
+
+		it("queues nothing in the background, so the model is never fetched unasked", async () => {
+			loadDocument(makeDoc(["asset_1", "asset_2"]));
+
+			useTranscriptionStore.getState().sync(useProjectStore.getState().document);
+			await whenTranscriptionIdle();
+
+			expect(transcribeMocks.transcribeAsset).not.toHaveBeenCalled();
+			expect(useTranscriptionStore.getState().jobs).toEqual({});
+		});
+
+		it("still transcribes what the user asks for, and only that", async () => {
+			transcribeMocks.transcribeAsset.mockImplementation(
+				async (_doc: AxcutDocument, assetId: string) => transcriptFor(assetId),
+			);
+			loadDocument(makeDoc(["asset_1", "asset_2"]));
+
+			await useTranscriptionStore.getState().request("asset_1");
+			await whenTranscriptionIdle();
+
+			expect(transcribeMocks.transcribeAsset).toHaveBeenCalledTimes(1);
+			expect(useProjectStore.getState().document?.transcripts.map((t) => t.assetId)).toEqual([
+				"asset_1",
+			]);
+		});
+
+		it("still answers the MCP transcribe tool", async () => {
+			transcribeMocks.transcribeAsset.mockImplementation(
+				async (_doc: AxcutDocument, assetId: string) => transcriptFor(assetId),
+			);
+			loadDocument(makeDoc(["asset_1"]));
+
+			await useTranscriptionStore.getState().ensureTranscript("asset_1");
+
+			expect(useProjectStore.getState().document?.transcripts).toHaveLength(1);
+		});
+
+		it("turning it on queues the loaded project's media without waiting for an edit", async () => {
+			transcribeMocks.transcribeAsset.mockImplementation(
+				async (_doc: AxcutDocument, assetId: string) => transcriptFor(assetId),
+			);
+			loadDocument(makeDoc(["asset_1", "asset_2"]));
+			useTranscriptionStore.getState().sync(useProjectStore.getState().document);
+
+			useTranscriptionStore.getState().setAutoTranscribe(true);
+			await whenTranscriptionIdle();
+
+			expect(loadUserPreferences().autoTranscribe).toBe(true);
+			expect(transcribeMocks.transcribeAsset).toHaveBeenCalledTimes(2);
+		});
+	});
+
+	it("stays off when the preference cannot be saved", async () => {
+		const setItem = vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => {
+			throw new DOMException("quota exceeded", "QuotaExceededError");
+		});
+		loadDocument(makeDoc(["asset_1"]));
+
+		useTranscriptionStore.getState().setAutoTranscribe(false);
+		useTranscriptionStore.getState().sync(useProjectStore.getState().document);
+		await whenTranscriptionIdle();
+		setItem.mockRestore();
+
+		expect(loadUserPreferences().autoTranscribe).toBe(true);
+		expect(transcribeMocks.transcribeAsset).not.toHaveBeenCalled();
+	});
+
+	it("turning it off stops the background pass but keeps what the user asked for", async () => {
+		const started: string[] = [];
+		transcribeMocks.transcribeAsset.mockImplementation(
+			async (_doc: AxcutDocument, assetId: string, options: { signal?: AbortSignal }) => {
+				started.push(assetId);
+				if (assetId === "asset_1") {
+					// The background run of asset_1 holds until it is aborted.
+					await new Promise<void>((_resolve, reject) => {
+						options.signal?.addEventListener("abort", () =>
+							reject(new DOMException("Aborted", "AbortError")),
+						);
+					});
+				}
+				return transcriptFor(assetId);
+			},
+		);
+		loadDocument(makeDoc(["asset_1", "asset_2", "asset_3"]));
+		useTranscriptionStore.getState().sync(useProjectStore.getState().document);
+		await Promise.resolve();
+		expect(useTranscriptionStore.getState().jobs.asset_1?.status).toBe("running");
+		const requested = useTranscriptionStore.getState().request("asset_3");
+
+		useTranscriptionStore.getState().setAutoTranscribe(false);
+		await requested;
+		await whenTranscriptionIdle();
+
+		expect(loadUserPreferences().autoTranscribe).toBe(false);
+		expect(started).toEqual(["asset_1", "asset_3"]);
+		expect(useProjectStore.getState().document?.transcripts.map((t) => t.assetId)).toEqual([
+			"asset_3",
+		]);
+		expect(useTranscriptionStore.getState().jobs).toEqual({});
+	});
+
+	it("turning it off leaves a background run alone when the MCP tool is waiting on it", async () => {
+		const firstRun = deferred();
+		transcribeMocks.transcribeAsset.mockImplementation(
+			async (_doc: AxcutDocument, assetId: string) => {
+				await firstRun.promise;
+				return transcriptFor(assetId);
+			},
+		);
+		loadDocument(makeDoc(["asset_1"]));
+		useTranscriptionStore.getState().sync(useProjectStore.getState().document);
+		await Promise.resolve();
+		const ensured = useTranscriptionStore.getState().ensureTranscript("asset_1");
+
+		useTranscriptionStore.getState().setAutoTranscribe(false);
+		firstRun.release();
+		await ensured;
 
 		expect(useProjectStore.getState().document?.transcripts).toHaveLength(1);
 	});

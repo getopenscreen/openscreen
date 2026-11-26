@@ -32,6 +32,10 @@ The agents act alone on everything that is not a product or architecture decisio
 - **A feature request the owner has already said is not near-term**, with nobody working on it: the
   agents label it `help wanted`, say so once on the issue, and stop revisiting it. It comes back only
   when someone comments, opens a PR for it, or the owner asks.
+- **An item the owner has labelled `help wanted`** (a feature request or a tracker that waits on any
+  volunteer, not on a named person), with nobody working on it for two weeks: the agents park it like
+  a not-near-term request: say so once on the issue if it was never said, and stop revisiting it. It
+  comes back only when someone comments, opens a PR for it, or the owner asks.
 
 ## Waiting on a third party: two days at most
 

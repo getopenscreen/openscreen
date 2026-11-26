@@ -49,7 +49,19 @@ const DIRECTORY_DROPS = [".mcp.json", "scripts"];
 // reads `network` (the hosts the plugin reaches), but the directory does not list it.
 const DIRECTORY_MANIFEST_DROPS = ["network"];
 // Words that would point Claude at something the directory edition does not ship.
-const DANGLING = [/\.mjs\b/, /openscreenSetup/, /\/reload-plugins/, /\b(the|plugin.s) launcher\b/];
+// The directory also refuses text that registers an MCP server the plugin does not declare,
+// or that downloads and runs code without a pinned version and checksum.
+const DANGLING = [
+	/\bmcp add\b/,
+	/\bwinget\b/,
+	/\bgh release\b/,
+	/releases\/latest/,
+	/\/plugin marketplace add\b/,
+	/\.mjs\b/,
+	/openscreenSetup/,
+	/\/reload-plugins/,
+	/\b(the|plugin.s) launcher\b/,
+];
 
 function walk(dir, root = dir) {
 	return readdirSync(dir).flatMap((name) => {

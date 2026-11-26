@@ -5,6 +5,7 @@ export const SUPPORTED_LOCALES = [
 	"cs",
 	"de",
 	"es",
+	"fa",
 	"fr",
 	"it",
 	"ja-JP",

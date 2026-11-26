@@ -1,0 +1,164 @@
+{
+	"floatingCamera": {
+		"title": "پیش‌نمایش دوربین",
+		"show": "نمایش پیش‌نمایش دوربین",
+		"hide": "پنهان کردن پیش‌نمایش دوربین",
+		"smaller": "کوچک کردن پیش‌نمایش",
+		"larger": "بزرگ کردن پیش‌نمایش"
+	},
+	"tooltips": {
+		"hideHUD": "پنهان کردن نوار ضبط",
+		"hideHUDTip": "نوار ضبط را پنهان کنید. برای نمایش دوباره، از آیکون برنامه در ناحیهٔ اعلان‌ها استفاده کنید.",
+		"closeApp": "خروج از OpenScreen",
+		"restartRecording": "این ضبط را حذف کنید و دوباره شروع کنید",
+		"cancelRecording": "این ضبط را متوقف و حذف کنید",
+		"pauseRecording": "مکث ضبط",
+		"resumeRecording": "ادامهٔ ضبط",
+		"useVerticalTray": "تغییر به نوار عمودی",
+		"useHorizontalTray": "تغییر به نوار افقی",
+		"changeSource": "انتخاب صفحه یا پنجره‌ای دیگر",
+		"systemAudio": "صدای پخش‌شده از رایانه را ضبط می‌کند",
+		"microphone": "صدای شما را از میکروفون ضبط می‌کند",
+		"camera": "تصویر دوربین را در لایه‌ای جدا ضبط می‌کند که در ویرایشگر می‌توانید جابه‌جایش کنید",
+		"openStudio": "باز کردن استودیو برای ویرایش ضبط‌ها",
+		"openNotes": "باز کردن یادداشت‌ها برای خواندن هنگام ضبط",
+		"openNotesPlaceholder": "یادداشت خود را اینجا بنویسید…",
+		"notesToolbar": {
+			"bold": "پررنگ",
+			"italic": "مورب",
+			"strikethrough": "خط‌خورده",
+			"bulletList": "فهرست نشانه‌دار",
+			"numberedList": "فهرست شماره‌دار",
+			"blockquote": "نقل‌قول",
+			"codeBlock": "بلوک کد",
+			"play": "شروع پیمایش خودکار",
+			"pause": "مکث پیمایش خودکار",
+			"speed": "سرعت پیمایش",
+			"decreaseSpeed": "کاهش سرعت پیمایش",
+			"increaseSpeed": "افزایش سرعت پیمایش",
+			"fontSize": "اندازهٔ قلم",
+			"decreaseFontSize": "کوچک کردن قلم",
+			"increaseFontSize": "بزرگ کردن قلم",
+			"mirror": "قرینهٔ افقی",
+			"mirrorTip": "متن را از چپ به راست قرینه کنید تا در آینه خوانا باشد"
+		}
+	},
+	"audio": {
+		"systemAudio": "صدای سیستم",
+		"microphone": "میکروفون",
+		"inputDevice": "دستگاه ورودی"
+	},
+	"webcam": {
+		"searching": "در حال جست‌وجو…",
+		"noneFound": "دوربینی پیدا نشد",
+		"unavailable": "دوربین در دسترس نیست",
+		"camera": "دوربین",
+		"cameraDevice": "دستگاه دوربین",
+		"quality": "کیفیت دوربین",
+		"quality1080p": "1080p",
+		"quality1440p": "1440p",
+		"quality2160p": "4K"
+	},
+	"cursor": {
+		"name": "نشانگر قابل ویرایش",
+		"editableTip": "نشانگر جداگانه ضبط می‌شود و در ویرایشگر می‌توانید ظاهرش را عوض کنید یا بزرگ‌نمایی خودکار داشته باشید",
+		"systemTip": "نشانگر سیستم در خود ویدیو ضبط می‌شود و ظاهر آن و بزرگ‌نمایی خودکار قابل تنظیم نیست"
+	},
+	"sourceSelector": {
+		"loading": "در حال بارگیری صفحه‌ها و پنجره‌ها…",
+		"screens": "صفحه‌ها ({{count}})",
+		"windows": "پنجره‌ها ({{count}})",
+		"emptyTitle": "صفحه یا پنجره‌ای پیدا نشد",
+		"emptyDescription": "اگر همین حالا مجوز ضبط صفحه را داده‌اید، این پنجره را دوباره بارگیری کنید. در macOS شاید لازم باشد OpenScreen را دوباره باز کنید.",
+		"loadFailedDescription": "صفحه‌ها و پنجره‌ها بارگیری نشدند. این پنجره را دوباره بارگیری کنید و دوباره امتحان کنید.",
+		"defaultSourceName": "صفحه‌نمایش"
+	},
+	"recording": {
+		"selectSource": "صفحه یا پنجره‌ای برای ضبط انتخاب کنید",
+		"systemPicker": "سیستم از شما می‌پرسد چه چیزی را به اشتراک بگذارید",
+		"start": "شروع ضبط",
+		"stop": "توقف ضبط و ذخیرهٔ آن",
+		"saving": "در حال ذخیره…"
+	},
+	"language": "زبان",
+	"languageWithName": "زبان فعلی {{language}}",
+	"systemLanguagePrompt": {
+		"title": "از زبان سیستم استفاده شود؟",
+		"description": "زبان سیستم شما {{language}} است. می‌خواهید زبان OpenScreen را به {{language}} تغییر دهید؟",
+		"switch": "تغییر زبان به {{language}}",
+		"keepDefault": "حفظ زبان فعلی"
+	},
+	"softwareEncoderFallback": {
+		"title": "رمزگذار جایگزین فعال شد",
+		"description": "رمزگذار کارت گرافیک راه‌اندازی نشد و OpenScreen به رمزگذار پشتیبان تغییر کرد. ضبط سالم است، اما ممکن است فشار بیشتری به رایانه وارد شود.",
+		"dismiss": "متوجه شدم",
+		"dontShowAgain": "دیگر نمایش نده"
+	},
+	"deviceSettings": {
+		"title": "تنظیمات دستگاه‌ها",
+		"close": "بستن",
+		"micLevel": "سطح ورودی",
+		"micHint": "برای آزمایش میکروفون صحبت کنید",
+		"noMicrophones": "میکروفونی پیدا نشد",
+		"preview": "پیش‌نمایش",
+		"previewUnavailable": "پیش‌نمایش در دسترس نیست",
+		"about": "درباره",
+		"version": "نسخهٔ {{version}}",
+		"checkingForUpdates": "در حال بررسی…"
+	},
+	"permissions": {
+		"title": "OpenScreen به چند مجوز نیاز دارد",
+		"subtitle": "macOS برای هر مجوز یک‌بار از شما اجازه می‌خواهد. هر زمان می‌توانید آن‌ها را در System Settings تغییر دهید.",
+		"level": {
+			"required": "ضروری",
+			"recommended": "پیشنهادی",
+			"optional": "اختیاری"
+		},
+		"rows": {
+			"screen": {
+				"name": "صفحه‌نمایش و صدای سیستم",
+				"description": "برای ضبط صفحه و صدایی که مک پخش می‌کند."
+			},
+			"systemAudio": {
+				"name": "صدای سیستم",
+				"description": "برای ضبط صدایی که مک پخش می‌کند. انتخاب صفحه یا پنجره مجوز نمی‌خواهد."
+			},
+			"accessibility": {
+				"name": "دسترس‌پذیری",
+				"description": "برای نمایش شکل درست نشانگر (مثلاً نشانگر ماوس یا متن) در ضبط."
+			},
+			"microphone": {
+				"name": "میکروفون",
+				"description": "برای ضبط صدای شما."
+			},
+			"camera": {
+				"name": "دوربین",
+				"description": "برای افزودن تصویر دوربین به ضبط."
+			}
+		},
+		"status": {
+			"granted": "مجاز",
+			"restricted": "تحت مدیریت سازمان شما"
+		},
+		"actions": {
+			"continue": "ادامه",
+			"allow": "اجازه دادن",
+			"openSettings": "باز کردن تنظیمات",
+			"restart": "اجرای دوبارهٔ OpenScreen",
+			"start": "شروع"
+		},
+		"help": {
+			"screenPrompt": "سپس macOS از شما می‌خواهد OpenScreen را در System Settings فعال کنید.",
+			"screenSettings": "در System Settings، گزینهٔ OpenScreen را فعال کنید. اگر macOS پیشنهاد بستن و باز کردن دوبارهٔ برنامه را داد، بپذیرید تا این پنجره دوباره باز شود.",
+			"screenNotListed": "OpenScreen در فهرست نیست؟ روی + کلیک کنید و برنامه را از پوشهٔ Applications انتخاب کنید.",
+			"screenRestart": "مجوز داده شد. برای استفاده از آن، OpenScreen باید دوباره اجرا شود.",
+			"screenRecurring": "در اولین ضبط، macOS برای دسترسی مستقیم OpenScreen به صفحه و بدون انتخابگر سیستم اجازه می‌خواهد. روی Allow کلیک کنید. درخواست دوبارهٔ این مجوز هر چند وقت یک‌بار طبیعی است.",
+			"systemAudioPrompt": "macOS برای ضبط صدایی که مک پخش می‌کند از شما اجازه می‌خواهد.",
+			"systemAudioRequested": "اگر اجازه ندادید، OpenScreen را در بخش «System Audio Recording Only» در System Settings فعال کنید."
+		},
+		"footer": {
+			"screenRequired": "برای ضبط، مجوز ضبط صفحه لازم است.",
+			"ready": "همه‌چیز آماده است."
+		}
+	}
+}

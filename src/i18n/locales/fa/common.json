@@ -1,0 +1,80 @@
+{
+	"actions": {
+		"cancel": "لغو",
+		"save": "ذخیره",
+		"delete": "حذف",
+		"close": "بستن",
+		"resetToDefault": "بازنشانی به پیش‌فرض",
+		"share": "انتخاب",
+		"done": "انجام شد",
+		"open": "باز کردن",
+		"checkForUpdates": "بررسی به‌روزرسانی",
+		"update": "به‌روزرسانی",
+		"updateTo": "به‌روزرسانی به نسخهٔ {{version}}",
+		"usagePing": "ارسال آمار ناشناس استفاده",
+		"viewRelease": "مشاهدهٔ جزئیات نسخه",
+		"downloadUpdate": "دریافت به‌روزرسانی",
+		"restartNow": "اکنون راه‌اندازی مجدد شود",
+		"upload": "بارگذاری",
+		"export": "خروجی",
+		"showInFolder": "نمایش در پوشه",
+		"file": "فایل",
+		"edit": "ویرایش",
+		"view": "نما",
+		"window": "پنجره",
+		"help": "راهنما",
+		"quit": "خروج",
+		"stopRecording": "توقف ضبط",
+		"undo": "واگرد",
+		"redo": "انجام دوباره",
+		"cut": "برش",
+		"copy": "کپی",
+		"paste": "چسباندن",
+		"selectAll": "انتخاب همه",
+		"minimize": "کمینه کردن",
+		"reload": "بارگیری دوباره",
+		"forceReload": "بارگیری دوباره بدون حافظهٔ نهان",
+		"toggleDevTools": "نمایش یا پنهان کردن ابزارهای توسعه",
+		"actualSize": "اندازهٔ واقعی",
+		"zoomIn": "بزرگ‌نمایی",
+		"zoomOut": "کوچک‌نمایی",
+		"toggleFullScreen": "ورود به تمام‌صفحه یا خروج از آن",
+		"recordingStatus": "در حال ضبط {{source}}",
+		"about": "دربارهٔ OpenScreen",
+		"services": "خدمات",
+		"hide": "پنهان کردن OpenScreen",
+		"hideOthers": "پنهان کردن سایر برنامه‌ها",
+		"unhide": "نمایش همه",
+		"saveDiagnostics": "ذخیرهٔ اطلاعات عیب‌یابی",
+		"starOnGithub": "ستاره دادن در GitHub",
+		"permissions": "مجوزها…",
+		"closeNotification": "بستن اعلان"
+	},
+	"updates": {
+		"available": "نسخهٔ {{latestVersion}} از OpenScreen آمادهٔ دریافت است. نسخهٔ فعلی شما {{currentVersion}} است.",
+		"current": "OpenScreen به‌روز است (نسخهٔ {{currentVersion}}).",
+		"readyToInstall": "نسخهٔ {{latestVersion}} از OpenScreen دریافت شد. برای پایان نصب، برنامه را دوباره اجرا کنید.",
+		"blockedRecording": "پیش از نصب به‌روزرسانی، ضبط را تمام کنید.",
+		"blockedLocation": "پیش از به‌روزرسانی، OpenScreen را به پوشهٔ Applications منتقل کنید.",
+		"failed": "بررسی به‌روزرسانی ممکن نشد.",
+		"downloadFailed": "دریافت به‌روزرسانی ممکن نشد."
+	},
+	"units": {
+		"pixelsPerSecond": "{{value}} پیکسل بر ثانیه",
+		"pixels": "{{value}} پیکسل"
+	},
+	"locale": {
+		"name": "فارسی",
+		"short": "FA"
+	},
+	"recordingSource": {
+		"window": "پنجره",
+		"screen": "صفحه‌نمایش",
+		"virtual": "نمایشگر مجازی",
+		"unknown": "ضبط صفحه"
+	},
+	"presenterOverlay": {
+		"interruptedTitle": "ممکن است ضبط دوربین ناقص باشد",
+		"interruptedDescription": "ممکن است قابلیت Presenter Overlay ضبط دوربین را قطع کرده باشد. آن را خاموش کنید و دوباره ضبط کنید."
+	}
+}

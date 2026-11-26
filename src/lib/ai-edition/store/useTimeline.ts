@@ -1525,9 +1525,9 @@ export function useTimeline() {
 					...(needsDims ? { video: { codec: "unknown", fps: 0, ...a.video, ...probedDims } } : {}),
 				};
 			});
-			// `history: false`. Nothing about this write is a user action: `addAsset` never
-			// populates `durationSec`, so EVERY freshly imported asset lands at the 60s
-			// placeholder and fires this probe. Recording it put a placeholder-length clip
+			// `history: false`. Nothing about this write is a user action: an asset whose
+			// import probe failed (or one from an older project) has no `durationSec`, so it
+			// lands at the 60s placeholder and fires this probe. Recording it put a placeholder-length clip
 			// on the undo stack a beat after the drop, so the first Ctrl+Z snapped the clip
 			// back to 60s instead of removing it — and a probe resolving after the user
 			// had already undone wiped `future`, destroying redo from a background write.

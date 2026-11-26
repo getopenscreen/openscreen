@@ -350,6 +350,8 @@ unsafe fn walk_timeline(
     let cursor_enabled = scene.is_some();
     let cursor_smoothing = scene.as_ref().map(|s| s.cursor.smoothing).unwrap_or(0.0);
     let mut cursor_tracks: HashMap<String, CursorTrack> = HashMap::new();
+    // `None`: the file has no readable telemetry, so it is not read again for the next clip.
+    let mut raw_cursor_tracks: HashMap<String, Option<CursorTrack>> = HashMap::new();
     let mut cursor_active_path: Option<String> = None;
 
     let mut frames: u64 = 0;
@@ -506,13 +508,32 @@ unsafe fn walk_timeline(
         }
 
         if cursor_enabled {
-            // Keyed by file AND turn: the same file turned is another track.
-            let key = cursor_key(&clip.screen, turned);
+            // Keyed by file AND turn: the same file turned is another track. The raw file is read
+            // once; the smoothed track is also keyed by where this clip's spring restarts
+            // (`Scene::cursor_break_for_clip`, as in preview), so one clip's start never resets
+            // the cursor inside another clip on the same file.
+            let raw_key = cursor_key(&clip.screen, turned);
+            let clip_break = scene.as_ref().and_then(|s| s.cursor_break_for_clip(clip_index));
+            let key = match clip_break {
+                Some(at) => format!("{raw_key}#{}", at.to_bits()),
+                None => raw_key.clone(),
+            };
             if !cursor_tracks.contains_key(&key) {
-                let path = format!("{}.cursor.json", clip.screen);
-                if let Ok(raw) = CursorTrack::load(&path, 0.0, 24.0 * 3600.0) {
-                    let raw = if turned { raw.turned() } else { raw };
-                    cursor_tracks.insert(key.clone(), raw.smoothed(cursor_smoothing));
+                if !raw_cursor_tracks.contains_key(&raw_key) {
+                    let path = format!("{}.cursor.json", clip.screen);
+                    let raw = CursorTrack::load(&path, 0.0, 24.0 * 3600.0)
+                        .ok()
+                        .map(|raw| if turned { raw.turned() } else { raw });
+                    raw_cursor_tracks.insert(raw_key.clone(), raw);
+                }
+                if let Some(Some(raw)) = raw_cursor_tracks.get(&raw_key) {
+                    let breaks: Vec<f32> = clip_break.into_iter().collect();
+                    // One smoothed track at a time: each spans the whole recording (two 240 Hz
+                    // lists, about 20 MB per hour), and a timeline with many cuts would keep one
+                    // per cut until the export ends. Only the playing clip's is read; the raw
+                    // telemetry stays cached, so coming back to a chain costs one spring pass.
+                    cursor_tracks.clear();
+                    cursor_tracks.insert(key.clone(), raw.smoothed_with_breaks(cursor_smoothing, &breaks));
                 }
                 // absente/illisible → pas d'entrée : ce clip s'exporte sans curseur (visible,
                 // pas masqué en un curseur fantôme d'un autre clip).

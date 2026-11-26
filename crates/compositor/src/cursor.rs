@@ -513,6 +513,15 @@ impl CursorTrack {
     /// du slider (0 = passthrough, retourne un clone). Les clics restent sur leurs instants
     /// bruts (le bounce est temporel, pas positionnel — ne doit pas suivre le lissage).
     pub fn smoothed(&self, factor: f32) -> CursorTrack {
+        self.smoothed_with_breaks(factor, &[])
+    }
+
+    /// `smoothed(factor)`, with the spring also restarted at each of `breaks` (source seconds),
+    /// as it already restarts when the cursor reappears. The callers pass the start of the clip
+    /// window being played (`Scene::cursor_break_for_clip`): without it the spring ran across the
+    /// footage a trim or a clip boundary removed, and the drawn cursor teleported at the cut to
+    /// wherever that hidden path had dragged it.
+    pub fn smoothed_with_breaks(&self, factor: f32, breaks: &[f32]) -> CursorTrack {
         if self.samples.len() < 2 || factor <= 0.0 {
             return CursorTrack::new_with_visibility(
                 self.samples.clone(),
@@ -525,31 +534,43 @@ impl CursorTrack {
         let start = self.samples[0].0;
         let end = self.samples[self.samples.len() - 1].0;
         let step_count = (((end - start) / STEP_S).round() as usize).max(1);
-        let n = step_count + 1;
-        let mut times = Vec::with_capacity(n);
+        let mut sorted_breaks: Vec<f32> = breaks.iter().copied().filter(|b| b.is_finite()).collect();
+        sorted_breaks.sort_by(|a, b| a.partial_cmp(b).unwrap());
+        let mut times: Vec<f32> = (0..=step_count)
+            .map(|i| if i == step_count { end } else { start + i as f32 * STEP_S })
+            .collect();
+        // Each break is a sample of its own, the first of its run: a clip rarely starts on the
+        // 240 Hz grid, and restarting at the next grid sample instead left the clip's first frame
+        // interpolating from the run before, still trailing. The one step this shortens is
+        // integrated as a whole one; the run starts at rest on its target, so nothing visible
+        // changes.
+        times.extend(sorted_breaks.iter().copied().filter(|&b| b > start && b < end));
+        times.sort_by(|a, b| a.partial_cmp(b).unwrap());
+        times.dedup_by(|later, earlier| (*later - *earlier).abs() < 1e-6);
+        let n = times.len();
         let mut raw_x = Vec::with_capacity(n);
         let mut raw_y = Vec::with_capacity(n);
-        for i in 0..n {
-            let t = if i == n - 1 {
-                end
-            } else {
-                start + i as f32 * STEP_S
-            };
+        for &t in &times {
             let (cx, cy) = self.at(t).unwrap_or((0.0, 0.0));
-            times.push(t);
             raw_x.push(cx);
             raw_y.push(cy);
         }
         let (stiffness, damping, mass) = cursor_spring_config(factor);
         // Une phase masquée coupe le ressort. Au retour, le curseur repart du premier point
-        // réellement visible au lieu de traverser la trajectoire cachée avec du retard.
+        // réellement visible au lieu de traverser la trajectoire cachée avec du retard. A break
+        // (a clip window's start) cuts it the same way.
+        let segment_of = |t: f32| sorted_breaks.partition_point(|&b| b <= t + 1e-6);
         let mut xs = Vec::with_capacity(n);
         let mut ys = Vec::with_capacity(n);
         let mut run_start = 0;
         while run_start < n {
             let visible = self.visible_at(times[run_start]);
+            let segment = segment_of(times[run_start]);
             let mut run_end = run_start + 1;
-            while run_end < n && self.visible_at(times[run_end]) == visible {
+            while run_end < n
+                && self.visible_at(times[run_end]) == visible
+                && segment_of(times[run_end]) == segment
+            {
                 run_end += 1;
             }
             xs.extend(spring_smooth(
@@ -1213,5 +1234,72 @@ mod tests {
         assert_eq!(track.opacity_at(4.2, true), 1.0);
         // Et s'éteint 1.8s après le clic (4.0 + 1.8 = 5.8s)
         assert_eq!(track.opacity_at(5.9, true), 0.0);
+    }
+}
+
+#[cfg(test)]
+mod break_tests {
+    use super::*;
+
+    #[test]
+    fn smoothed_without_breaks_is_unchanged() {
+        let samples: Vec<_> = (0..=60).map(|i| (i as f32 / 30.0, 0.1 + 0.01 * i as f32, 0.5)).collect();
+        let raw = CursorTrack::new(samples, vec![], vec![(0.0, "arrow".to_string())]);
+        for t in [0.0, 0.7, 1.3, 2.0] {
+            assert_eq!(raw.smoothed_with_breaks(0.4, &[]).at(t), raw.smoothed(0.4).at(t));
+        }
+    }
+
+    #[test]
+    fn a_break_restarts_the_spring_so_a_cut_does_not_teleport_late() {
+        // Still at x = 0.1 until 2 s, then at x = 0.9: what a cut to later footage looks like.
+        let samples: Vec<_> = (0..=120)
+            .map(|i| {
+                let t = i as f32 / 30.0;
+                (t, if t < 2.0 { 0.1 } else { 0.9 }, 0.5)
+            })
+            .collect();
+        let raw = CursorTrack::new(samples, vec![], vec![(0.0, "arrow".to_string())]);
+        let lagging = raw.smoothed(0.5).at(2.05).unwrap().0;
+        let restarted = raw.smoothed_with_breaks(0.5, &[2.0]).at(2.05).unwrap().0;
+        assert!(lagging < 0.8, "without a break the spring still trails: {lagging}");
+        assert!((restarted - 0.9).abs() < 1e-3, "after a break it starts on the pointer: {restarted}");
+    }
+
+    #[test]
+    fn a_break_between_grid_samples_restarts_exactly_on_it() {
+        // The clip starts at 2.001 s, off the 240 Hz grid: its first frame must already be on the
+        // pointer, not interpolated from the run before the break.
+        let samples: Vec<_> = (0..=120)
+            .map(|i| {
+                let t = i as f32 / 30.0;
+                (t, if t < 2.0 { 0.1 } else { 0.9 }, 0.5)
+            })
+            .collect();
+        let raw = CursorTrack::new(samples, vec![], vec![(0.0, "arrow".to_string())]);
+        let at_break = 2.001;
+        let target = raw.at(at_break).unwrap().0;
+        let restarted = raw.smoothed_with_breaks(0.5, &[at_break]).at(at_break).unwrap().0;
+        assert!((restarted - target).abs() < 1e-4, "{restarted} vs the pointer at {target}");
+    }
+
+    #[test]
+    fn the_clips_of_a_chain_draw_one_path_across_their_split() {
+        // A pointer that keeps moving after a cut at 2 s. Both clips of the chain [2, 2.05] and
+        // [2.05, 4] are smoothed with the restart at 2, so the path has no step at the split,
+        // where a track without that restart is still far behind.
+        let samples: Vec<_> = (0..=120)
+            .map(|i| {
+                let t = i as f32 / 30.0;
+                (t, if t < 2.0 { 0.1 } else { 0.5 + 0.2 * (t - 2.0) }, 0.5)
+            })
+            .collect();
+        let raw = CursorTrack::new(samples, vec![], vec![(0.0, "arrow".to_string())]);
+        let chain = raw.smoothed_with_breaks(0.5, &[2.0]);
+        let before = chain.at(2.05 - 1.0 / 60.0).unwrap().0;
+        let after = chain.at(2.05).unwrap().0;
+        assert!((after - before).abs() < 0.01, "a step of {} at the split", after - before);
+        let without_restart = raw.smoothed(0.5).at(2.05).unwrap().0;
+        assert!((after - without_restart).abs() > 0.05, "the restart is what keeps it on the pointer");
     }
 }

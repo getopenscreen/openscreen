@@ -13,7 +13,7 @@ A take is cheaper to redo than to repair. Aim for one that needs no cut: the fir
 |---|---|---|
 | A desktop app, a native window, anything a browser cannot show | `startRecording`, real mouse | Recorded with the take |
 | A web app the user wants filmed as they use it | `startRecording`, real mouse | Recorded with the take |
-| A web app, a repeatable take, nothing on the user's screen | <!-- full-plugin -->Headless script (below)<!-- /full-plugin --><!-- directory-plugin A headless script, with the full plugin (below) --> | `setPointerTrack` from the script's log |
+| A web app, a repeatable take, nothing on the user's screen | <!-- full-plugin -->Headless script (below)<!-- /full-plugin --><!-- directory-plugin Not in this edition (below) --> | `setPointerTrack` from the script's log |
 | A web app shown in a real window, driven by Playwright or CDP | `startRecording`, script drives the page | `setPointerTrack` from the script's log |
 | A video file that already exists | `createProject` with its `videoPath` | `setPointerTrack` if you know the clicks |
 
@@ -87,7 +87,7 @@ Never write a `.cursor.json` file yourself: `setPointerTrack` writes it, and a c
 <!-- directory-plugin
 ## The headless recipe
 
-Capturing a web page in a browser with no window needs a capture script that comes with the full OpenScreen plugin, from https://github.com/getopenscreen/openscreen (see its `plugin/` folder). Without it, record the page in a real window with `startRecording` as above.
+Capturing a web page in a browser with no window needs a capture script that this edition of the plugin does not carry. Without it, record the page in a real window with `startRecording` as above.
 
 -->
 ## Check the take before editing

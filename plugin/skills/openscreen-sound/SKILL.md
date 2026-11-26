@@ -10,7 +10,7 @@ Decide what leads, place it, then measure the mix instead of trusting it: you ca
 preview, and a render you did not measure is a guess.
 
 If a tool this skill names is not in your tool list, the installed OpenScreen is older than this
-skill: <!-- full-plugin -->offer to update it (see the `openscreen-demo` skill, step 1)<!-- /full-plugin --><!-- directory-plugin ask the user to quit OpenScreen, install the latest one over it, as https://getopenscreen.com/docs/installation explains, then to start a new session (if no OpenScreen tool is listed at all, OpenScreen is not connected: say so, link https://getopenscreen.com/docs/ai-editing and stop) -->, or measure as in
+skill: <!-- full-plugin -->offer to update it (see the `openscreen-demo` skill, step 1)<!-- /full-plugin --><!-- directory-plugin ask the user to quit OpenScreen, install the latest one over it, as https://getopenscreen.com/docs/installation explains, then to start a new session (if no OpenScreen tool is listed at all, OpenScreen's tools are not available in this session: say so, link https://getopenscreen.com/docs/ai-editing and stop) -->, or measure as in
 "Without getAudioReport" below.
 
 ## 1. Keep it simple

@@ -26,3 +26,7 @@ workbench/measurements/** -text
 # submittable to Claude's plugin directory, which refuses any `export-ignore`:
 # the plugin is submitted from its mirror instead (.github/workflows/plugin-mirror.yml).
 docs/assets/** export-ignore
+
+# Generated Workbench evidence; review the scenario/code and recorded outcomes first.
+workbench/baselines/public-demo-*.json linguist-generated=true
+workbench/public-fixtures/local-demo-v1/demo.webm.cursor.json linguist-generated=true

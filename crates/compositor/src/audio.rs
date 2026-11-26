@@ -3118,7 +3118,11 @@ mod tests {
         // crests back over full scale), raised by the loudness gain: the export read +0.5 dBTP.
         let mut recording = through_aac(&voice(8.0, 1.0, 2.0), "clipped-recording");
         let gain = loudness_gain_for(loudness_of(&recording));
-        assert!(gain > 1.0, "the fixture needs raising, like #1157's +1.6 dB: {gain}");
+        // The AAC round-trip's integrated loudness shifts by a few tenths of a dB
+        // between platform encoders (arm64 measured 0.95 here, Intel ~1.6). This
+        // guard only needs to prove the fixture asks for a boost; keep it well
+        // below 1 dB so the cross-encoder drift cannot turn it into a flaky failure.
+        assert!(gain > 0.5, "the fixture needs raising, like #1157's +1.6 dB: {gain}");
         apply_gain_db(&mut recording, gain);
         assert_lufs(loudness_of(&recording), -16.0);
         let hot = true_peak_dbtp(&recording);

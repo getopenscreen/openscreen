@@ -1,0 +1,119 @@
+name: Plugin mirror
+
+# Claude's plugin directory cannot validate this repository: its GitHub archive
+# is over the directory's 50 MiB limit without the `export-ignore` rule in
+# .gitattributes, and the directory refuses any repository whose .gitattributes
+# uses `export-ignore` at all. A plugin in a subfolder is also always held for a
+# reviewer. So the plugin is submitted from a small repository of its own,
+# getopenscreen/openscreen-plugin, that holds plugin/ at its root.
+#
+# plugin/ stays the source of truth: never edit the mirror by hand, every push
+# here overwrites it. The directory rescans the mirror on each push to it.
+#
+# Setup (once): create getopenscreen/openscreen-plugin, add a deploy key with
+# write access to it, and store the private key here as the
+# PLUGIN_MIRROR_DEPLOY_KEY secret.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "plugin/**"
+      - "LICENSE"
+      - "package.json"
+      - ".github/scripts/build-plugin-mirror.mjs"
+      - ".github/workflows/plugin-mirror.yml"
+  pull_request:
+    branches: [main]
+    paths:
+      - "plugin/**"
+      - "package.json"
+      - ".github/scripts/build-plugin-mirror.mjs"
+      - ".github/workflows/plugin-mirror.yml"
+  workflow_dispatch:
+
+# Publishing runs (pushes and dispatches on main) queue in one group; every
+# other run gets a group of its own, so it can never take the place of a
+# pending publication.
+concurrency:
+  group: plugin-mirror-${{ github.event_name != 'pull_request' && github.ref == 'refs/heads/main' && 'publish' || github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  mirror:
+    name: Check and mirror the plugin
+    runs-on: ubuntu-latest
+    steps:
+      # A publishing run builds from main's tip, not from the commit that queued
+      # it, so a run that starts late can never put older content back.
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event_name != 'pull_request' && github.ref == 'refs/heads/main' && 'main' || '' }}
+
+      # The directory only publishes a new version when `version` goes up, so
+      # the plugin's version follows the app's, released together.
+      - name: Check the plugin's version matches the app's
+        run: |
+          node -e '
+            const read = (f) => JSON.parse(require("fs").readFileSync(f, "utf8"));
+            const app = read("package.json").version;
+            const bad = ["plugin/.claude-plugin/plugin.json", "plugin/.codex-plugin/plugin.json"]
+              .map((f) => [f, read(f).version])
+              .filter(([, v]) => v !== app);
+            for (const [f, v] of bad) console.log(`::error file=${f}::version is ${v}, the app is ${app}`);
+            process.exit(bad.length ? 1 : 0);
+          '
+
+      # The directory edition carries the skills alone: the directory accepts a
+      # local MCP server and script files only from Verified organizations, which
+      # getopenscreen is not yet. Set PLUGIN_MIRROR_EDITION to "full" (a repository
+      # variable) once it is. The script says what it drops and why.
+      - name: Build the mirror's tree
+        env:
+          EDITION: ${{ vars.PLUGIN_MIRROR_EDITION || 'directory' }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/mirror"
+          node .github/scripts/build-plugin-mirror.mjs plugin "$RUNNER_TEMP/tree" --edition "$EDITION" --license LICENSE
+
+      - name: Push to getopenscreen/openscreen-plugin
+        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main' && github.repository == 'getopenscreen/openscreen'
+        env:
+          DEPLOY_KEY: ${{ secrets.PLUGIN_MIRROR_DEPLOY_KEY }}
+        run: |
+          if [ -z "$DEPLOY_KEY" ]; then
+            echo "::warning::PLUGIN_MIRROR_DEPLOY_KEY is not set, so the mirror was not updated."
+            exit 0
+          fi
+          install -m 700 -d ~/.ssh
+          # A key pasted into the secret from Windows carries CRLF line ends,
+          # which OpenSSH refuses ("error in libcrypto").
+          printf '%s\n' "$DEPLOY_KEY" | tr -d '\r' > ~/.ssh/mirror_key
+          chmod 600 ~/.ssh/mirror_key
+          if ! ssh-keygen -y -f ~/.ssh/mirror_key > /dev/null; then
+            echo "::error::PLUGIN_MIRROR_DEPLOY_KEY is not a readable private key. Paste the whole private key file, from its BEGIN line to its END line."
+            exit 1
+          fi
+          ssh-keyscan github.com >> ~/.ssh/known_hosts 2>/dev/null
+          export GIT_SSH_COMMAND="ssh -i ~/.ssh/mirror_key -o IdentitiesOnly=yes"
+
+          cd "$RUNNER_TEMP/mirror"
+          if git clone --depth 1 git@github.com:getopenscreen/openscreen-plugin.git repo 2>/dev/null; then
+            cd repo
+          else
+            mkdir repo && cd repo && git init -q -b main
+            git remote add origin git@github.com:getopenscreen/openscreen-plugin.git
+          fi
+          find . -mindepth 1 -maxdepth 1 ! -name .git -exec rm -rf {} +
+          cp -a "$RUNNER_TEMP/tree/." .
+          git add -A
+          if git diff --cached --quiet; then
+            echo "The mirror is already up to date."
+            exit 0
+          fi
+          git -c user.name="github-actions[bot]" \
+              -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
+              commit -q -m "Mirror plugin/ from getopenscreen/openscreen@${GITHUB_SHA::7}"
+          git push origin HEAD:main

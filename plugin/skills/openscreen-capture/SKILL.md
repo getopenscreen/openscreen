@@ -7,17 +7,21 @@ description: Gets a clean, repeatable take for an OpenScreen video. Covers stagi
 
 A take is cheaper to redo than to repair. Aim for one that needs no cut: the first frame already shows the result, every action happens once, and every result stays on screen about 1 s before the next action.
 
+<!-- directory-plugin
+This edition of the plugin carries the skills only. If `startRecording` and OpenScreen's other tools are not in your tool list, they are not available in this session: say so in plain words, point the user to OpenScreen's documentation, https://getopenscreen.com/docs/ai-editing, and stop. Never install anything or change the agent's settings for it yourself.
+
+-->
 ## Choose how to capture
 
 | Situation | Capture | Cursor and zooms |
 |---|---|---|
 | A desktop app, a native window, anything a browser cannot show | `startRecording`, real mouse | Recorded with the take |
 | A web app the user wants filmed as they use it | `startRecording`, real mouse | Recorded with the take |
-| A web app, a repeatable take, nothing on the user's screen | Headless script (below) | `setPointerTrack` from the script's log |
+| A web app, a repeatable take, nothing on the user's screen | <!-- full-plugin -->Headless script (below)<!-- /full-plugin --><!-- directory-plugin Not in this edition (below) --> | `setPointerTrack` from the script's log |
 | A web app shown in a real window, driven by Playwright or CDP | `startRecording`, script drives the page | `setPointerTrack` from the script's log |
 | A video file that already exists | `createProject` with its `videoPath` | `setPointerTrack` if you know the clicks |
 
-**Prefer a real recording** when the thing to show is not a web page, needs the user's real data or session, involves sound from the app (`startRecording` with `systemAudio: true`), needs the webcam (`camera`) or a narration (`microphone: true`), or when the user wants to drive it themselves. Everything else in a browser is cleaner headless: same timing on every run, no hesitation, the user's screen untouched.
+**Prefer a real recording** when the thing to show is not a web page, needs the user's real data or session, involves sound from the app (`startRecording` with `systemAudio: true`), needs the webcam (`camera`) or a narration (`microphone: true`), or when the user wants to drive it themselves. <!-- full-plugin -->Everything else in a browser is cleaner headless: same timing on every run, no hesitation, the user's screen untouched.<!-- /full-plugin -->
 
 ## Stage the app
 
@@ -61,6 +65,7 @@ Log where each move starts and ends, and each click; OpenScreen glides between t
 
 For a page shown in a real window, the tool's description gives the formula from a page point (`clientX`, `clientY`) to window fractions. `setPointerTrack` replaces the pointer the take had, then plans zooms on the new clicks (`autoZoomsAdded`). On a project not open in the editor it needs a checkpoint, which `stopRecording` and `createProject` make; `restoreCheckpoint` undoes it.
 
+<!-- full-plugin -->
 ## The headless recipe
 
 `scripts/capture.mjs` captures a web page in a browser with no window: a screenshot loop at twice the display scale (2560×1440 from a 1280×720 viewport, about 20 frames a second, enough for an interface), encoded to an H.264 MP4 at 30 fps, plus the pointer log in video time. Twice the scale is what keeps text sharp under a 1.5× to 2.2× zoom.
@@ -82,6 +87,13 @@ Never write a `.cursor.json` file yourself: `setPointerTrack` writes it, and a c
 - Timers inside the page run on the real clock while frames arrive at their own pace: an on-screen clock or counter can look faster or slower than real time. Keep them out of the shot.
 - A 3× scale (3840×2160) is worth it only for an effect that magnifies a detail, and costs frame rate.
 
+<!-- /full-plugin -->
+<!-- directory-plugin
+## The headless recipe
+
+Capturing a web page in a browser with no window needs a capture script that this edition of the plugin does not carry. Say so, and ask the user whether a recording in a real window, which shows the page on their screen, will do. Record it with `startRecording` as above only once they agree.
+
+-->
 ## Check the take before editing
 
 Look at the whole take in one image: `getContactSheet` with the `videoPath` as `path` and `count: 12`. If that tool is not listed, use `getFrames` with `path` and `count: 6`. Then:

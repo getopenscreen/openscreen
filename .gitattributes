@@ -20,8 +20,9 @@ CMakeLists.txt text eol=lf
 # Adopted measurement manifests hash exact bytes; keep their artifacts unchanged.
 workbench/measurements/** -text
 
-# Claude's plugin directory refuses a repository whose GitHub archive exceeds
-# 50 MiB, and this one was at 50.4. These ~8 MB of README media are copies of
-# files in public/, served from the tree (README, raw.githubusercontent links),
-# never from an archive, so leaving them out of archives costs nothing.
+# These ~8 MB of README media are copies of files in public/, served from the
+# tree (README, raw.githubusercontent links), never from an archive, so leaving
+# them out of archives costs nothing. This rule does not make the repository
+# submittable to Claude's plugin directory, which refuses any `export-ignore`:
+# the plugin is submitted from its mirror instead (.github/workflows/plugin-mirror.yml).
 docs/assets/** export-ignore

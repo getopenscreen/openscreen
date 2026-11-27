@@ -23,6 +23,13 @@
 	object-position: center;
 }
 
+/* Device settings' Custom: the window is square, and the camera's centre fills it, under the
+   rounding picked there. Default: the window takes the camera's own shape and the whole frame
+   shows, edges included. */
+.square img {
+	object-fit: cover;
+}
+
 .hide {
 	-webkit-app-region: no-drag;
 	position: absolute;
@@ -36,6 +43,13 @@
 	background: #09090bbf;
 	color: #f4f4f5;
 	cursor: pointer;
+}
+
+/* Centred on the Custom (square) preview: its rounder corners would clip a corner button. */
+.square .hide {
+	right: auto;
+	left: 50%;
+	transform: translateX(-50%);
 }
 
 .hide:focus-visible {

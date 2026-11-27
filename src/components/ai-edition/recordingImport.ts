@@ -18,6 +18,7 @@ import type { CursorTelemetryPoint } from "@/components/video-editor/types";
 import { createId } from "@/lib/ai-edition/document/ids";
 import { clipAwaitsProbedDuration } from "@/lib/ai-edition/document/timeline";
 import type { AxcutDocument } from "@/lib/ai-edition/schema";
+import { patchEditorSettings } from "@/lib/ai-edition/store/editorSettings";
 import {
 	DOCUMENT_SAVES_WAIT_TIMEOUT_MS,
 	saveWithDeadline,
@@ -28,6 +29,7 @@ import {
 	appendAutoZoomSuggestions,
 	collectAutoZoomSuggestionsForLatestDocument,
 } from "@/lib/ai-edition/timeline/apply-auto-zooms";
+import { DEFAULT_WEBCAM_ROUNDNESS } from "@/lib/projectDefaults";
 import type { RecordingSession } from "@/lib/recordingSession";
 import { nativeBridgeClient } from "@/native/client";
 
@@ -140,6 +142,36 @@ async function readAutoZoomPref(timeoutMs = DOCUMENT_SAVES_WAIT_TIMEOUT_MS): Pro
 		return settled === "timeout" ? true : settled;
 	} catch {
 		return true;
+	}
+}
+
+/**
+ * Device settings' Custom, which a fresh take's webcam starts with: the square crop and the
+ * rounding the user watched in the floating preview while recording, the editor's default
+ * rounding for a square camera until the slider was moved. Default carries nothing: the take
+ * keeps its project's own look. Also nothing when the bridge is unreachable, throws or does not
+ * answer in time (bounded like `readAutoZoomPref`).
+ */
+async function readSquareCameraPref(
+	timeoutMs = DOCUMENT_SAVES_WAIT_TIMEOUT_MS,
+): Promise<{ webcamMaskShape: "square"; webcamRoundness: number } | null> {
+	try {
+		const read = (async () => {
+			const prefs = await window.electronAPI?.getRecordingPrefs?.();
+			if (prefs?.camShape !== "square") return null;
+			const roundness = prefs.camRoundness;
+			return {
+				webcamMaskShape: "square" as const,
+				webcamRoundness:
+					typeof roundness === "number" && Number.isFinite(roundness)
+						? roundness
+						: DEFAULT_WEBCAM_ROUNDNESS.square,
+			};
+		})();
+		const settled = await saveWithDeadline(read, timeoutMs);
+		return settled === "timeout" ? null : settled;
+	} catch {
+		return null;
 	}
 }
 
@@ -383,10 +415,15 @@ export async function importPendingRecording(
 		const warning = result.success ? result.warning : undefined;
 
 		const label = screenPath.split(/[\\/]/).pop() || "Recording";
+		// Read before the project exists, so no wait of its own sits between creating the
+		// project and adding the recording to it.
+		const cameraLook = await readSquareCameraPref();
 		const created = await useProjectStore
 			.getState()
 			.createProject(`Recording ${new Date().toLocaleString()}`);
 		if (pending) pending.projectId = created.project.id;
+		// Straight after creating the project, with no wait of this import's own between the
+		// two, so the recording lands in the project made for it.
 		await useProjectStore.getState().addAsset(screenPath, label);
 		// Mark before the video element can fire `loadedmetadata`. The asset path is
 		// already on the document; waiting until the 60s seed finished let the first
@@ -400,6 +437,20 @@ export async function importPendingRecording(
 		if (cursorCaptureMode !== "system") {
 			markFreshRecordingAutoZoomPending(screenPath);
 		}
+		// After the mark: the camera save waits, and the video must not load unmarked meanwhile.
+		const withRecording = useProjectStore.getState().document;
+		// Only onto the project made for this recording, never one opened since.
+		if (cameraLook && withRecording?.project.id === created.project.id) {
+			// `history: false`, like the timeline seed below: the editor set this up, the user
+			// did not, so their first Ctrl+Z must not undo it.
+			const saved = await useProjectStore
+				.getState()
+				.saveDocument(patchEditorSettings(withRecording, cameraLook), { history: false });
+			// The recording matters more than its camera's look: the import goes on, because
+			// leaving the session pending would make the next editor mount import the same
+			// take into a second project (#364). The webcam then has the project's own look.
+			if (!saved) console.warn("The recording bar's Custom camera could not be applied.");
+		}
 		// Consumed: the recording now lives in a project. Cleared here rather than
 		// after the timeline seed below so a failure down there can't hand the same
 		// recording to the next editor window.
@@ -410,8 +461,14 @@ export async function importPendingRecording(
 		// asset, drop a default 60s clip into the timeline so the editor isn't stuck
 		// on "No clips yet" the moment the user lands in the project. Real duration
 		// overwrites this when handleLoadedMetadata fires with a finite value.
+		// Every wait above is a moment another project can open: set up only the project made
+		// for this recording, which already holds it, so the session stays consumed either way.
 		const doc = useProjectStore.getState().document;
-		if (doc && doc.timeline.clips.length === 0 && doc.assets.length > 0) {
+		if (
+			doc?.project.id === created.project.id &&
+			doc.timeline.clips.length === 0 &&
+			doc.assets.length > 0
+		) {
 			// `history: false`. Nothing here is an edit: the user finished a recording and the
 			// editor built them a project around it, unattended, on mount. Recording it left a
 			// brand-new project sitting at `past.length === 1` before the user had touched
@@ -424,7 +481,7 @@ export async function importPendingRecording(
 				});
 		}
 		const latest = useProjectStore.getState().document;
-		if (latest) {
+		if (latest?.project.id === created.project.id) {
 			await maybeSaveFreshRecordingAutoZooms(latest);
 		}
 		if (warning) {

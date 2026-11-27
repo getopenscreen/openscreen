@@ -18,6 +18,17 @@ export interface RecordingPreferences {
 	camDeviceName: string | null;
 	/** Capture resolution for the camera. See WEBCAM_QUALITY_PRESETS. */
 	camQuality: WebcamQualityId;
+	/**
+	 * Device settings' Custom (a square crop), or null for Default. Custom crops the floating preview square and
+	 * rounds it by `camRoundness`, and a fresh take's webcam starts square at that roundness.
+	 * Default leaves the preview showing the camera's whole frame and a take its project's look.
+	 */
+	camShape: "square" | null;
+	/**
+	 * The Custom (square) preview's corner rounding, 0 square to 1 round, as the editor measures it
+	 * (`webcamRoundness`). Null until moved: the editor's default for a square camera.
+	 */
+	camRoundness: number | null;
 	systemAudioEnabled: boolean;
 	cursorCaptureMode: CursorCaptureMode;
 	/** Display captures on macOS and Windows. Opt-in: on Windows the icons also leave the real desktop while recording. */
@@ -40,6 +51,8 @@ export const DEFAULT_RECORDING_PREFERENCES: RecordingPreferences = {
 	camDeviceId: null,
 	camDeviceName: null,
 	camQuality: DEFAULT_WEBCAM_QUALITY,
+	camShape: null,
+	camRoundness: null,
 	systemAudioEnabled: false,
 	cursorCaptureMode: "editable-overlay",
 	hideDesktopIcons: false,
@@ -101,6 +114,8 @@ function atomicWrite(userData: string, value: RawSettings): void {
 const bool = (value: unknown, fallback: boolean) => (typeof value === "boolean" ? value : fallback);
 const nullableString = (value: unknown, fallback: string | null) =>
 	value === null || typeof value === "string" ? value : fallback;
+const isRoundness = (value: unknown): value is number =>
+	typeof value === "number" && Number.isFinite(value) && value >= 0 && value <= 1;
 
 function parseRecording(raw: RawSettings): RecordingPreferences {
 	return {
@@ -113,6 +128,10 @@ function parseRecording(raw: RawSettings): RecordingPreferences {
 		// Unset in every settings file written before the camera had a quality
 		// setting, and `webcamQualityFrom` answers those with the default.
 		camQuality: webcamQualityFrom(raw.camQuality),
+		camShape: raw.camShape === "square" ? "square" : DEFAULT_RECORDING_PREFERENCES.camShape,
+		camRoundness: isRoundness(raw.camRoundness)
+			? raw.camRoundness
+			: DEFAULT_RECORDING_PREFERENCES.camRoundness,
 		systemAudioEnabled: bool(
 			raw.systemAudioEnabled,
 			DEFAULT_RECORDING_PREFERENCES.systemAudioEnabled,
@@ -185,6 +204,12 @@ function validateRecordingPatch(patch: Partial<RecordingPreferences>): void {
 		// one the caller asked for.
 		if (key === "camQuality" && !WEBCAM_QUALITY_IDS.includes(value as WebcamQualityId)) {
 			throw new TypeError("camQuality is invalid");
+		}
+		if (key === "camShape" && value !== null && value !== "square") {
+			throw new TypeError("camShape must be square or null");
+		}
+		if (key === "camRoundness" && value !== null && !isRoundness(value)) {
+			throw new TypeError("camRoundness must be a number from 0 to 1, or null");
 		}
 	}
 }

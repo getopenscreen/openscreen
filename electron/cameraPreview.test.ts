@@ -126,6 +126,26 @@ describe("floating camera preview lifecycle", () => {
 		expect(resize).toHaveBeenCalledTimes(calls);
 	});
 
+	it("is square while Device settings asks for Square, and the camera's shape otherwise", () => {
+		const { preview, sender, overlaySender, resize, overlay } = setup();
+		preview.configure(sender, true, true);
+		overlay.emit("ready-to-show");
+		preview.frame(sender, jpeg, 9 / 16);
+		expect(resize).toHaveBeenLastCalledWith(overlay, 224, 9 / 16);
+
+		preview.setSquare(true);
+		expect(resize).toHaveBeenLastCalledWith(overlay, 224, 1);
+		// A new camera shape is remembered, but the window stays square.
+		const calls = resize.mock.calls.length;
+		preview.frame(sender, jpeg, 16 / 9);
+		expect(resize).toHaveBeenCalledTimes(calls);
+		preview.resize(overlaySender, 320);
+		expect(resize).toHaveBeenLastCalledWith(overlay, 320, 1);
+
+		preview.setSquare(false);
+		expect(resize).toHaveBeenLastCalledWith(overlay, 320, 16 / 9);
+	});
+
 	it("recreates an unexpectedly closed preview and waits for the replacement to be ready", () => {
 		const { preview, sender, overlay, create, owner } = setup();
 		const replacement = setup().overlay;

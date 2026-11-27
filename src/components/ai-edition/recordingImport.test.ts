@@ -3,9 +3,11 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { CursorTelemetryPoint } from "@/components/video-editor/types";
 import { replaceTimeline as replaceTimelineOp } from "@/lib/ai-edition/document/timeline";
 import { type AxcutDocument, createEmptyDocument } from "@/lib/ai-edition/schema";
+import { getEditorSettings } from "@/lib/ai-edition/store/editorSettings";
 import { useProjectStore } from "@/lib/ai-edition/store/projectStore";
 import { undo } from "@/lib/ai-edition/store/undo";
 import { clearHistory, past } from "@/lib/ai-edition/store/undoStack";
+import { DEFAULT_WEBCAM_ROUNDNESS } from "@/lib/projectDefaults";
 import {
 	applyPendingFreshRecordingAutoZooms,
 	consumeFreshRecordingAutoZoomPending,
@@ -163,8 +165,12 @@ describe("importPendingRecording", () => {
 		stubElectronApi("/recordings/recording-1.webm");
 		addAsset.mockImplementationOnce(async () => {
 			useProjectStore.setState({
-				// biome-ignore lint/suspicious/noExplicitAny: only the two fields the seed reads
-				document: { assets: [{ id: "a1" }], timeline: { clips: [] } } as any,
+				document: {
+					project: { id: "proj_stub" },
+					assets: [{ id: "a1" }],
+					timeline: { clips: [] },
+					// biome-ignore lint/suspicious/noExplicitAny: only the fields the seed reads
+				} as any,
 			});
 			return null;
 		});
@@ -176,6 +182,152 @@ describe("importPendingRecording", () => {
 			"Auto-imported recording",
 			{ history: false },
 		);
+	});
+
+	describe("camera roundness from Device settings", () => {
+		const saveDocument = vi.fn(async (): Promise<boolean> => true);
+		beforeEach(() => {
+			// The real `createProject` installs the new document; the import reads it from there.
+			createProject.mockImplementationOnce(async (title: string) => {
+				const created = createEmptyDocument({ projectId: "proj_stub", title });
+				useProjectStore.setState({ document: created });
+				return created;
+			});
+			useProjectStore.setState({ saveDocument });
+		});
+
+		it("starts a fresh take's webcam square, at the roundness picked in the HUD", async () => {
+			stubElectronApi("/recordings/recording-1.mp4");
+			stubRecordingPrefs({ camShape: "square", camRoundness: 0.25 });
+
+			await importPendingRecording();
+
+			expect(saveDocument).toHaveBeenCalledOnce();
+			const [saved, options] = saveDocument.mock.calls[0] as unknown as [
+				AxcutDocument,
+				{ history: boolean },
+			];
+			expect(getEditorSettings(saved)).toMatchObject({
+				webcamMaskShape: "square",
+				webcamRoundness: 0.25,
+			});
+			// Set up by the editor, not an edit: the first Ctrl+Z must not undo it.
+			expect(options).toEqual({ history: false });
+		});
+
+		it("uses the editor's square rounding when Square was picked but not rounded", async () => {
+			stubElectronApi("/recordings/recording-1.mp4");
+			stubRecordingPrefs({ camShape: "square", camRoundness: null });
+
+			await importPendingRecording();
+
+			const [saved] = saveDocument.mock.calls[0] as unknown as [AxcutDocument];
+			expect(getEditorSettings(saved).webcamRoundness).toBe(DEFAULT_WEBCAM_ROUNDNESS.square);
+		});
+
+		// A roundness left from an earlier Square pick belongs to the Square preview only.
+		it("leaves the project's look alone under Default, whatever roundness is stored", async () => {
+			stubElectronApi("/recordings/recording-1.mp4");
+			stubRecordingPrefs({ camShape: null, camRoundness: 0.25 });
+
+			await importPendingRecording();
+
+			expect(saveDocument).not.toHaveBeenCalled();
+		});
+
+		it("writes nothing onto a project opened while the import was under way", async () => {
+			stubElectronApi("/recordings/recording-1.mp4");
+			stubRecordingPrefs({ camShape: "square", camRoundness: 0.25 });
+			createProject.mockReset();
+			createProject.mockImplementationOnce(async (title: string) => {
+				const created = createEmptyDocument({ projectId: "proj_stub", title });
+				// Another project took the editor before the import could write.
+				useProjectStore.setState({
+					document: createEmptyDocument({ projectId: "proj_other", title: "Other" }),
+				});
+				return created;
+			});
+
+			await importPendingRecording();
+
+			expect(saveDocument).not.toHaveBeenCalled();
+		});
+
+		// The camera save waits; a project opened during it must not be where the recording goes.
+		it("adds the recording before the camera save, so a switch during it cannot take it", async () => {
+			stubElectronApi("/recordings/recording-1.mp4");
+			stubRecordingPrefs({ camShape: "square", camRoundness: 0.25 });
+			saveDocument.mockImplementationOnce(async () => {
+				useProjectStore.setState({
+					document: createEmptyDocument({ projectId: "proj_other", title: "Other" }),
+				});
+				return true;
+			});
+
+			await expect(importPendingRecording()).resolves.toBe(true);
+
+			expect(addAsset).toHaveBeenCalledOnce();
+			expect(saveDocument).toHaveBeenCalledOnce();
+			expect(addAsset.mock.invocationCallOrder[0]).toBeLessThan(
+				saveDocument.mock.invocationCallOrder[0],
+			);
+			const [saved] = saveDocument.mock.calls[0] as unknown as [AxcutDocument];
+			expect(saved.project.id).toBe("proj_stub");
+		});
+
+		it("sets up nothing on a project with a recording and no clips opened during the save", async () => {
+			const api = stubElectronApi("/recordings/recording-1.mp4");
+			stubRecordingPrefs({ camShape: "square", camRoundness: 0.25 });
+			const other = createEmptyDocument({ projectId: "proj_other", title: "Other" });
+			saveDocument.mockImplementationOnce(async () => {
+				useProjectStore.setState({
+					document: {
+						...other,
+						assets: [
+							{
+								id: "asset_b",
+								kind: "video",
+								label: "b.mp4",
+								originalPath: "/recordings/b.mp4",
+								cameraTrack: null,
+							},
+						],
+					},
+				});
+				return true;
+			});
+
+			await expect(importPendingRecording()).resolves.toBe(true);
+
+			// B is left as it was: no placeholder clip seeded into it.
+			expect(replaceTimeline).not.toHaveBeenCalled();
+			// The recording is already in its own project, so the hand-off is still consumed.
+			expect(api.setCurrentRecordingSession).toHaveBeenCalledWith(null);
+		});
+
+		// Leaving the session pending would import the take into a second project next time.
+		it("still imports the recording when the camera look cannot be saved", async () => {
+			const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+			const api = stubElectronApi("/recordings/recording-1.mp4");
+			stubRecordingPrefs({ camShape: "square", camRoundness: 0.25 });
+			saveDocument.mockResolvedValueOnce(false);
+
+			await expect(importPendingRecording()).resolves.toBe(true);
+
+			expect(addAsset).toHaveBeenCalledWith("/recordings/recording-1.mp4", "recording-1.mp4");
+			expect(api.setCurrentRecordingSession).toHaveBeenCalledWith(null);
+			expect(warn).toHaveBeenCalledWith("The recording bar's Custom camera could not be applied.");
+			warn.mockRestore();
+		});
+
+		it("keeps the project's own look when the preference cannot be read", async () => {
+			stubElectronApi("/recordings/recording-1.mp4");
+			stubRecordingPrefsBridge(vi.fn(async () => Promise.reject(new Error("bridge down"))));
+
+			await expect(importPendingRecording()).resolves.toBe(true);
+
+			expect(saveDocument).not.toHaveBeenCalled();
+		});
 	});
 });
 

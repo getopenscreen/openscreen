@@ -1,12 +1,16 @@
 import { Check, X } from "lucide-react";
-import { memo, useEffect, useRef } from "react";
+import { type CSSProperties, memo, useEffect, useRef } from "react";
 import { useAudioLevelMeter } from "../../hooks/useAudioLevelMeter";
 import type { CameraDevice } from "../../hooks/useCameraDevices";
+import type { CameraPreviewShape } from "../../hooks/useCameraLook";
 import { useCameraPreviewStream } from "../../hooks/useCameraPreviewStream";
 import type { MicrophoneDevice } from "../../hooks/useMicrophoneDevices";
 import { WEBCAM_QUALITY_IDS, type WebcamQualityId } from "../../hooks/webcamCaptureTarget";
 import { Tooltip } from "../ui/tooltip";
 import styles from "./LaunchWindow.module.css";
+
+/** Default first: the whole frame is what the preview is for, checking framing (#1288). */
+const CAMERA_SHAPES: readonly CameraPreviewShape[] = ["default", "square"];
 
 const LEVEL_SEGMENTS = 12;
 const LEVEL_SEGMENT_KEYS = Array.from({ length: LEVEL_SEGMENTS }, (_, i) => `segment-${i}`);
@@ -29,6 +33,9 @@ export interface HudDeviceSettingsLabels {
 	checkingForUpdates: string;
 	cameraQuality: string;
 	cameraQualityOptions: Record<WebcamQualityId, string>;
+	cameraShape: string;
+	cameraShapeOptions: Record<CameraPreviewShape, string>;
+	cameraRoundness: string;
 }
 
 /** Segmented input-level bar, driven by the live analyser. */
@@ -102,6 +109,10 @@ export const HudDeviceSettings = memo(function HudDeviceSettings({
 	checkingForUpdates,
 	cameraQuality,
 	onSelectCameraQuality,
+	cameraShape,
+	onSelectCameraShape,
+	cameraRoundness,
+	onChangeCameraRoundness,
 	onSelectMic,
 	onSelectCamera,
 	onCheckForUpdates,
@@ -124,6 +135,12 @@ export const HudDeviceSettings = memo(function HudDeviceSettings({
 	checkingForUpdates: boolean;
 	cameraQuality: WebcamQualityId;
 	onSelectCameraQuality: (quality: WebcamQualityId) => void;
+	/** Default shows the camera's whole frame; Custom crops it square, rounded, and a fresh take with it. */
+	cameraShape: CameraPreviewShape;
+	onSelectCameraShape: (shape: CameraPreviewShape) => void;
+	/** The Custom (square) preview's rounding, 0 square to 1 round. Offered only once Custom is picked. */
+	cameraRoundness: number;
+	onChangeCameraRoundness: (roundness: number) => void;
 	onSelectMic: (device: MicrophoneDevice) => void;
 	onSelectCamera: (device: CameraDevice) => void;
 	onCheckForUpdates: () => void;
@@ -137,6 +154,7 @@ export const HudDeviceSettings = memo(function HudDeviceSettings({
 		enabled: showMicrophone && micDevices.length > 0,
 		deviceId: activeMicId && activeMicId !== "default" ? activeMicId : undefined,
 	});
+	const roundnessPercent = Math.round(cameraRoundness * 100);
 	const { stream, error: previewError } = useCameraPreviewStream({
 		enabled: hasCamera,
 		deviceId: activeCameraId,
@@ -248,6 +266,50 @@ export const HudDeviceSettings = memo(function HudDeviceSettings({
 							</button>
 						);
 					})}
+					<div className={styles.hudModalMeterRow}>
+						<span className={styles.hudModalMeterLabel}>{labels.cameraShape}</span>
+					</div>
+					{CAMERA_SHAPES.map((shape) => {
+						const isActive = shape === cameraShape;
+						return (
+							<button
+								key={shape}
+								type="button"
+								role="menuitemradio"
+								aria-checked={isActive}
+								data-testid={`camera-shape-${shape}`}
+								onClick={() => onSelectCameraShape(shape)}
+								className={`${styles.languageMenuItem} ${isActive ? styles.languageMenuItemActive : ""}`}
+							>
+								<span className="truncate">{labels.cameraShapeOptions[shape]}</span>
+								{isActive ? <Check size={11} className="text-white/85" /> : null}
+							</button>
+						);
+					})}
+					{cameraShape === "square" ? (
+						<div className={styles.hudSlider}>
+							<div className={styles.hudSliderHead}>
+								<label htmlFor="hud-camera-roundness" className={styles.hudModalMeterLabel}>
+									{labels.cameraRoundness}
+								</label>
+								<span className={styles.hudSliderValue}>{roundnessPercent}%</span>
+							</div>
+							{/* Drawn like the editor's sliders (SliderCell): a pill track filled up to the
+							    value, and a white knob. */}
+							<input
+								id="hud-camera-roundness"
+								type="range"
+								min={0}
+								max={100}
+								step={5}
+								value={roundnessPercent}
+								data-testid="camera-roundness"
+								style={{ "--slider-pct": `${roundnessPercent}%` } as CSSProperties}
+								onChange={(event) => onChangeCameraRoundness(Number(event.target.value) / 100)}
+								className={styles.hudSliderInput}
+							/>
+						</div>
+					) : null}
 					<div className={styles.hudModalMeterRow}>
 						<span className={styles.hudModalMeterLabel}>{labels.preview}</span>
 					</div>

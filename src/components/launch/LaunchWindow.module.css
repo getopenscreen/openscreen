@@ -205,6 +205,78 @@
 	white-space: nowrap;
 }
 
+.hudSlider {
+	display: grid;
+	gap: 8px;
+	padding: 8px 10px 4px;
+}
+
+.hudSliderHead {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+}
+
+.hudSliderValue {
+	font-size: 12px;
+	font-variant-numeric: tabular-nums;
+	color: rgba(255, 255, 255, 0.85);
+}
+
+/* The editor's slider look (SliderCell in NewEditorShell.module.css), in the HUD's palette. */
+.hudSliderInput {
+	width: 100%;
+	height: 6px;
+	margin: 0;
+	border-radius: 999px;
+	background: linear-gradient(
+		to right,
+		#10b981 0%,
+		#10b981 var(--slider-pct, 0%),
+		rgba(255, 255, 255, 0.14) var(--slider-pct, 0%),
+		rgba(255, 255, 255, 0.14) 100%
+	);
+	outline: none;
+	-webkit-appearance: none;
+	appearance: none;
+	cursor: pointer;
+}
+
+.hudSliderInput::-webkit-slider-thumb {
+	-webkit-appearance: none;
+	width: 16px;
+	height: 16px;
+	border-radius: 50%;
+	background: #fff;
+	box-shadow: 0 1px 3px rgb(0 0 0 / 0.45);
+	cursor: pointer;
+	transition: transform 120ms ease;
+}
+
+.hudSliderInput::-moz-range-thumb {
+	width: 16px;
+	height: 16px;
+	border: 0;
+	border-radius: 50%;
+	background: #fff;
+	box-shadow: 0 1px 3px rgb(0 0 0 / 0.45);
+	cursor: pointer;
+}
+
+.hudSliderInput:hover::-webkit-slider-thumb,
+.hudSliderInput:active::-webkit-slider-thumb {
+	transform: scale(1.12);
+}
+
+/* `outline: none` above takes the native ring, so keyboard focus lands on the knob. */
+.hudSliderInput:focus-visible::-webkit-slider-thumb {
+	box-shadow: 0 1px 3px rgb(0 0 0 / 0.45), 0 0 0 4px rgba(16, 185, 129, 0.35);
+}
+
+.hudSliderInput:focus-visible::-moz-range-thumb {
+	box-shadow: 0 1px 3px rgb(0 0 0 / 0.45), 0 0 0 4px rgba(16, 185, 129, 0.35);
+}
+
 .hudModalHint {
 	padding: 0 10px 6px;
 	font-size: 12px;

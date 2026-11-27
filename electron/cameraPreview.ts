@@ -16,6 +16,8 @@ export class CameraPreviewController {
 	private captureGeneration = 0;
 	private width: number = CAMERA_PREVIEW_DEFAULT_SIZE;
 	private aspectRatio = CAMERA_PREVIEW_DEFAULT_ASPECT_RATIO;
+	/** Device settings' Square: the window is square, whatever shape the camera delivers. */
+	private square = false;
 	private ready = false;
 	private onOwnerDestroyed: (() => void) | null = null;
 	private parked = false;
@@ -39,6 +41,20 @@ export class CameraPreviewController {
 		private readonly windowOf: (owner: WebContents) => BrowserWindow | null = () => null,
 	) {}
 
+	/** The shape the window takes: square when asked for, else the camera's own frame. */
+	private shownAspectRatio(): number {
+		return this.square ? 1 : this.aspectRatio;
+	}
+
+	/** Follows the recording preference `camShape`; applies to the window there is and the next. */
+	setSquare(square: boolean): void {
+		if (this.square === square) return;
+		this.square = square;
+		if (this.window && this.ready && !this.parked) {
+			this.resizeWindow(this.window, this.width, this.shownAspectRatio());
+		}
+	}
+
 	private shouldShow(): boolean {
 		return this.visible && this.captureAllowed && this.ownerShown;
 	}
@@ -55,7 +71,7 @@ export class CameraPreviewController {
 	private reveal(window: BrowserWindow): void {
 		if (this.parked) {
 			this.parked = false;
-			this.resizeWindow(window, this.width, this.aspectRatio);
+			this.resizeWindow(window, this.width, this.shownAspectRatio());
 		}
 		window.showInactive();
 	}
@@ -110,7 +126,7 @@ export class CameraPreviewController {
 			this.window.once("ready-to-show", () => {
 				if (this.window !== previewWindow) return;
 				this.ready = true;
-				this.resizeWindow(previewWindow, this.width, this.aspectRatio);
+				this.resizeWindow(previewWindow, this.width, this.shownAspectRatio());
 				if (this.shouldShow()) this.reveal(previewWindow);
 			});
 		}
@@ -174,7 +190,7 @@ export class CameraPreviewController {
 			return;
 		this.width = width;
 		// A parked preview takes its new width when it comes back (reveal).
-		if (!this.parked) this.resizeWindow(this.window, this.width, this.aspectRatio);
+		if (!this.parked) this.resizeWindow(this.window, this.width, this.shownAspectRatio());
 	}
 
 	frame(sender: WebContents, jpeg: unknown, aspectRatio?: unknown): void {
@@ -196,7 +212,7 @@ export class CameraPreviewController {
 				return;
 			if (this.aspectRatio !== aspectRatio) {
 				this.aspectRatio = aspectRatio;
-				this.resizeWindow(this.window, this.width, aspectRatio);
+				if (!this.square) this.resizeWindow(this.window, this.width, aspectRatio);
 			}
 		}
 		this.window.webContents.send("camera-preview:frame", jpeg);

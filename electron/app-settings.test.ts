@@ -155,6 +155,41 @@ describe("app settings store", () => {
 		expect(store.getSnapshot().recording.camQuality).toBe("1440p");
 	});
 
+	it("leaves the camera shape and roundness unset until they are picked", () => {
+		const store = new AppSettingsStore(temp());
+		expect(store.getSnapshot().recording).toMatchObject({ camShape: null, camRoundness: null });
+	});
+
+	it("stores a camera shape and a roundness from 0 to 1, and rejects anything else", () => {
+		const store = new AppSettingsStore(temp());
+
+		expect(store.setRecordingPreferences({ camShape: "square" }).recording.camShape).toBe("square");
+		expect(store.setRecordingPreferences({ camRoundness: 0.25 }).recording.camRoundness).toBe(0.25);
+		for (const bad of ["circle", "rectangle"]) {
+			expect(() => store.setRecordingPreferences({ camShape: bad as never })).toThrow(TypeError);
+		}
+		for (const bad of [-0.1, 1.5, Number.NaN, "0.5"]) {
+			expect(() => store.setRecordingPreferences({ camRoundness: bad as number })).toThrow(
+				TypeError,
+			);
+		}
+		expect(store.getSnapshot().recording).toMatchObject({ camShape: "square", camRoundness: 0.25 });
+	});
+
+	it("reads an unknown camera shape or out-of-range roundness on disk as unset", () => {
+		const dir = temp();
+		writeFileSync(
+			path.join(dir, "recording-settings.json"),
+			JSON.stringify({ camShape: "circle", camRoundness: 4 }),
+			"utf8",
+		);
+
+		expect(new AppSettingsStore(dir).getSnapshot().recording).toMatchObject({
+			camShape: null,
+			camRoundness: null,
+		});
+	});
+
 	it("reads a settings file written before the camera had a quality", () => {
 		const dir = temp();
 		writeFileSync(

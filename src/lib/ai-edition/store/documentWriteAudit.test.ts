@@ -131,6 +131,10 @@ const DECLARED: WritePath[] = [
 	// It sits in `runLoadedMetadataWrite` rather than the handler because the handler
 	// only puts it on the write queue — the write itself, and its deadline, are there.
 	w("src/components/ai-edition/NewEditorShell.tsx", "runLoadedMetadataWrite", "save", "automatic"),
+	// The recording bar's Custom camera (square, at its roundness) applied to the project the
+	// import just created. Set up for the user, not by them, so their first Ctrl+Z must not
+	// undo it: `history: false`, like the timeline seed beside it.
+	w("src/components/ai-edition/recordingImport.ts", "importPendingRecording", "save", "automatic"),
 	// Auto-zoom regions suggested for a freshly imported recording. `history: true`
 	// on purpose: unlike the probed duration above, this is a suggestion the user is
 	// meant to be able to undo.

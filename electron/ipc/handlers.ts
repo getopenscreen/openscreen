@@ -821,6 +821,18 @@ function isTrustedProjectPath(filePath?: string | null) {
 const CURSOR_SAMPLE_INTERVAL_MS = 33;
 const MAX_CURSOR_SAMPLES = 60 * 60 * 30; // 1 hour @ 30Hz
 
+/**
+ * Direct IPC/MCP callers can send a negative linear gain. macOS clamps it, but
+ * the Linux and Windows helpers do not: a negative scalar flips the phase of
+ * the captured audio. Clamp to non-negative at the boundary, defaulting an
+ * absent value to unity. NaN/Infinity are treated as unity too so a bad caller
+ * cannot poison the helper config.
+ */
+function safeGainScalar(gain: number | null | undefined, fallback = 1): number {
+	if (gain === null || gain === undefined || !Number.isFinite(gain)) return fallback;
+	return Math.max(0, gain);
+}
+
 let cursorRecordingSession: CursorRecordingSession | null = null;
 let pendingCursorRecordingData: CursorRecordingData | null = null;
 let nativeWindowsCaptureProcess: ChildProcessWithoutNullStreams | null = null;
@@ -1029,10 +1041,13 @@ function captureSettingsOf(request: NativeLinuxRecordingRequest): string {
 		fps: request.video?.fps ?? null,
 		bitrate: request.video?.bitrate ?? null,
 		system: request.audio?.system?.enabled ?? false,
-		systemGain: request.audio?.system?.gain ?? 1,
+		systemGain: safeGainScalar(request.audio?.system?.gain, 1),
 		microphone: request.audio?.microphone?.enabled ?? false,
 		deviceName: request.audio?.microphone?.deviceName ?? null,
-		gain: request.audio?.microphone?.gain ?? null,
+		gain:
+			typeof request.audio?.microphone?.gain === "number"
+				? safeGainScalar(request.audio.microphone.gain)
+				: null,
 		cursor: normalizeCursorCaptureMode(request?.cursor?.mode) ?? "editable-overlay",
 	});
 }
@@ -2821,13 +2836,16 @@ export function registerIpcHandlers(
 					fps: request.video.fps,
 					...(request.video.bitrate ? { bitrate: request.video.bitrate } : {}),
 					audio: {
-						system: { enabled: request.audio.system.enabled, gain: request.audio.system.gain ?? 1 },
+						system: {
+							enabled: request.audio.system.enabled,
+							gain: safeGainScalar(request.audio.system.gain, 1),
+						},
 						microphone: {
 							enabled: request.audio.microphone.enabled,
 							...(request.audio.microphone.deviceName
 								? { deviceName: request.audio.microphone.deviceName }
 								: {}),
-							gain: request.audio.microphone.gain,
+							gain: safeGainScalar(request.audio.microphone.gain),
 						},
 					},
 					maxCursorSamples: MAX_CURSOR_SAMPLES,
@@ -2927,14 +2945,14 @@ export function registerIpcHandlers(
 						audio: {
 							system: {
 								enabled: request.audio.system.enabled,
-								gain: request.audio.system.gain ?? 1,
+								gain: safeGainScalar(request.audio.system.gain, 1),
 							},
 							microphone: {
 								enabled: request.audio.microphone.enabled,
 								...(request.audio.microphone.deviceName
 									? { deviceName: request.audio.microphone.deviceName }
 									: {}),
-								gain: request.audio.microphone.gain,
+								gain: safeGainScalar(request.audio.microphone.gain),
 							},
 						},
 						maxCursorSamples: MAX_CURSOR_SAMPLES,
@@ -3218,8 +3236,8 @@ export function registerIpcHandlers(
 					captureMic: request.audio.microphone.enabled,
 					microphoneDeviceId: request.audio.microphone.deviceId ?? null,
 					microphoneDeviceName: request.audio.microphone.deviceName ?? null,
-					microphoneGain: request.audio.microphone.gain,
-					systemGain: request.audio.system.gain ?? 1,
+					microphoneGain: safeGainScalar(request.audio.microphone.gain),
+					systemGain: safeGainScalar(request.audio.system.gain, 1),
 					webcamEnabled: request.webcam.enabled,
 					webcamDeviceId: request.webcam.deviceId ?? null,
 					webcamDeviceName: request.webcam.deviceName ?? null,

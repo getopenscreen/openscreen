@@ -77,6 +77,7 @@ Current V2 JSON shape:
   "microphoneDeviceId": "default",
   "microphoneDeviceName": "Microphone (NVIDIA Broadcast)",
   "microphoneGain": 1.4,
+  "systemGain": 1.0,
   "webcamEnabled": true,
   "webcamDeviceId": "default",
   "webcamDeviceName": "Camera (NVIDIA Broadcast)",

@@ -633,6 +633,8 @@ export class CompositorViewService {
 	async checkShaderEffect(
 		code: string,
 		params: ReadonlyArray<{ name: string; type: string }>,
+		/** The effect carries an image, so its code may call `image()`. */
+		image = false,
 	): Promise<ShaderEffectCheck | null> {
 		const addon = this.ensureAddon();
 		if (!addon || typeof addon.checkShaderEffect !== "function") return null;
@@ -642,6 +644,7 @@ export class CompositorViewService {
 			return await addon.checkShaderEffect(
 				code,
 				JSON.stringify(params.map(({ name, type }) => ({ name, type }))),
+				image,
 			);
 		} catch (err) {
 			// A native throw is the addon failing, not the effect: "not checked", as documented.

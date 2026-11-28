@@ -1433,16 +1433,17 @@ function ShaderEffectPane({
 	// Asked of this machine's compositor: a region whose code does not compile here draws
 	// nothing, and only the compiler's error says why.
 	const [error, setError] = useState<string | null>(null);
+	const hasImage = effect.image !== undefined;
 	useEffect(() => {
 		let current = true;
 		setError(null);
-		void checkShaderEffectCode(effect.code, effect.params).then((check) => {
+		void checkShaderEffectCode(effect.code, effect.params, hasImage).then((check) => {
 			if (current) setError(check?.error ?? null);
 		});
 		return () => {
 			current = false;
 		};
-	}, [effect.code, effect.params]);
+	}, [effect.code, effect.params, hasImage]);
 	// One live write per frame while a slider or a colour moves, one save on release.
 	const liveRef = useRef(tl.updateShaderEffectLive);
 	liveRef.current = tl.updateShaderEffectLive;
@@ -1470,82 +1471,85 @@ function ShaderEffectPane({
 						<pre style={EFFECT_CODE_STYLE}>{error}</pre>
 					</div>
 				) : null}
-				{effect.params.map((param) => {
-					if (param.type === "number") {
+				{/* An animated parameter follows its keyframes: a control there would move nothing. */}
+				{effect.params
+					.filter((param) => !region.animate?.[param.name])
+					.map((param) => {
+						if (param.type === "number") {
+							return (
+								<SliderCell
+									key={param.name}
+									label={param.label}
+									value={paramValue(param) as number}
+									min={param.min}
+									max={param.max}
+									step={(param.max - param.min) / 100}
+									decimals={2}
+									defaultValue={param.default}
+									onChange={(next) => setLive(param.name, next)}
+									onCommit={commit}
+								/>
+							);
+						}
+						if (param.type === "toggle") {
+							return (
+								<div key={param.name}>
+									{paneRow(
+										param.label,
+										<Toggle
+											checked={paramValue(param) as boolean}
+											ariaLabel={param.label}
+											onChange={(next) =>
+												void tl.updateShaderEffect(region.id, { values: { [param.name]: next } })
+											}
+										/>,
+									)}
+								</div>
+							);
+						}
+						if (param.type === "color") {
+							return (
+								<div key={param.name}>
+									{paneRow(
+										param.label,
+										<ColorField
+											label={param.label}
+											value={paramValue(param) as string}
+											onChange={(next) => setLive(param.name, next)}
+											onCommit={commit}
+										/>,
+									)}
+								</div>
+							);
+						}
+						const point = paramValue(param) as { x: number; y: number };
 						return (
-							<SliderCell
-								key={param.name}
-								label={param.label}
-								value={paramValue(param) as number}
-								min={param.min}
-								max={param.max}
-								step={(param.max - param.min) / 100}
-								decimals={2}
-								defaultValue={param.default}
-								onChange={(next) => setLive(param.name, next)}
-								onCommit={commit}
-							/>
-						);
-					}
-					if (param.type === "toggle") {
-						return (
-							<div key={param.name}>
-								{paneRow(
-									param.label,
-									<Toggle
-										checked={paramValue(param) as boolean}
-										ariaLabel={param.label}
-										onChange={(next) =>
-											void tl.updateShaderEffect(region.id, { values: { [param.name]: next } })
-										}
-									/>,
-								)}
+							<div key={param.name} style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+								<SliderCell
+									label={`${param.label} · x`}
+									value={point.x}
+									min={0}
+									max={1}
+									step={0.01}
+									decimals={2}
+									defaultValue={param.default.x}
+									onChange={(x) => setLive(param.name, { ...point, x })}
+									onCommit={commit}
+								/>
+								<SliderCell
+									label={`${param.label} · y`}
+									value={point.y}
+									min={0}
+									max={1}
+									step={0.01}
+									decimals={2}
+									defaultValue={param.default.y}
+									onChange={(y) => setLive(param.name, { ...point, y })}
+									onCommit={commit}
+								/>
 							</div>
 						);
-					}
-					if (param.type === "color") {
-						return (
-							<div key={param.name}>
-								{paneRow(
-									param.label,
-									<ColorField
-										label={param.label}
-										value={paramValue(param) as string}
-										onChange={(next) => setLive(param.name, next)}
-										onCommit={commit}
-									/>,
-								)}
-							</div>
-						);
-					}
-					const point = paramValue(param) as { x: number; y: number };
-					return (
-						<div key={param.name} style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-							<SliderCell
-								label={`${param.label} · x`}
-								value={point.x}
-								min={0}
-								max={1}
-								step={0.01}
-								decimals={2}
-								defaultValue={param.default.x}
-								onChange={(x) => setLive(param.name, { ...point, x })}
-								onCommit={commit}
-							/>
-							<SliderCell
-								label={`${param.label} · y`}
-								value={point.y}
-								min={0}
-								max={1}
-								step={0.01}
-								decimals={2}
-								defaultValue={param.default.y}
-								onChange={(y) => setLive(param.name, { ...point, y })}
-								onCommit={commit}
-							/>
-						</div>
-					);
-				})}
+					})}
 				<ChoiceRow
 					label={te("inspector.effectTarget")}
 					options={[

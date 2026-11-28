@@ -327,7 +327,7 @@ const ZOOM_TRANSITION_BASE_S: f32 = 0.6;
 const ZOOM_TRANSITION_PER_LN_S: f32 = 0.55;
 // ω·T du ressort de `ease_spring` : assez haut pour que la fin de fenêtre soit à l'arrêt (1,5 %
 // du pic), assez bas pour ne pas figer la seconde moitié.
-const SPRING_OMEGA_T: f32 = 7.0;
+pub(crate) const SPRING_OMEGA_T: f32 = 7.0;
 // port de `CHAINED_ZOOM_PAN_GAP_MS` / `CONNECTED_ZOOM_PAN_DURATION_MS` (TS).
 const CHAINED_ZOOM_PAN_GAP_S: f32 = 1.5;
 const CONNECTED_ZOOM_PAN_DURATION_S: f32 = 1.0;
@@ -347,7 +347,7 @@ fn sample_cubic_bezier_derivative(a1: f32, a2: f32, t: f32) -> f32 {
 }
 
 /// Port direct de `cubicBezier` (TS) : Newton-Raphson puis bissection de repli.
-fn cubic_bezier(x1: f32, y1: f32, x2: f32, y2: f32, t: f32) -> f32 {
+pub(crate) fn cubic_bezier(x1: f32, y1: f32, x2: f32, y2: f32, t: f32) -> f32 {
     let target_x = clamp01(t);
     let mut solved_t = target_x;
     for _ in 0..8 {
@@ -395,7 +395,7 @@ fn scale_lerp(a: f32, b: f32, t: f32) -> f32 {
 /// Montée d'un ressort critique (sans rebond), ramenée pile sur [0, 1] à la fin de la fenêtre :
 /// vitesse nulle au départ, donc pas d'à-coup, et arrivée amortie. L'ancienne courbe du zoom
 /// (cubic-bezier(0.16, 1, 0.3, 1)) partait à pleine vitesse dès la première frame.
-fn ease_spring(t: f32) -> f32 {
+pub(crate) fn ease_spring(t: f32) -> f32 {
     let x = SPRING_OMEGA_T * clamp01(t);
     let end = 1.0 - (1.0 + SPRING_OMEGA_T) * (-SPRING_OMEGA_T).exp();
     (1.0 - (1.0 + x) * (-x).exp()) / end

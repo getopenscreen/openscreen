@@ -9,6 +9,7 @@
 import { STT_MEDIA_UNREADABLE } from "../../../../electron/stt/transcriptionContract";
 import type { AxcutDocument, AxcutTranscript } from "../schema";
 import { voiceoverPlacements } from "../timeline/aggregated-transcript";
+import { isStillAsset } from "../timeline/clip-parts";
 
 /** Why a transcription run could not produce anything. */
 export type TranscriptionFailureKind = "no-audio" | "unsupported-audio" | "error";
@@ -421,7 +422,8 @@ export function resolveTranscriptGate(views: AssetTranscriptionView[]): Transcri
  */
 export function assetCanCarrySpeech(document: AxcutDocument, assetId: string): boolean {
 	const asset = document.assets.find((a) => a.id === assetId);
-	if (!asset) return false;
+	// A still image has no sound at all.
+	if (!asset || isStillAsset(asset)) return false;
 	if (asset.kind !== "audio") return true;
 	return document.audioTracks.some(
 		(track) => track.assetId === assetId && track.kind === "voiceover",
@@ -430,6 +432,8 @@ export function assetCanCarrySpeech(document: AxcutDocument, assetId: string): b
 
 export function transcriptRelevantAssetIds(document: AxcutDocument | null): string[] {
 	if (!document) return [];
+	// A still has no sound: it never waits for, nor asks for, a transcript.
+	const stills = new Set(document.assets.filter(isStillAsset).map((a) => a.id));
 	// The UNION of both lanes. "Can this project be transcribed" is not a per-lane
 	// question — a voiceover-only project has speech to transcribe with no clip carrying
 	// it, and narrowing this to the selected lane would report "no transcript" on a
@@ -442,6 +446,9 @@ export function transcriptRelevantAssetIds(document: AxcutDocument | null): stri
 		if (!onTimeline.includes(placement.assetId)) onTimeline.push(placement.assetId);
 	}
 	const known = new Set(document.assets.map((a) => a.id));
-	const filtered = onTimeline.filter((id) => known.has(id));
-	return filtered.length > 0 ? filtered : document.assets.map((a) => a.id);
+	const placed = onTimeline.filter((id) => known.has(id));
+	// Stills on the timeline and nothing else: nothing to transcribe. An unused video in the bin
+	// is not what plays, so it is no fallback here.
+	if (placed.length > 0) return placed.filter((id) => !stills.has(id));
+	return document.assets.filter((a) => !stills.has(a.id)).map((a) => a.id);
 }

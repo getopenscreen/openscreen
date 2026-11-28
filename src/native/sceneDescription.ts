@@ -41,7 +41,11 @@ import {
 	resolvePlaybackSegments,
 } from "@/lib/ai-edition/document/timeline";
 import type { AxcutAudioTrack, AxcutClip, AxcutDocument } from "@/lib/ai-edition/schema";
-import { nativeShaderEffectValue } from "@/lib/ai-edition/shaderEffects";
+import {
+	type NativeShaderKeyframe,
+	nativeShaderEffectTrack,
+	nativeShaderEffectValue,
+} from "@/lib/ai-edition/shaderEffects";
 import { getEditorSettings } from "@/lib/ai-edition/store/editorSettings";
 import { assetCameraSource } from "@/lib/ai-edition/timeline/camera";
 import { resolveClipSourceEndSec } from "@/lib/ai-edition/timeline/clipDuration";
@@ -143,6 +147,10 @@ export interface SceneShaderEffect {
 	params: Array<{ name: string; type: "number" | "toggle" | "color" | "point" }>;
 	/** Every declared parameter, defaults filled in: one float, or 2 (point) or 4 (color). */
 	values: Record<string, number | number[]>;
+	/** Animated parameters: their keyframes, which replace `values` for them. Omitted when none. */
+	animate?: Record<string, NativeShaderKeyframe[]>;
+	/** The file of the image the code reads with `image()`. Omitted when the effect has none. */
+	image?: string;
 }
 
 /** A "Full Camera" timeline region (from `legacyEditor.cameraFullscreenRegions`). Times in seconds. */
@@ -1219,6 +1227,16 @@ export function buildSceneDescription(
 	const sceneShaderEffects: SceneShaderEffect[] = projectedShaderEffects.flatMap((region) => {
 		const effect = effectsById.get(region.effectId);
 		if (!effect) return [];
+		const animate = Object.fromEntries(
+			effect.params.flatMap((param) => {
+				// A list, not whatever the key reads: a parameter named like an Object member
+				// (`constructor`) would otherwise read the prototype's.
+				const track = region.animate?.[param.name];
+				return Array.isArray(track) && track.length > 0
+					? [[param.name, nativeShaderEffectTrack(param, track)]]
+					: [];
+			}),
+		);
 		return [
 			{
 				startSec: region.startMs / 1000,
@@ -1236,6 +1254,10 @@ export function buildSceneDescription(
 						nativeShaderEffectValue(param, region.values[param.name]),
 					]),
 				),
+				// Left out when empty: a project without animation sends today's scene byte for byte.
+				...(Object.keys(animate).length > 0 ? { animate } : {}),
+				// The same for an effect with no image, which is most of them.
+				...(effect.image ? { image: effect.image.path } : {}),
 			},
 		];
 	});

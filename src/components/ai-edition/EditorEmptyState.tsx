@@ -58,6 +58,8 @@ export function EditorEmptyState({
 
 	const handleImportVideo = useCallback(async () => {
 		const result = await window.electronAPI?.openVideoFilePicker?.();
+		// An image that could not be made into a clip, or a file that cannot be read.
+		if (result && !result.success && result.message) setDropError("load-failed");
 		if (!result || result.canceled || !result.success || !result.path) return;
 		try {
 			const projectId = await ensureProject();

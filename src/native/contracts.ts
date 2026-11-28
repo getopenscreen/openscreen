@@ -900,8 +900,9 @@ export type NativeBridgeRequest =
 	| {
 			domain: "compositor";
 			action: "checkShaderEffect";
-			/** An effect's code and declared parameters, as the agent tools check them. */
-			payload: { code: string; params: Array<{ name: string; type: string }> };
+			/** An effect's code and declared parameters, as the agent tools check them, and whether
+			 *  it carries an image (absent: it does not). */
+			payload: { code: string; params: Array<{ name: string; type: string }>; image?: boolean };
 			requestId?: string;
 	  }
 	| {

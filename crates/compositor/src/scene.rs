@@ -666,6 +666,34 @@ pub struct SceneShaderEffect {
     /// Les valeurs, déjà normalisées par l'app : un nombre, ou 2 ou 4 floats.
     #[serde(default)]
     pub values: std::collections::HashMap<String, ShaderParamValue>,
+    /// Les paramètres animés : nom → images clés triées par `at_sec`. Une piste remplace la valeur
+    /// de `values` ; absente (le cas courant), le paramètre garde sa valeur fixe.
+    #[serde(default)]
+    pub animate: std::collections::HashMap<String, Vec<ShaderKeyframe>>,
+    /// Le fichier de l'image que lit `image()` (PNG ou JPEG). Absent, le cas courant : l'effet
+    /// n'a ni `image()` ni son binding, et compile comme avant que les images existent.
+    #[serde(default)]
+    pub image: Option<String>,
+}
+
+/// Une image clé d'un paramètre animé. `at_sec` est compté depuis le début de la pilule, sur
+/// l'horloge de `ctx.region.z`. La courbe va de cette image clé à la suivante : linéaire par
+/// défaut, `bezier` (x1, y1, x2, y2), `spring` (le rebond, 0 à 0,9) ou `hold` (palier).
+///
+/// Des champs optionnels plutôt qu'une enum, pour la même raison que `SceneAnnotation::space` :
+/// une forme de courbe inconnue d'un binaire plus ancien retombe sur le linéaire au lieu de faire
+/// échouer toute la scène.
+#[derive(Debug, Clone, PartialEq, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ShaderKeyframe {
+    pub at_sec: f32,
+    pub value: ShaderParamValue,
+    #[serde(default)]
+    pub bezier: Option<[f32; 4]>,
+    #[serde(default)]
+    pub spring: Option<f32>,
+    #[serde(default)]
+    pub hold: bool,
 }
 
 fn default_contract() -> u32 {

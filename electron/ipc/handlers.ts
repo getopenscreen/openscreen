@@ -25,6 +25,7 @@ import {
 	isAxcutDocumentFile,
 	parseDocumentFile,
 } from "../../src/lib/ai-edition/schema";
+import type { ShaderEffectImageStore } from "../../src/lib/ai-edition/shaderEffects";
 import type { CliSourcesResult } from "../../src/lib/cliContracts";
 import { pickRecordingSource } from "../../src/lib/cliSourcePick";
 import { desktopSourceTimeoutMessage } from "../../src/lib/desktopSourceTimeout";
@@ -95,6 +96,7 @@ import {
 } from "../main";
 import { createAppRecorder, pickTakePrefs, takePrefs } from "../mcp/app-recorder";
 import { EditorDocumentHost } from "../mcp/editor-document-host";
+import { frameImages } from "../mcp/frame-images";
 import { openVideoInHiddenWindow } from "../mcp/hidden-video";
 import { NAMED_TAKE_NEEDS_SCREEN_ACCESS, namedTakeMayEnumerate } from "../mcp/macNamedTake";
 import { McpController } from "../mcp/mcp-controller";
@@ -102,14 +104,22 @@ import { McpSettingsStore } from "../mcp/mcp-settings-store";
 import { createMediaTools, type MediaToolDeps, type RecordRequest } from "../mcp/media-tools";
 import { createToolRunner, type McpToolDeps } from "../mcp/openscreen-mcp-server";
 import { RecordingCompletion } from "../mcp/recording-completion";
-import { type AudioPeaksResult, getAudioPeaks } from "../media/audioPeaks";
+import { type AudioPeaksResult, getAudioPeaks, resolveFfmpeg } from "../media/audioPeaks";
 import {
 	readCursorRecordingFile as readCursorRecordingFileFrom,
 	readCursorSidecar,
 	readCursorTelemetryFile as readCursorTelemetryFileFrom,
 } from "../media/cursorSidecar";
+import { storeEffectImage } from "../media/effectImage";
 import { findMediaLinksByFingerprint, registerMediaLinks } from "../media/mediaLinksRegistry";
 import { relinkProjectMedia } from "../media/projectMediaRelinker";
+import {
+	DEFAULT_HOLD_SEC,
+	ensureStillClip,
+	IMAGE_EXTENSIONS,
+	isImagePath,
+	probeImageSize,
+} from "../media/stillClip";
 import { showOpenDialogOver, showSaveDialogOver } from "../messageBox";
 import {
 	isPortalCancelled,
@@ -186,6 +196,7 @@ import {
 	shouldPersistSelectedSource,
 } from "../recording-source-settings";
 import { getSttManager } from "../stt";
+import { countToolCall } from "../usage-ping";
 import { usesWaylandBackend } from "../wayland";
 import {
 	createCameraPreviewWindow,
@@ -266,6 +277,14 @@ function withDeadline<T>(work: Promise<T>, ms: number, message: string): Promise
 		}),
 	]).finally(() => clearTimeout(timer)) as Promise<T>;
 }
+
+/** The copy an effect's image gets in the recordings folder, sized upright as a still's is. */
+const keepEffectImage: ShaderEffectImageStore = (file) =>
+	storeEffectImage(file, RECORDINGS_DIR, (image) => {
+		const ffmpeg = resolveFfmpeg();
+		if (!ffmpeg) throw new Error("OpenScreen found no ffmpeg to read the image with.");
+		return probeImageSize(ffmpeg, image);
+	});
 
 // Paths the user approved via file picker or project load (i.e. outside the default dirs).
 const approvedPaths = new Set<string>();
@@ -4717,17 +4736,29 @@ export function registerIpcHandlers(
 		}
 	});
 
-	// The media tab imports VIDEO (it arranges clips). Audio is imported from the
-	// timeline toolbar instead (issue #350) — see `open-audio-file-picker` below.
+	// The media tab imports VIDEO (it arranges clips), and images as the still clip
+	// made from them. Audio is imported from the timeline toolbar instead (issue
+	// #350) — see `open-audio-file-picker` below.
 	ipcMain.handle("open-video-file-picker", async (event) => {
 		try {
 			const dialogOptions: Electron.OpenDialogOptions = {
-				title: mainT("dialogs", "fileDialogs.selectVideo"),
+				title: mainT("dialogs", "fileDialogs.selectVideoOrImage"),
 				defaultPath: RECORDINGS_DIR,
 				filters: [
 					{
-						name: mainT("dialogs", "fileDialogs.videoFiles"),
-						extensions: ["webm", "mp4", "mov", "avi", "mkv", "m4v", "wmv", "flv", "ts"],
+						name: mainT("dialogs", "fileDialogs.videoAndImageFiles"),
+						extensions: [
+							"webm",
+							"mp4",
+							"mov",
+							"avi",
+							"mkv",
+							"m4v",
+							"wmv",
+							"flv",
+							"ts",
+							...IMAGE_EXTENSIONS.map((ext) => ext.slice(1)),
+						],
 					},
 					{ name: mainT("dialogs", "fileDialogs.allFiles"), extensions: ["*"] },
 				],
@@ -4742,7 +4773,18 @@ export function registerIpcHandlers(
 				return { success: false, canceled: true };
 			}
 
-			const normalizedPath = await approveReadableVideoPath(result.filePaths[0]);
+			const picked = result.filePaths[0];
+			if (isImagePath(picked)) {
+				const still = await ensureStillClip(picked, DEFAULT_HOLD_SEC, RECORDINGS_DIR).catch(
+					(error: Error) => error,
+				);
+				if (still instanceof Error) return { success: false, message: still.message };
+				approveFilePath(still.path);
+				currentProjectPath = null;
+				return { success: true, path: still.path, name: path.basename(picked) };
+			}
+
+			const normalizedPath = await approveReadableVideoPath(picked);
 			if (!normalizedPath) {
 				return {
 					success: false,
@@ -5554,7 +5596,10 @@ export function registerIpcHandlers(
 		editsAllowed: () => mcpSettings.getSettings().allowEdits,
 		cursor: agentCursorTelemetryReader,
 		cameraSegmentation: () => loudnessService.probeSegmentation(),
-		checkShaderEffect: (code, params) => loudnessService.checkShaderEffect(code, params),
+		checkShaderEffect: (code, params, image) =>
+			loudnessService.checkShaderEffect(code, params, image),
+		storeEffectImage: keepEffectImage,
+		stylePresets: () => stylePresets.list(),
 		// The editor's own engine, in this process: `openscreen mcp` transcribes without the app.
 		transcribe: (request) => getSttManager().transcribe(request),
 		version: app.getVersion(),
@@ -5565,6 +5610,9 @@ export function registerIpcHandlers(
 			const media = normalizeVideoSourcePath(filePath);
 			if (media && hasAllowedImportMediaExtension(media)) approveFilePath(media);
 		},
+		makeStill: (imagePath, holdSec) => ensureStillClip(imagePath, holdSec, RECORDINGS_DIR),
+		// The tool's name and nothing of the call, for the daily count to carry.
+		onToolCall: (name) => countToolCall(app.getPath("userData"), getInstallChannel(), name),
 	};
 	// One runner, so one queue and one checkpoint store, for the in-app server and every
 	// `openscreen mcp` the app answers through its channel (app-channel.ts, started by main.ts).
@@ -5668,6 +5716,7 @@ export function registerIpcHandlers(
 		documents: aiEditionDocuments,
 		openVideo: openVideoInHiddenWindow,
 		renderFrames: (...args) => loudnessService.renderFrames(...args),
+		images: frameImages,
 		readCursor: async (videoPath) => (await readCursorTelemetryFile(videoPath)).samples,
 		// Never overriding the switch: setPointerTrack is refused while MCP edits is off.
 		runTool: mcpRunTool,
@@ -5739,7 +5788,10 @@ export function registerIpcHandlers(
 				signal,
 				cursor: agentCursorTelemetryReader,
 				cameraSegmentation: () => loudnessService.probeSegmentation(),
-				checkShaderEffect: (code, params) => loudnessService.checkShaderEffect(code, params),
+				checkShaderEffect: (code, params, image) =>
+					loudnessService.checkShaderEffect(code, params, image),
+				storeEffectImage: keepEffectImage,
+				stylePresets: () => stylePresets.list(),
 			}),
 		undoAiEditionToolBatch: (_projectId, _sessionId) => ({
 			success: false,

@@ -1,6 +1,7 @@
 {
 	"actions": {
 		"cancel": "Anuluj",
+		"tryAgain": "Spróbuj ponownie",
 		"save": "Zapisz",
 		"delete": "Usuń",
 		"close": "Zamknij",
@@ -58,6 +59,9 @@
 		"blockedLocation": "Przenieś OpenScreen do folderu Aplikacje przed aktualizacją.",
 		"failed": "Nie udało się sprawdzić aktualizacji.",
 		"downloadFailed": "Nie udało się pobrać aktualizacji."
+	},
+	"usagePing": {
+		"notSaved": "OpenScreen nie mógł zapisać tego wyboru, więc pozostaje bez zmian."
 	},
 	"units": {
 		"pixelsPerSecond": "{{value}} px/s",

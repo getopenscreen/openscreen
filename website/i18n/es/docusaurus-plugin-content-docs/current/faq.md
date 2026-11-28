@@ -36,12 +36,12 @@ OpenScreen es un grabador de pantalla y editor de video gratis, con licencia MIT
 - **github.com, una vez por idioma.** En un equipo con GPU, la primera transcripción en inglés o en francés también descarga el modelo que vuelve a sincronizar cada palabra: unos 110 MB para el inglés, 350 MB para el francés.
 - **github.com y api.github.com.** Las compilaciones que se actualizan solas buscan una nueva versión un minuto después de abrirse, luego cada seis horas, y cuando tú lo pides. La descargan en segundo plano y muestran un botón de actualización; no se instala nada hasta que haces clic en él.
 - **fonts.googleapis.com, solo para una fuente añadida en 1.x.** Una fuente personalizada para anotaciones añadida en una versión anterior se sigue descargando al iniciar, aunque la 2.x ya no la dibuja.
-- **PostHog, una vez al día.** Un recuento anónimo de instalaciones activas, enviado a los servidores de PostHog en la UE. Contiene la versión de la app, el sistema operativo, la arquitectura del procesador, cómo se instaló la app, si se usó directamente o a través de su servidor MCP por un agente de IA, si es el primer recuento de la semana y del mes, y la semana en que se instaló la app. Nada más: ningún identificador de instalación (cada recuento recibe un ID aleatorio nuevo), ninguna dirección IP conservada, nada sobre tus grabaciones. Desmarca **Enviar recuento de uso anónimo** en el menú de la bandeja para desactivarlo, o define `DO_NOT_TRACK=1`.
+- **PostHog, una vez al día.** Un recuento anónimo de instalaciones activas, enviado a los servidores de PostHog en la UE. Contiene la versión de la app, el sistema operativo, la arquitectura del procesador, cómo se instaló la app, si se usó directamente o a través de su servidor MCP por un agente de IA, si es el primer recuento de la semana y del mes, la semana en que se instaló la app, y cuántas veces un agente de IA llamó a cada herramienta del servidor MCP desde el recuento anterior: el nombre de la herramienta y un número, nunca lo que se le pasó. Nada más: ningún identificador de instalación (cada recuento recibe un ID aleatorio nuevo), ninguna dirección IP conservada, nada sobre tus grabaciones. Desmarca **Enviar recuento de uso anónimo** en el menú de la bandeja para desactivarlo, o define `DO_NOT_TRACK=1`.
 - **Tu proveedor de IA, solo si conectas uno.** La edición por chat envía tus mensajes y los datos del proyecto que lee, como la línea de tiempo y la transcripción. La traducción de subtítulos envía el texto de los subtítulos. Ambas permanecen desactivadas hasta que conectas un proveedor. Consulta [Edición con IA](./ai-editing.md).
 
 ## ¿OpenScreen recopila analíticas o informes de fallos? {#does-openscreen-collect-analytics-or-crash-reports}
 
-**Un recuento diario anónimo, nada más.** La app no contiene ningún SDK de analíticas ni de informes de fallos, y nada registra lo que haces en ella.
+**Un recuento diario anónimo, nada más.** La app no contiene ningún SDK de analíticas ni de informes de fallos, y nada registra lo que haces en ella. La única medida de uso del recuento es cuántas veces un agente de IA llamó a cada herramienta del servidor MCP.
 
 - Una vez al día, la app informa de que una instalación estuvo activa. [¿OpenScreen funciona sin conexión?](#does-openscreen-work-offline) detalla exactamente qué contiene ese recuento y cómo desactivarlo.
 - El recuento no lleva ningún identificador de instalación: cada uno recibe un ID aleatorio nuevo, y nada más en él es propio de tu equipo. La semana de instalación que lleva, como `2026-W44`, es la semana en que se instaló la app, la misma para todos los que la instalaron esa semana, no un identificador.
@@ -144,7 +144,7 @@ Si necesitas algo de esto, OpenScreen no es la herramienta adecuada:
 
 - **Compartir desde un servicio alojado.** No hay enlaces para compartir, almacenamiento en la nube, espacios de trabajo en equipo ni comentarios. Tus archivos se quedan en tu disco. Consulta [OpenScreen como alternativa a Loom](/alternatives/loom/).
 - **Transmisión en vivo.** Consulta [OpenScreen vs. OBS Studio](/compare/openscreen-vs-obs/).
-- **Archivos de subtítulos.** Los subtítulos se incrustan en el video. No hay exportación SRT ni VTT. Consulta [Subtítulos](./captions.md).
+- **Archivos de subtítulos generados por el editor o la CLI.** Ambos incrustan los subtítulos en el video y no escriben ningún archivo SRT ni VTT; un agente puede escribir uno con `exportCaptions`. Consulta [Subtítulos](./captions.md).
 - **Dispositivos móviles.** No hay app móvil, ni captura en iOS o Android.
 
 ## ¿Cómo empiezo? {#how-do-i-get-started}

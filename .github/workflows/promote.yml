@@ -93,7 +93,7 @@ jobs:
           bash "$RUNNER_TEMP/refresh-nix-npm-hash.sh"
           git config user.name  "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add package.json package-lock.json nix/package.nix
+          git add package.json package-lock.json nix/package.nix plugin/.claude-plugin/plugin.json plugin/.codex-plugin/plugin.json
           git commit --allow-empty -m "chore(release): bump to ${STABLE_VERSION} [skip ci]" || true
           git push "https://x-access-token:${TOKEN}@github.com/${GITHUB_REPOSITORY}.git" "$BRANCH"
 
@@ -206,7 +206,7 @@ jobs:
           # The lockfile's version is part of Nix's npm hash, and the hash must match
           # main's lockfile, not the release's.
           bash .github/scripts/refresh-nix-npm-hash.sh
-          git add package.json package-lock.json nix/package.nix
+          git add package.json package-lock.json nix/package.nix plugin/.claude-plugin/plugin.json plugin/.codex-plugin/plugin.json
           git commit -m "chore(release): release v${STABLE_VERSION} into main"
           # --force: a rerun commits again on top of a newer main.
           git push --force "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" "${BRANCH}-sync"

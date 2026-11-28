@@ -92,7 +92,14 @@ export function resolveX11CaptureSource(
 		return { kind: "window", windowId };
 	}
 	if (!source.id.startsWith("screen:")) throw new Error("Unsupported X11 recording source.");
-	const display = displays.find((candidate) => String(candidate.id) === source.display_id);
+	// Electron derives desktopCapturer's X11 display_id with its own copy of Chromium's
+	// EDID logic, which falls back to the output index for an output id above 0xff
+	// (NVIDIA): it then matches no `screen` id (#1629). A single display is still the
+	// one picked. ponytail: several displays still need the id to match; resolving the
+	// RandR monitor atom of `screen:<atom>:0` in the helper would cover them.
+	const display =
+		displays.find((candidate) => String(candidate.id) === source.display_id) ??
+		(displays.length === 1 ? displays[0] : undefined);
 	if (!display) throw new Error("The selected X11 display is no longer available.");
 	const { bounds, scaleFactor } = display;
 	if (displays.some((candidate) => candidate.scaleFactor !== scaleFactor)) {

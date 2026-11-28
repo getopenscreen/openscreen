@@ -2,10 +2,19 @@
 	"name": "openscreen",
 	"displayName": "OpenScreen",
 	"description": "Make a demo video from one sentence: record the screen, edit and export it with OpenScreen.",
-	"version": "2.1.1",
+	"version": "2.4.0",
 	"author": { "name": "Etienne Lescot", "url": "https://getopenscreen.com" },
 	"homepage": "https://getopenscreen.com/docs/ai-editing",
 	"repository": "https://github.com/getopenscreen/openscreen",
 	"license": "MIT",
-	"keywords": ["demo video", "screen recording", "video editing", "pull request"]
+	"keywords": ["demo video", "screen recording", "video editing", "pull request"],
+	"network": {
+		"hosts": [
+			"github.com",
+			"api.github.com",
+			"uploads.github.com",
+			"objects.githubusercontent.com",
+			"release-assets.githubusercontent.com"
+		]
+	}
 }

@@ -98,7 +98,7 @@ En el panel **Transcripción**, haz clic en **Subtítulos** y activa **Mostrar s
 
 Whisper detecta el idioma hablado, o puedes forzar uno de los 100 idiomas con **Regenerar en** en la vista Multimedia. Para publicar en otro idioma, usa **Traducir** hacia uno de los 15 idiomas de destino y selecciona ese idioma en **Visualización** antes de exportar. La traducción pasa por tu propio proveedor de LLM, así que necesita una clave.
 
-Los subtítulos se incrustan en el video. OpenScreen no escribe ningún archivo `.srt` ni `.vtt`, así que un reproductor no puede desactivarlos. Detalles: [Subtítulos y transcripción](../captions.md) y [cómo funciona la función de subtítulos](/features/captions/).
+Los subtítulos se incrustan en el video. El editor y la CLI no escriben ningún archivo `.srt` ni `.vtt`, así que un reproductor no puede desactivarlos. Un agente puede escribir uno con `exportCaptions`. Detalles: [Subtítulos y transcripción](../captions.md) y [cómo funciona la función de subtítulos](/features/captions/).
 
 ## 8. Exporta {#8-export}
 
@@ -121,7 +121,7 @@ OpenScreen no aloja tu video, no crea enlaces para compartir ni cuenta reproducc
 
 - **Quieres un enlace alojado con estadísticas de espectadores o comentarios.** Te conviene más un grabador con alojamiento. Loom, por ejemplo, comparte cada grabación como un enlace en loom.com, y su página de precios incluye estadísticas de espectadores y comentarios en los videos en todos los planes (en septiembre de 2026). Consulta [OpenScreen como alternativa a Loom](/alternatives/loom/) para el caso, más acotado, en que OpenScreen sí encaja.
 - **Quieres una demo interactiva** en la que el espectador haga clic. OpenScreen solo exporta video y GIF.
-- **Tu reproductor de video necesita un archivo de subtítulos aparte.** OpenScreen solo incrusta los subtítulos.
+- **Tu reproductor de video necesita un archivo de subtítulos aparte, generado por el editor o la CLI.** Ambos solo incrustan los subtítulos; un agente puede escribir uno con `exportCaptions`.
 - **Grabas en un teléfono o una tableta.** OpenScreen es una app de escritorio para Windows, macOS 13 o posterior, y Linux.
 
 ## Fuentes {#sources}

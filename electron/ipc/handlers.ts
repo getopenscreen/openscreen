@@ -84,6 +84,11 @@ import { createZip } from "../diagnostics/zip";
 import { mainT } from "../i18n";
 import { getInstallChannel } from "../install-channel";
 import {
+	broadcastKeystroke,
+	hideKeystrokeOverlay,
+	showKeystrokeOverlay,
+} from "../keystrokeOverlay";
+import {
 	DEFAULT_RECORDINGS_DIR,
 	getRecordingsDirInfo,
 	RECORDINGS_DIR,
@@ -759,6 +764,8 @@ export interface RecordingPrefs {
 	hideDesktopIcons: boolean;
 	/** Whether a fresh take gets automatic zooms on import. Persisted; defaults on. */
 	autoZoomEnabled: boolean;
+	/** Live keystroke badges on the recorded display (win32). Opt-in: the hook sees every key. */
+	keystrokeOverlayEnabled: boolean;
 }
 const defaultRecordingPrefs: RecordingPrefs = {
 	micEnabled: false,
@@ -772,6 +779,7 @@ const defaultRecordingPrefs: RecordingPrefs = {
 	cursorCaptureMode: "editable-overlay",
 	hideDesktopIcons: false,
 	autoZoomEnabled: true,
+	keystrokeOverlayEnabled: false,
 };
 
 // Cached source from the user's pick. Used by setDisplayMediaRequestHandler in main.ts for cursor-free capture.
@@ -816,6 +824,29 @@ const CURSOR_SAMPLE_INTERVAL_MS = 33;
 const MAX_CURSOR_SAMPLES = 60 * 60 * 30; // 1 hour @ 30Hz
 
 let cursorRecordingSession: CursorRecordingSession | null = null;
+/**
+ * Module-level mirror of the `keystrokeOverlayEnabled` preference. The cursor
+ * session is created by module-level helpers that cannot reach the handler-local
+ * `recordingPrefs`; this is kept in sync from its initializer and onChange so
+ * those helpers can decide whether to install the low-level keyboard hook.
+ */
+let keystrokeKeysEnabled = false;
+/**
+ * Keyboard-only capture for takes that do not run a cursor telemetry session
+ * (Windows system-cursor mode). The keystroke overlay needs the native helper's
+ * low-level keyboard hook even when no editable cursor overlay is drawn; reusing
+ * the telemetry session would tie key capture to `editable-overlay` and leave
+ * system-cursor takes with an overlay that never shows a key (#1633 review).
+ */
+let keystrokeKeySession: CursorRecordingSession | null = null;
+/**
+ * A keyboard-only session whose `start()` is still pending. Tracking it before
+ * the await lets Stop tear it down and blocks a second Start from racing in
+ * while the slot still looks empty.
+ */
+let pendingKeystrokeKeySession: CursorRecordingSession | null = null;
+/** Monotonic token so a Stop can invalidate an in-flight start's completion. */
+let keystrokeKeyGeneration = 0;
 let pendingCursorRecordingData: CursorRecordingData | null = null;
 let nativeWindowsCaptureProcess: ChildProcessWithoutNullStreams | null = null;
 let nativeWindowsCaptureOutput = "";
@@ -1417,6 +1448,13 @@ async function startCursorRecording(recordingId?: number) {
 		sourceId: getSelectedSourceId(),
 		startTimeMs:
 			typeof recordingId === "number" && Number.isFinite(recordingId) ? recordingId : undefined,
+		// Only ask the helper for the keyboard hook when the overlay is enabled.
+		// The helper installs WH_KEYBOARD_LL unconditionally otherwise, which would
+		// observe every key typed during a take even with the overlay switched off.
+		onKeyEvent: keystrokeKeysEnabled
+			? (event) => broadcastKeystroke(event.vk, event.modifiers)
+			: undefined,
+		captureKeys: keystrokeKeysEnabled,
 	});
 
 	try {
@@ -1439,6 +1477,77 @@ async function stopCursorRecording() {
 		pendingCursorRecordingData = null;
 	} finally {
 		cursorRecordingSession = null;
+	}
+}
+
+/**
+ * Start a keyboard-only native session for a Windows take that has no cursor
+ * telemetry session. The helper's low-level keyboard hook is what drives the
+ * keystroke overlay; it is independent of the selected cursor mode. No-op when
+ * a cursor session already exists (it carries the same hook) or off Windows.
+ */
+async function startKeystrokeKeyCapture(): Promise<void> {
+	if (
+		process.platform !== "win32" ||
+		cursorRecordingSession ||
+		keystrokeKeySession ||
+		pendingKeystrokeKeySession
+	)
+		return;
+	const generation = ++keystrokeKeyGeneration;
+	const session = createCursorRecordingSession({
+		getDisplayBounds: getSelectedSourceBounds,
+		maxSamples: MAX_CURSOR_SAMPLES,
+		platform: "win32",
+		sampleIntervalMs: CURSOR_SAMPLE_INTERVAL_MS,
+		sourceId: getSelectedSourceId(),
+		captureKeys: true,
+		onKeyEvent: (event) => {
+			// A session Stop already tore down can still have queued key lines. Drop
+			// them so no key paints on the overlay after the take ends.
+			if (generation !== keystrokeKeyGeneration) return;
+			broadcastKeystroke(event.vk, event.modifiers);
+		},
+	});
+	// Publish before awaiting `start()` so Stop sees the session and a second
+	// Start is rejected by the pending-slot guard above.
+	pendingKeystrokeKeySession = session;
+	try {
+		await session.start();
+	} catch (error) {
+		// A Stop that tore this session down mid-start rejects `start()` on helper
+		// exit. That is expected teardown, not a startup failure worth logging.
+		if (generation === keystrokeKeyGeneration) {
+			console.error("Failed to start keystroke key capture:", error);
+		}
+		if (pendingKeystrokeKeySession === session) pendingKeystrokeKeySession = null;
+		return;
+	}
+	if (pendingKeystrokeKeySession === session) pendingKeystrokeKeySession = null;
+	// Stop invalidated this start while it was pending. Stop owns the teardown of
+	// that session, so do not publish it and do not stop it a second time here.
+	if (generation !== keystrokeKeyGeneration) return;
+	keystrokeKeySession = session;
+}
+
+/**
+ * Stop the keyboard-only session; its cursor samples are never written out.
+ * Also tears down a session whose `start()` is still pending: the generation
+ * bump makes that start's continuation discard its result, so Stop is the sole
+ * owner of teardown.
+ */
+async function stopKeystrokeKeyCapture(): Promise<void> {
+	// Invalidate any in-flight start before touching the slots so its eventual
+	// completion cannot republish the session as live.
+	keystrokeKeyGeneration += 1;
+	const session = keystrokeKeySession ?? pendingKeystrokeKeySession;
+	keystrokeKeySession = null;
+	pendingKeystrokeKeySession = null;
+	if (!session) return;
+	try {
+		await session.stop();
+	} catch (error) {
+		console.error("Failed to stop keystroke key capture:", error);
 	}
 }
 
@@ -2056,6 +2165,13 @@ export function registerIpcHandlers(
 ) {
 	/** The HUD is recording a take, the user's or an MCP client's. Set by `setAppRecording` only. */
 	let appRecording = false;
+	/**
+	 * Resolved capture bounds of the current take, when the start path knows them
+	 * explicitly (native Windows request can target a display other than the
+	 * mutable selection). The keystroke overlay is positioned from these; the
+	 * selection getter is only a fallback for paths without explicit bounds.
+	 */
+	let takeRecordingBounds: Rectangle | null = null;
 	const recordingCompletion = new RecordingCompletion();
 	/**
 	 * Every start and stop of a take goes through here: the browser path's `set-recording-state`
@@ -2075,6 +2191,28 @@ export function registerIpcHandlers(
 		if (!recording && !preparing) cameraPreview.setCaptureAllowed(true);
 		if (!preparing) mcpAppRecorder.recordingChanged(recording, recordingId);
 		onRecordingStateChange?.(recording, sourceName, preparing);
+		// The keystroke overlay lives only while a take is live, on the display being
+		// recorded. Windows only: the overlay's invisibility-to-capture relies on
+		// content protection, which `applyContentProtection` gates per platform.
+		// Opt-in via `keystrokeOverlayEnabled`: the low-level hook observes every key
+		// typed during a take, so it is off by default and installed only on request.
+		if (process.platform === "win32") {
+			if (recording && recordingPrefs.get().keystrokeOverlayEnabled) {
+				void showKeystrokeOverlay(takeRecordingBounds ?? getSelectedSourceBounds());
+				// The keystroke overlay needs the native keyboard hook in every cursor
+				// mode. In editable-overlay mode the cursor session already carries it;
+				// otherwise (system cursor) no session is running, so start a
+				// keyboard-only one. Guarded by `!preparing` so it attaches to the take
+				// proper, after the editable-overlay session has had a chance to start.
+				if (!preparing) void startKeystrokeKeyCapture();
+			} else {
+				// Always tear down on stop (or when the option is off), so a take that
+				// ends after the toggle was switched off cannot leave a hook behind.
+				hideKeystrokeOverlay();
+				takeRecordingBounds = null;
+				void stopKeystrokeKeyCapture();
+			}
+		}
 	};
 	const appSettings = new AppSettingsStore(app.getPath("userData"));
 	const broadcastSelectedSource = (source: SelectedSource | null) => {
@@ -2401,6 +2539,9 @@ export function registerIpcHandlers(
 		getMainWindow,
 		() => BrowserWindow.getAllWindows(),
 		(previous, next) => {
+			// Keep the module-level mirror in step with the durable setting, so a
+			// cursor session created on the next take installs the hook only if asked.
+			keystrokeKeysEnabled = next.keystrokeOverlayEnabled;
 			// Apple's picker bakes the exclusions into the filter it hands back, so a pick made
 			// before "Hide desktop icons" changed would still record the desktop the old way.
 			// Dropping it makes the HUD ask for a new pick instead of ignoring the toggle.
@@ -2420,6 +2561,9 @@ export function registerIpcHandlers(
 			}
 		},
 	);
+	// Seed the mirror from the persisted value: onChange only fires on later edits,
+	// so without this a restored "on" setting would still skip the hook on startup.
+	keystrokeKeysEnabled = recordingPrefs.get().keystrokeOverlayEnabled;
 
 	// Asked before every take starts. A disk that fills up mid-take used to be found only
 	// when the take was saved, and the take was lost with it.
@@ -3262,6 +3406,12 @@ export function registerIpcHandlers(
 				}
 				// Reserve startup before cursor/helper awaits without reporting a started take.
 				startReserved = true;
+				// Publish the overlay's display only now, after the final reservation
+				// guard: a rejected start must not move a take that is already live, and
+				// there is no await between here and the overlay show below (#1633).
+				// The request resolved this display; it may differ from the mutable
+				// selection when an MCP client targets another screen.
+				takeRecordingBounds = bounds;
 				setAppRecording(true, selectedSource?.name ?? "Screen", undefined, true);
 				await fs.mkdir(RECORDINGS_DIR, { recursive: true });
 				nativeWindowsCaptureOutput = "";

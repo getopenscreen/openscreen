@@ -119,6 +119,8 @@
 		"editableCursor": "可編輯游標",
 		"editableCursorTip": "開：可編輯游標，可修改樣式並使用自動縮放。關：系統游標，直接錄進影片。",
 		"autoZoom": "錄製後自動縮放",
+		"keystrokeOverlay": "顯示按鍵",
+		"keystrokeOverlayTip": "錄製時在畫面上即時顯示按下的按鍵。預設關閉：開啟後會在錄製期間監聽你輸入的每一個按鍵。",
 		"hideDesktopIcons": "隱藏桌面圖示",
 		"hideDesktopIconsHintMac": "在螢幕錄製中略去桌面圖示。它們仍會留在你的桌面上。",
 		"hideDesktopIconsHintWindows": "錄製時遮住桌面圖示。停止後會恢復。",

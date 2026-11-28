@@ -119,6 +119,8 @@
 		"editableCursor": "Редактируемый курсор",
 		"editableCursorTip": "Вкл.: редактируемый курсор, с изменением стиля и автозумом. Выкл.: системный курсор, записанный в видео.",
 		"autoZoom": "Автомасштабирование после записи",
+		"keystrokeOverlay": "Show keystrokes",
+		"keystrokeOverlayTip": "Shows a live badge for each key during recording, on the recorded display. Off by default: it observes every key you type while recording.",
 		"hideDesktopIcons": "Скрыть значки рабочего стола",
 		"hideDesktopIconsHintMac": "Убирает значки рабочего стола из записи экрана. На рабочем столе они остаются.",
 		"hideDesktopIconsHintWindows": "Закрывает значки рабочего стола во время записи. После неё они возвращаются.",

@@ -621,6 +621,11 @@ contextBridge.exposeInMainWorld("electronAPI", {
 	notifyCountdownOverlayCleared: (runId: number) => {
 		ipcRenderer.send("countdown-overlay-cleared", runId);
 	},
+	onKeystrokeKey: (callback: (vk: number, modifiers: number) => void) => {
+		const listener = (_event: unknown, vk: number, modifiers: number) => callback(vk, modifiers);
+		ipcRenderer.on("keystroke-overlay-key", listener);
+		return () => ipcRenderer.removeListener("keystroke-overlay-key", listener);
+	},
 	onRequestSaveBeforeClose: (callback: () => Promise<boolean> | boolean) => {
 		const listener = async () => {
 			try {

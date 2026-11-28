@@ -119,6 +119,8 @@
 		"editableCursor": "مؤشر قابل للتحرير",
 		"editableCursorTip": "التشغيل: مؤشر قابل للتحرير، مع تغيير الشكل والتكبير التلقائي. الإيقاف: مؤشر النظام، يُسجَّل داخل الفيديو.",
 		"autoZoom": "تكبير تلقائي بعد التسجيل",
+		"keystrokeOverlay": "Show keystrokes",
+		"keystrokeOverlayTip": "Shows a live badge for each key during recording, on the recorded display. Off by default: it observes every key you type while recording.",
 		"hideDesktopIcons": "إخفاء أيقونات سطح المكتب",
 		"hideDesktopIconsHintMac": "يستبعد أيقونات سطح المكتب من تسجيلات الشاشة. تبقى على سطح المكتب لديك.",
 		"hideDesktopIconsHintWindows": "يغطي أيقونات سطح المكتب أثناء التسجيل. تعود عند توقفه.",

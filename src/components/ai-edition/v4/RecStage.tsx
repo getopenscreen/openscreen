@@ -3,6 +3,7 @@ import {
 	CameraOff,
 	ChevronDown,
 	FolderOpen,
+	Keyboard,
 	LayoutGrid,
 	Loader2,
 	MicOff,
@@ -40,6 +41,7 @@ interface RecordingPrefsState {
 	cursorCaptureMode: "editable-overlay" | "system";
 	hideDesktopIcons: boolean;
 	autoZoomEnabled: boolean;
+	keystrokeOverlayEnabled: boolean;
 }
 
 const DEFAULT_PREFS: RecordingPrefsState = {
@@ -53,6 +55,7 @@ const DEFAULT_PREFS: RecordingPrefsState = {
 	cursorCaptureMode: "editable-overlay",
 	hideDesktopIcons: false,
 	autoZoomEnabled: true,
+	keystrokeOverlayEnabled: false,
 };
 
 /** The last segment of a Windows or POSIX path; a drive root keeps its letter. */
@@ -611,6 +614,31 @@ export function RecStage({
 							>
 								{prefs.autoZoomEnabled ? t("rec.on") : t("rec.off")}
 							</button>
+						</div>
+					) : null}
+
+					{/* Keystroke badges are a live hint for the recorder. Windows-only, and the
+					    low-level hook observes every key during a take, so it is opt-in. */}
+					{platform === "win32" ? (
+						<div className={styles.recRow}>
+							<div id={rowLabelId("keystrokeOverlay")} className={styles.recRowLabel}>
+								<Keyboard size={15} />
+								{t("rec.keystrokeOverlay")}
+							</div>
+							<Tooltip content={t("rec.keystrokeOverlayTip")} side="top">
+								<button
+									type="button"
+									data-testid="rec-keystroke-overlay-button"
+									className={`${styles.recToggleBtn}${prefs.keystrokeOverlayEnabled ? ` ${styles.on}` : ""}`}
+									aria-labelledby={rowLabelId("keystrokeOverlay")}
+									aria-pressed={prefs.keystrokeOverlayEnabled}
+									onClick={() =>
+										updatePrefs({ keystrokeOverlayEnabled: !prefs.keystrokeOverlayEnabled })
+									}
+								>
+									{prefs.keystrokeOverlayEnabled ? t("rec.on") : t("rec.off")}
+								</button>
+							</Tooltip>
 						</div>
 					) : null}
 

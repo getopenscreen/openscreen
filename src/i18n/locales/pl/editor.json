@@ -119,6 +119,8 @@
 		"editableCursor": "Edytowalny kursor",
 		"editableCursorTip": "Włączone: edytowalny kursor z możliwością zmiany wyglądu i auto-powiększaniem. Wyłączone: kursor systemowy w wideo.",
 		"autoZoom": "Automatyczne powiększanie po nagraniu",
+		"keystrokeOverlay": "Show keystrokes",
+		"keystrokeOverlayTip": "Shows a live badge for each key during recording, on the recorded display. Off by default: it observes every key you type while recording.",
 		"hideDesktopIcons": "Ukryj ikony pulpitu",
 		"hideDesktopIconsHintMac": "Pomija ikony pulpitu w nagraniach ekranu. Pozostają na pulpicie.",
 		"hideDesktopIconsHintWindows": "Zasłania ikony pulpitu podczas nagrywania. Wracają po zatrzymaniu.",

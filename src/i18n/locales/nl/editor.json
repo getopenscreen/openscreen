@@ -119,6 +119,8 @@
 		"editableCursor": "Bewerkbare cursor",
 		"editableCursorTip": "Aan: bewerkbare cursor, met aanpassen en automatisch inzoomen. Uit: systeemcursor, opgenomen in de video.",
 		"autoZoom": "Automatisch inzoomen na opname",
+		"keystrokeOverlay": "Show keystrokes",
+		"keystrokeOverlayTip": "Shows a live badge for each key during recording, on the recorded display. Off by default: it observes every key you type while recording.",
 		"hideDesktopIcons": "Bureaubladpictogrammen verbergen",
 		"hideDesktopIconsHintMac": "Laat de bureaubladpictogrammen weg uit schermopnames. Ze blijven op je bureaublad staan.",
 		"hideDesktopIconsHintWindows": "Bedekt de bureaubladpictogrammen terwijl je opneemt. Ze komen terug zodra je stopt.",

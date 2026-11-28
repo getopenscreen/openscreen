@@ -119,6 +119,8 @@
 		"editableCursor": "Bearbeitbarer Cursor",
 		"editableCursorTip": "An: bearbeitbarer Cursor, mit Stiländerung und Auto-Zoom. Aus: System-Cursor, im Video aufgenommen.",
 		"autoZoom": "Auto-Zoom nach der Aufnahme",
+		"keystrokeOverlay": "Show keystrokes",
+		"keystrokeOverlayTip": "Shows a live badge for each key during recording, on the recorded display. Off by default: it observes every key you type while recording.",
 		"hideDesktopIcons": "Schreibtischsymbole ausblenden",
 		"hideDesktopIconsHintMac": "Lässt die Schreibtischsymbole in Bildschirmaufnahmen weg. Auf deinem Schreibtisch bleiben sie.",
 		"hideDesktopIconsHintWindows": "Deckt die Schreibtischsymbole während der Aufnahme ab. Danach sind sie wieder da.",

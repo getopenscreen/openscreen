@@ -119,6 +119,8 @@
 		"editableCursor": "Curseur éditable",
 		"editableCursorTip": "Activé : curseur éditable, avec changement de style et zoom automatique. Désactivé : curseur système, enregistré dans la vidéo.",
 		"autoZoom": "Zoom automatique après l'enregistrement",
+		"keystrokeOverlay": "Show keystrokes",
+		"keystrokeOverlayTip": "Shows a live badge for each key during recording, on the recorded display. Off by default: it observes every key you type while recording.",
 		"hideDesktopIcons": "Masquer les icônes du bureau",
 		"hideDesktopIconsHintMac": "Retire les icônes du bureau des enregistrements d'écran. Elles restent sur votre bureau.",
 		"hideDesktopIconsHintWindows": "Recouvre les icônes du bureau pendant l'enregistrement. Elles reviennent à la fin.",

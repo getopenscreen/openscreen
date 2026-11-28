@@ -119,6 +119,8 @@
 		"editableCursor": "Düzenlenebilir imleç",
 		"editableCursorTip": "Açık: düzenlenebilir imleç, stil değiştirme ve otomatik yakınlaştırma ile. Kapalı: sistem imleci, videoya kaydedilir.",
 		"autoZoom": "Kayıttan sonra otomatik yakınlaştırma",
+		"keystrokeOverlay": "Show keystrokes",
+		"keystrokeOverlayTip": "Shows a live badge for each key during recording, on the recorded display. Off by default: it observes every key you type while recording.",
 		"hideDesktopIcons": "Masaüstü simgelerini gizle",
 		"hideDesktopIconsHintMac": "Masaüstü simgelerini ekran kayıtlarının dışında bırakır. Masaüstünüzde kalırlar.",
 		"hideDesktopIconsHintWindows": "Kayıt sırasında masaüstü simgelerini örter. Kayıt bitince geri gelirler.",

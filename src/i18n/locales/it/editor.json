@@ -119,6 +119,8 @@
 		"editableCursor": "Cursore modificabile",
 		"editableCursorTip": "Attivo: cursore modificabile, con cambio di stile e zoom automatico. Disattivo: cursore di sistema, registrato nel video.",
 		"autoZoom": "Zoom automatico dopo la registrazione",
+		"keystrokeOverlay": "Show keystrokes",
+		"keystrokeOverlayTip": "Shows a live badge for each key during recording, on the recorded display. Off by default: it observes every key you type while recording.",
 		"hideDesktopIcons": "Nascondi icone della scrivania",
 		"hideDesktopIconsHintMac": "Esclude le icone della scrivania dalle registrazioni dello schermo. Restano sulla tua scrivania.",
 		"hideDesktopIconsHintWindows": "Copre le icone della scrivania durante la registrazione. Tornano alla fine.",

@@ -79,7 +79,11 @@ export class WindowsNativeRecordingSession implements CursorRecordingSession {
 
 		const windowHandle = parseWindowHandleFromSourceId(this.options.sourceId);
 		const args = [String(this.options.sampleIntervalMs)];
+		// argv layout: <intervalMs> [windowHandle] [--keys]. The keyboard hook is
+		// opt-in; install it in the helper only when this session asked for key events.
 		if (windowHandle) args.push(windowHandle);
+		else if (this.options.captureKeys) args.push("null");
+		if (this.options.captureKeys) args.push("--keys");
 
 		const child = spawn(helperPath, args, {
 			stdio: ["ignore", "pipe", "pipe"],
@@ -183,6 +187,12 @@ export class WindowsNativeRecordingSession implements CursorRecordingSession {
 		if (payload.type === "ready") {
 			this.logDiagnostic("ready", { timestampMs: payload.timestampMs });
 			this.resolveReady();
+			return;
+		}
+
+		if (payload.type === "key") {
+			// The keystroke overlay's live feed — never touches the telemetry sidecar.
+			this.options.onKeyEvent?.(payload);
 			return;
 		}
 

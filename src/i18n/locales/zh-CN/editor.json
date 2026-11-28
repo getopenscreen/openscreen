@@ -119,6 +119,8 @@
 		"editableCursor": "可编辑光标",
 		"editableCursorTip": "开启后可修改光标样式并使用自动缩放；关闭后，系统光标将直接录制到视频中",
 		"autoZoom": "录制后自动缩放",
+		"keystrokeOverlay": "显示按键",
+		"keystrokeOverlayTip": "录制时在画面上实时显示按下的按键。默认关闭：开启后会在录制期间监听你输入的每一个按键。",
 		"hideDesktopIcons": "隐藏桌面图标",
 		"hideDesktopIconsHintMac": "录制画面中不显示桌面图标，桌面上的图标不受影响",
 		"hideDesktopIconsHintWindows": "录制时遮住桌面图标，录制结束后恢复",

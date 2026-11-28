@@ -555,6 +555,8 @@ interface Window {
 		) => () => void;
 		/** The overlay painted a frame without the digit; a Linux hide waits for this. */
 		notifyCountdownOverlayCleared: (runId: number) => void;
+		/** A live keydown while a take is running (`KeystrokeOverlay`). */
+		onKeystrokeKey: (callback: (vk: number, modifiers?: number) => void) => () => void;
 		setMicrophoneExpanded: (expanded: boolean) => void;
 		setHasUnsavedChanges: (hasChanges: boolean) => void;
 		onRequestSaveBeforeClose: (callback: () => Promise<boolean> | boolean) => () => void;

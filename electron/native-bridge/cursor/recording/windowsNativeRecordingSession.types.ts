@@ -66,4 +66,6 @@ export interface WindowsNativeRecordingSessionOptions {
 	startTimeMs?: number;
 	/** Live keydowns, forwarded to the keystroke overlay. Absent = not consumed. */
 	onKeyEvent?: (event: WindowsCursorKeyEvent) => void;
+	/** Install the helper's low-level keyboard hook. Off by default. */
+	captureKeys?: boolean;
 }

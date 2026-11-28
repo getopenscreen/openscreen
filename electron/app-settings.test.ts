@@ -62,6 +62,31 @@ describe("app settings store", () => {
 		);
 	});
 
+	// The keystroke overlay installs a keyboard hook that observes every key of a
+	// take. It must default off (including for settings files written before the
+	// preference existed) and be persisted and validated like other toggles.
+	it("keeps the keystroke overlay off by default and persists the opt-in", () => {
+		const dir = temp();
+		const file = path.join(dir, "recording-settings.json");
+		const store = new AppSettingsStore(dir);
+		expect(store.getSnapshot().recording.keystrokeOverlayEnabled).toBe(false);
+
+		expect(
+			store.setRecordingPreferences({ keystrokeOverlayEnabled: true }).recording
+				.keystrokeOverlayEnabled,
+		).toBe(true);
+		expect(JSON.parse(readFileSync(file, "utf8"))).toMatchObject({
+			keystrokeOverlayEnabled: true,
+		});
+		expect(new AppSettingsStore(dir).getSnapshot().recording.keystrokeOverlayEnabled).toBe(true);
+
+		writeFileSync(file, JSON.stringify({ micEnabled: true }), "utf8");
+		expect(store.getSnapshot().recording.keystrokeOverlayEnabled).toBe(false);
+		expect(() =>
+			store.setRecordingPreferences({ keystrokeOverlayEnabled: "yes" as never }),
+		).toThrow(TypeError);
+	});
+
 	it("stores the last source beside the recording preferences", () => {
 		const dir = temp();
 		const store = new AppSettingsStore(dir);

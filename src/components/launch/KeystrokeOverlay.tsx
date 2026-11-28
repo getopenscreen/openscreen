@@ -82,7 +82,10 @@ export function KeystrokeOverlay() {
 	}
 
 	return (
-		<div className="w-screen h-screen bg-transparent flex items-end justify-center pb-16 pointer-events-none select-none">
+		<div className="w-screen h-screen bg-transparent flex items-start justify-center pt-16 pointer-events-none select-none">
+			{/* Top-centre: the HUD bar and its popovers own the bottom of the display.
+			    Badges used to sit at pb-16 and covered the cursor-mode and record
+			    buttons in the recorded frames. */}
 			<div className="flex items-center gap-2">
 				{badges.map((badge) => (
 					<div key={badge.id} className="keystroke-badge">

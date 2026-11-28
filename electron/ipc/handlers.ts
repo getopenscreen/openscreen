@@ -745,6 +745,8 @@ export interface RecordingPrefs {
 	hideDesktopIcons: boolean;
 	/** Whether a fresh take gets automatic zooms on import. Persisted; defaults on. */
 	autoZoomEnabled: boolean;
+	/** Live keystroke badges on the recorded display (win32). Opt-in: the hook sees every key. */
+	keystrokeOverlayEnabled: boolean;
 }
 const defaultRecordingPrefs: RecordingPrefs = {
 	micEnabled: false,
@@ -758,6 +760,7 @@ const defaultRecordingPrefs: RecordingPrefs = {
 	cursorCaptureMode: "editable-overlay",
 	hideDesktopIcons: false,
 	autoZoomEnabled: true,
+	keystrokeOverlayEnabled: false,
 };
 
 // Cached source from the user's pick. Used by setDisplayMediaRequestHandler in main.ts for cursor-free capture.
@@ -802,6 +805,13 @@ const CURSOR_SAMPLE_INTERVAL_MS = 33;
 const MAX_CURSOR_SAMPLES = 60 * 60 * 30; // 1 hour @ 30Hz
 
 let cursorRecordingSession: CursorRecordingSession | null = null;
+/**
+ * Module-level mirror of the `keystrokeOverlayEnabled` preference. The cursor
+ * session is created by module-level helpers that cannot reach the handler-local
+ * `recordingPrefs`; this is kept in sync from its initializer and onChange so
+ * those helpers can decide whether to install the low-level keyboard hook.
+ */
+let keystrokeKeysEnabled = false;
 /**
  * Keyboard-only capture for takes that do not run a cursor telemetry session
  * (Windows system-cursor mode). The keystroke overlay needs the native helper's
@@ -1419,7 +1429,13 @@ async function startCursorRecording(recordingId?: number) {
 		sourceId: getSelectedSourceId(),
 		startTimeMs:
 			typeof recordingId === "number" && Number.isFinite(recordingId) ? recordingId : undefined,
-		onKeyEvent: (event) => broadcastKeystroke(event.vk, event.modifiers),
+		// Only ask the helper for the keyboard hook when the overlay is enabled.
+		// The helper installs WH_KEYBOARD_LL unconditionally otherwise, which would
+		// observe every key typed during a take even with the overlay switched off.
+		onKeyEvent: keystrokeKeysEnabled
+			? (event) => broadcastKeystroke(event.vk, event.modifiers)
+			: undefined,
+		captureKeys: keystrokeKeysEnabled,
 	});
 
 	try {
@@ -1466,6 +1482,7 @@ async function startKeystrokeKeyCapture(): Promise<void> {
 		platform: "win32",
 		sampleIntervalMs: CURSOR_SAMPLE_INTERVAL_MS,
 		sourceId: getSelectedSourceId(),
+		captureKeys: true,
 		onKeyEvent: (event) => {
 			// A session Stop already tore down can still have queued key lines. Drop
 			// them so no key paints on the overlay after the take ends.
@@ -2158,8 +2175,10 @@ export function registerIpcHandlers(
 		// The keystroke overlay lives only while a take is live, on the display being
 		// recorded. Windows only: the overlay's invisibility-to-capture relies on
 		// content protection, which `applyContentProtection` gates per platform.
+		// Opt-in via `keystrokeOverlayEnabled`: the low-level hook observes every key
+		// typed during a take, so it is off by default and installed only on request.
 		if (process.platform === "win32") {
-			if (recording) {
+			if (recording && recordingPrefs.get().keystrokeOverlayEnabled) {
 				void showKeystrokeOverlay(takeRecordingBounds ?? getSelectedSourceBounds());
 				// The keystroke overlay needs the native keyboard hook in every cursor
 				// mode. In editable-overlay mode the cursor session already carries it;
@@ -2168,6 +2187,8 @@ export function registerIpcHandlers(
 				// proper, after the editable-overlay session has had a chance to start.
 				if (!preparing) void startKeystrokeKeyCapture();
 			} else {
+				// Always tear down on stop (or when the option is off), so a take that
+				// ends after the toggle was switched off cannot leave a hook behind.
 				hideKeystrokeOverlay();
 				takeRecordingBounds = null;
 				void stopKeystrokeKeyCapture();
@@ -2499,6 +2520,9 @@ export function registerIpcHandlers(
 		getMainWindow,
 		() => BrowserWindow.getAllWindows(),
 		(previous, next) => {
+			// Keep the module-level mirror in step with the durable setting, so a
+			// cursor session created on the next take installs the hook only if asked.
+			keystrokeKeysEnabled = next.keystrokeOverlayEnabled;
 			// Apple's picker bakes the exclusions into the filter it hands back, so a pick made
 			// before "Hide desktop icons" changed would still record the desktop the old way.
 			// Dropping it makes the HUD ask for a new pick instead of ignoring the toggle.
@@ -2518,6 +2542,9 @@ export function registerIpcHandlers(
 			}
 		},
 	);
+	// Seed the mirror from the persisted value: onChange only fires on later edits,
+	// so without this a restored "on" setting would still skip the hook on startup.
+	keystrokeKeysEnabled = recordingPrefs.get().keystrokeOverlayEnabled;
 
 	// Asked before every take starts. A disk that fills up mid-take used to be found only
 	// when the take was saved, and the take was lost with it.

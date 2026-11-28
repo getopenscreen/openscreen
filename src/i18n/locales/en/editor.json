@@ -119,6 +119,8 @@
 		"editableCursor": "Editable cursor",
 		"editableCursorTip": "On: editable cursor, with restyling and auto-zoom. Off: system cursor, recorded in the video.",
 		"autoZoom": "Auto-zoom after recording",
+		"keystrokeOverlay": "Show keystrokes",
+		"keystrokeOverlayTip": "Shows a live badge for each key during recording, on the recorded display. Off by default: it observes every key you type while recording.",
 		"hideDesktopIcons": "Hide desktop icons",
 		"hideDesktopIconsHintMac": "Leaves the desktop icons out of screen recordings. They stay on your desktop.",
 		"hideDesktopIconsHintWindows": "Covers the desktop icons while you record. They return when it stops.",

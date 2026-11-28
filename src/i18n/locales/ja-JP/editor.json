@@ -119,6 +119,8 @@
 		"editableCursor": "編集可能なカーソル",
 		"editableCursorTip": "オン：スタイルを変更でき、自動ズームも使える編集可能なカーソル。オフ：動画にそのまま記録されるシステムカーソル。",
 		"autoZoom": "録画後に自動ズーム",
+		"keystrokeOverlay": "Show keystrokes",
+		"keystrokeOverlayTip": "Shows a live badge for each key during recording, on the recorded display. Off by default: it observes every key you type while recording.",
 		"hideDesktopIcons": "デスクトップアイコンを隠す",
 		"hideDesktopIconsHintMac": "画面収録からデスクトップアイコンを除外します。デスクトップ上には残ります。",
 		"hideDesktopIconsHintWindows": "録画中はデスクトップアイコンを覆い隠します。録画が終わるとアイコンは元に戻ります。",

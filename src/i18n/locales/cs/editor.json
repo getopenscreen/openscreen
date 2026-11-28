@@ -119,6 +119,8 @@
 		"editableCursor": "Upravitelný kurzor",
 		"editableCursorTip": "Zapnuto: upravitelný kurzor, se změnou stylu a automatickým přiblížením. Vypnuto: systémový kurzor, zaznamenaný ve videu.",
 		"autoZoom": "Automatické přiblížení po nahrávání",
+		"keystrokeOverlay": "Show keystrokes",
+		"keystrokeOverlayTip": "Shows a live badge for each key during recording, on the recorded display. Off by default: it observes every key you type while recording.",
 		"hideDesktopIcons": "Skrýt ikony na ploše",
 		"hideDesktopIconsHintMac": "Vynechá ikony na ploše ze záznamů obrazovky. Na ploše vám zůstanou.",
 		"hideDesktopIconsHintWindows": "Zakryje ikony na ploše během nahrávání. Po jeho skončení se vrátí.",

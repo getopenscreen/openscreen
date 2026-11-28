@@ -30,6 +30,7 @@ const initial: Prefs = {
 	cursorCaptureMode: "editable-overlay",
 	hideDesktopIcons: false,
 	autoZoomEnabled: true,
+	keystrokeOverlayEnabled: false,
 };
 
 afterEach(() => {

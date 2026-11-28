@@ -119,6 +119,8 @@
 		"editableCursor": "편집 가능한 커서",
 		"editableCursorTip": "켜짐: 편집 가능한 커서, 스타일 변경과 자동 줌 가능. 꺼짐: 시스템 커서, 영상에 녹화됩니다.",
 		"autoZoom": "녹화 후 자동 확대",
+		"keystrokeOverlay": "Show keystrokes",
+		"keystrokeOverlayTip": "Shows a live badge for each key during recording, on the recorded display. Off by default: it observes every key you type while recording.",
 		"hideDesktopIcons": "바탕화면 아이콘 숨기기",
 		"hideDesktopIconsHintMac": "화면 녹화에서 바탕화면 아이콘을 제외합니다. 바탕화면에는 그대로 남아 있습니다.",
 		"hideDesktopIconsHintWindows": "녹화하는 동안 바탕화면 아이콘을 가립니다. 녹화가 끝나면 다시 나타납니다.",

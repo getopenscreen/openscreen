@@ -30,6 +30,11 @@ export interface RecordingPreferences {
 	 * behaviour it gates has been on for every such installation.
 	 */
 	autoZoomEnabled: boolean;
+	/**
+	 * Live on-screen keystroke badges during a take (Windows only). Off by default:
+	 * the hook observes every key typed while recording, so it must be opt-in.
+	 */
+	keystrokeOverlayEnabled: boolean;
 }
 
 export const DEFAULT_RECORDING_PREFERENCES: RecordingPreferences = {
@@ -44,6 +49,7 @@ export const DEFAULT_RECORDING_PREFERENCES: RecordingPreferences = {
 	cursorCaptureMode: "editable-overlay",
 	hideDesktopIcons: false,
 	autoZoomEnabled: true,
+	keystrokeOverlayEnabled: false,
 };
 
 export interface RecordingSourceDescriptor {
@@ -123,6 +129,10 @@ function parseRecording(raw: RawSettings): RecordingPreferences {
 				: DEFAULT_RECORDING_PREFERENCES.cursorCaptureMode,
 		hideDesktopIcons: bool(raw.hideDesktopIcons, DEFAULT_RECORDING_PREFERENCES.hideDesktopIcons),
 		autoZoomEnabled: bool(raw.autoZoomEnabled, DEFAULT_RECORDING_PREFERENCES.autoZoomEnabled),
+		keystrokeOverlayEnabled: bool(
+			raw.keystrokeOverlayEnabled,
+			DEFAULT_RECORDING_PREFERENCES.keystrokeOverlayEnabled,
+		),
 	};
 }
 

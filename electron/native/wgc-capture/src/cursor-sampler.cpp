@@ -516,11 +516,17 @@ int main(int argc, char* argv[]) {
     const HighResolutionTiming highResolutionTiming;
 
     if (argc < 2) {
-        std::cerr << "Usage: cursor-sampler <intervalMs> [windowHandle]" << std::endl;
+        std::cerr << "Usage: cursor-sampler <intervalMs> [windowHandle] [--keys]" << std::endl;
         return 1;
     }
 
     const int intervalMs = std::max(1, std::atoi(argv[1]));
+
+    // The low-level keyboard hook observes every key typed while a take is live,
+    // so it is opt-in: the caller passes --keys only when the keystroke overlay
+    // has been explicitly enabled. Without it the helper captures cursor samples
+    // alone and never touches the keyboard hook.
+    const bool captureKeys = argc >= 4 && std::string(argv[3]) == "--keys";
 
     HWND targetWindow = nullptr;
     if (argc >= 3) {
@@ -557,11 +563,14 @@ int main(int argc, char* argv[]) {
         return 1;
     }
 
-    // The keyboard hook feeds the keystroke overlay only, so its failure costs
-    // nothing the recording needs — warn and keep going rather than aborting.
-    g_keyHook = SetWindowsHookEx(WH_KEYBOARD_LL, LowLevelKeyboardProc, GetModuleHandle(nullptr), 0);
-    if (!g_keyHook) {
-        std::cerr << "SetWindowsHookEx(WH_KEYBOARD_LL) failed; no keystroke overlay" << std::endl;
+    // The keyboard hook feeds the keystroke overlay only, and is installed only
+    // when the caller opted in with --keys. Its failure costs nothing the
+    // recording needs — warn and keep going rather than aborting.
+    if (captureKeys) {
+        g_keyHook = SetWindowsHookEx(WH_KEYBOARD_LL, LowLevelKeyboardProc, GetModuleHandle(nullptr), 0);
+        if (!g_keyHook) {
+            std::cerr << "SetWindowsHookEx(WH_KEYBOARD_LL) failed; no keystroke overlay" << std::endl;
+        }
     }
 
     // Prime GetAsyncKeyState so the first poll doesn't return stale "since-last-call" bits

@@ -54,6 +54,12 @@ What the editable overlay captures depends on the platform:
 
 A Linux take that falls back to [browser capture](#native-vs-browser-capture) records the system cursor, whichever mode you picked.
 
+## Keystroke overlay (Windows, optional)
+
+On Windows you can show a short badge on screen for each key you press while recording. It is a **live hint for the person recording**: the badges are drawn on a capture-excluded overlay, so they stay out of the saved video on Windows 11 22H2 and later. Keys are not written to the recording or the project, so viewers cannot show them later.
+
+The setting is **off by default** — turn it on with the *Show keystrokes* row in the editor's Record mode. Enabling it installs a low-level keyboard hook for the duration of a take, which observes every key typed while recording; leave it off when recording sensitive input such as passwords. It works in both cursor modes.
+
 ## Recording controls
 
 - **Record / Stop** — its tooltip reads *Start recording* when idle (*Choose a screen or window to record* with no source picked), and a live `mm:ss` elapsed timer shows while recording (it turns amber if paused).
@@ -81,6 +87,7 @@ You don't have to start from the HUD. In the editor, switch the top bar to **Rec
 - **Source** — same screen/window picker, in a modal, or Apple's system picker on macOS 15.2 and later. On Linux this row also reads *Your system will ask what to share*, and the portal dialog does the choosing.
 - **System audio**, **Microphone**, **Camera** — each an on/off row; mic and camera expand to a device list, and the camera shows a live preview so you can frame yourself before going live.
 - **Editable cursor** — on means the editable overlay cursor, off means the plain system cursor.
+- **Show keystrokes** (Windows only, off by default) — shows a live badge for each key during a take. See [Keystroke overlay](#keystroke-overlay-windows-optional).
 
 **Start recording** opens the recording widget and closes the editor window; cancelling drops you back into Edit mode. This is also the starting point **New project → Screen recording** takes you to.
 

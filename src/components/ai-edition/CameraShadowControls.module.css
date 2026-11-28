@@ -1,0 +1,333 @@
+/* The camera shadow section of the Layout pane. Tokens from design/tokens/v4.css; the one fixed
+   colour is the stage the previews sit on, a stand-in for the wallpaper: it stays light in both
+   themes, because a shadow on the editor's own dark surface would show nothing. */
+
+.root {
+	--shadow-stage: #e7ecf2;
+	--shadow-stage-line: rgb(15 23 42 / 0.08);
+	--shadow-camera: linear-gradient(160deg, #f8fafc 0%, #cbd5e1 100%);
+	padding-bottom: 4px;
+}
+/* In the dark editor a light stage glares; a mid grey still shows a dark shadow plainly. */
+:global(:root[data-theme="dark"]) .root {
+	--shadow-stage: #9ba5b3;
+	--shadow-stage-line: rgb(15 23 42 / 0.14);
+	--shadow-camera: linear-gradient(160deg, #e2e8f0 0%, #aab4c2 100%);
+}
+
+/* ─── preset tiles ──────────────────────────────────────────────────────── */
+
+.tileStage {
+	position: relative;
+	display: grid;
+	place-items: center;
+	width: 52px;
+	height: 34px;
+	margin-top: 2px;
+	border-radius: 7px;
+	background: var(--shadow-stage);
+	/* Concentric with the tile's 10px radius across its 3px inset. */
+	box-shadow: inset 0 0 0 1px var(--shadow-stage-line);
+	overflow: hidden;
+}
+
+.tileCamera {
+	width: 20px;
+	height: 20px;
+	border-radius: 6px;
+	background: var(--shadow-camera);
+	outline: 1px solid rgb(0 0 0 / 0.1);
+	outline-offset: -1px;
+	transition: box-shadow var(--motion-base) var(--ease);
+}
+
+/* Marks the preset an edited shadow was tuned from: a static cue, never motion alone. */
+.editedDot {
+	position: absolute;
+	top: 4px;
+	right: 4px;
+	width: 6px;
+	height: 6px;
+	border-radius: var(--r-pill);
+	background: var(--accent);
+	box-shadow: 0 0 0 2px var(--shadow-stage);
+}
+
+/* ─── Customize disclosure ──────────────────────────────────────────────── */
+
+.disclosureRow {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	margin: 10px var(--sp-4) 0;
+}
+
+.disclosure {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	min-height: 32px;
+	margin-left: -6px;
+	padding: 0 8px 0 6px;
+	border: 0;
+	border-radius: var(--r-sm);
+	background: transparent;
+	color: var(--fg-2);
+	font: 500 13px/1.3 var(--font-body);
+	cursor: pointer;
+	transition: background var(--motion-fast) var(--ease), color var(--motion-fast) var(--ease);
+}
+.disclosure:hover:not(:disabled) {
+	background: color-mix(in oklab, var(--fg) 6%, transparent);
+	color: var(--fg);
+}
+.disclosure:focus-visible {
+	outline: 2px solid var(--brand);
+	outline-offset: 1px;
+}
+.disclosure:disabled {
+	opacity: 0.5;
+	cursor: not-allowed;
+}
+
+.chevron {
+	color: var(--muted);
+	transition: rotate var(--motion-base) var(--ease);
+}
+.disclosure[aria-expanded="true"] .chevron {
+	rotate: 90deg;
+}
+
+.badge {
+	padding: 1px 6px;
+	border-radius: var(--r-pill);
+	background: var(--accent-soft);
+	color: var(--fg-2);
+	font: 500 11px/16px var(--font-body);
+}
+
+.reset {
+	display: inline-flex;
+	align-items: center;
+	gap: 4px;
+	min-height: 28px;
+	margin-left: auto;
+	padding: 0 8px;
+	border: 0;
+	border-radius: var(--r-sm);
+	background: transparent;
+	color: var(--muted);
+	font: 500 12px/1 var(--font-body);
+	cursor: pointer;
+	transition: background var(--motion-fast) var(--ease), color var(--motion-fast) var(--ease),
+		scale var(--motion-fast) var(--ease);
+}
+.reset:hover:not(:disabled) {
+	background: color-mix(in oklab, var(--fg) 6%, transparent);
+	color: var(--fg);
+}
+.reset:active:not(:disabled) {
+	scale: 0.96;
+}
+.reset:focus-visible {
+	outline: 2px solid var(--brand);
+	outline-offset: 1px;
+}
+
+/* Height animates through the grid track, which can go to its content's size without a
+   measured height; the content fades a beat behind so it never shows clipped mid-way. */
+.collapse {
+	display: grid;
+	grid-template-rows: 0fr;
+	opacity: 0;
+	transition: grid-template-rows var(--motion-base) var(--ease), opacity var(--motion-fast) var(--ease);
+}
+.collapse[data-open="true"] {
+	grid-template-rows: 1fr;
+	opacity: 1;
+	transition: grid-template-rows var(--motion-base) var(--ease),
+		opacity var(--motion-base) var(--ease) 60ms;
+}
+.collapseInner {
+	min-height: 0;
+	overflow: hidden;
+}
+
+/* ─── position pad ──────────────────────────────────────────────────────── */
+
+.position {
+	margin: 8px var(--sp-4) 4px;
+}
+
+.positionHead {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	min-height: 20px;
+	margin-bottom: 6px;
+}
+.positionLabel {
+	margin-right: auto;
+	font: 500 13px/1.3 var(--font-body);
+	color: var(--fg-2);
+}
+.readout {
+	font: 400 12px/1 var(--font-mono);
+	font-variant-numeric: tabular-nums;
+	color: var(--muted);
+}
+.iconButton {
+	display: grid;
+	place-items: center;
+	width: 20px;
+	height: 20px;
+	border: 0;
+	border-radius: var(--r-xs);
+	background: transparent;
+	color: var(--muted);
+	cursor: pointer;
+}
+.iconButton:hover {
+	color: var(--fg);
+	background: var(--border-hi);
+}
+.iconButton:focus-visible {
+	outline: 2px solid var(--brand);
+	outline-offset: 1px;
+}
+
+.pad {
+	position: relative;
+	height: 132px;
+	border-radius: var(--r-md);
+	background:
+		radial-gradient(circle, var(--shadow-stage-line) 1px, transparent 1.5px) center / 12px 12px,
+		var(--shadow-stage);
+	box-shadow: inset 0 0 0 1px var(--shadow-stage-line);
+	overflow: hidden;
+	cursor: grab;
+	touch-action: none;
+	user-select: none;
+}
+.pad[data-dragging="true"] {
+	cursor: grabbing;
+}
+.pad[data-disabled="true"] {
+	opacity: 0.5;
+	cursor: not-allowed;
+}
+
+/* The axes the position snaps to; one lights up while the drag sits on it. */
+.axisX,
+.axisY {
+	position: absolute;
+	background: rgb(15 23 42 / 0.1);
+	transition: background var(--motion-fast) var(--ease);
+}
+.axisX {
+	left: 0;
+	right: 0;
+	top: 50%;
+	height: 1px;
+}
+.axisY {
+	top: 0;
+	bottom: 0;
+	left: 50%;
+	width: 1px;
+}
+.axisX[data-snapped="true"],
+.axisY[data-snapped="true"] {
+	background: var(--accent);
+}
+
+.padCamera {
+	position: absolute;
+	left: 50%;
+	top: 50%;
+	width: 56px;
+	height: 56px;
+	margin: -28px 0 0 -28px;
+	border-radius: 14px;
+	background: var(--shadow-camera);
+	outline: 1px solid rgb(0 0 0 / 0.1);
+	outline-offset: -1px;
+	/* Glides between presets; follows the pointer exactly while dragged. */
+	transition: box-shadow var(--motion-base) var(--ease);
+}
+
+.vector {
+	position: absolute;
+	left: 50%;
+	top: 50%;
+	overflow: visible;
+	pointer-events: none;
+}
+.vector line {
+	stroke: rgb(15 23 42 / 0.35);
+	stroke-width: 1;
+	stroke-dasharray: 2 3;
+}
+
+.handle {
+	position: absolute;
+	left: 50%;
+	top: 50%;
+	width: 16px;
+	height: 16px;
+	margin: -8px 0 0 -8px;
+	border-radius: var(--r-pill);
+	background: rgb(255 255 255 / 0.85);
+	box-shadow:
+		0 0 0 1.5px rgb(15 23 42 / 0.55),
+		0 1px 3px rgb(15 23 42 / 0.25);
+	transition: transform var(--motion-base) var(--ease), box-shadow var(--motion-fast) var(--ease);
+	cursor: inherit;
+}
+/* A bigger target than the dot, without moving it. */
+.handle::before {
+	content: "";
+	position: absolute;
+	inset: -12px;
+	border-radius: inherit;
+}
+.handle:focus-visible {
+	outline: none;
+	box-shadow:
+		0 0 0 1.5px rgb(15 23 42 / 0.55),
+		0 0 0 4px color-mix(in oklab, var(--brand) 45%, transparent);
+}
+.pad[data-dragging="true"] .handle,
+.pad[data-dragging="true"] .padCamera {
+	transition: none;
+}
+
+/* ─── colour ────────────────────────────────────────────────────────────── */
+
+.colorRow {
+	margin-top: 0;
+	padding-top: 4px;
+}
+
+/* Forced colours drop box-shadow, which is the handle's whole focus ring: give it a system
+   colour outline there, and the dot a border so it stays visible on the pad. */
+@media (forced-colors: active) {
+	.handle {
+		border: 2px solid CanvasText;
+	}
+	.handle:focus-visible {
+		outline: 2px solid Highlight;
+		outline-offset: 2px;
+	}
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.collapse,
+	.collapse[data-open="true"],
+	.chevron,
+	.tileCamera,
+	.padCamera,
+	.handle {
+		transition: none;
+	}
+}

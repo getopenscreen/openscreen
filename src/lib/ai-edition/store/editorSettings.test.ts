@@ -39,28 +39,91 @@ const baseDoc: AxcutDocument = {
 };
 
 describe("getEditorSettings", () => {
-	it("preserves the historical camera shadow by default and round-trips an independent strength", () => {
-		expect(getEditorSettings(baseDoc).webcamShadowIntensity).toBe(0.6);
-		for (const strength of [0, 0.3, 0.6, 0.9]) {
-			const saved = patchEditorSettings(baseDoc, {
-				webcamShadowIntensity: strength,
-				shadowIntensity: 0.3,
-			});
-			const reopened = getEditorSettings(JSON.parse(JSON.stringify(saved)));
-			expect(reopened.webcamShadowIntensity).toBe(strength);
-			expect(reopened.shadowIntensity).toBe(0.3);
-		}
+	it("reads a new project's camera shadow as the Soft preset", () => {
+		expect(getEditorSettings(baseDoc)).toMatchObject({
+			webcamShadowPreset: "soft",
+			webcamShadowOffsetX: 0,
+			webcamShadowOffsetY: 12,
+			webcamShadowBlur: 32,
+			webcamShadowSpread: 0,
+			webcamShadowOpacity: 0.35,
+			webcamShadowColor: "#000000",
+		});
 	});
+	// 0.6 drew the 35% shadow, and the strength scaled its opacity linearly.
 	it.each([
-		[-1, 0],
-		[5, 1],
-		["invalid", 0.6],
-		[null, 0.6],
-	])("bounds camera shadow %s as %s", (value, expected) => {
+		[0, 0],
+		[0.3, 0.175],
+		[0.6, 0.35],
+		[0.9, 0.525],
+		[5, 0.35 / 0.6],
+	])("reads a camera shadow strength %s from before the presets as %s opacity", (value, opacity) => {
+		const snap = getEditorSettings({ ...baseDoc, legacyEditor: { webcamShadowIntensity: value } });
+		expect(snap.webcamShadowOpacity).toBeCloseTo(opacity, 6);
+		expect(snap).toMatchObject({
+			webcamShadowPreset: null,
+			webcamShadowBlur: 32,
+			webcamShadowOffsetY: 12,
+		});
+	});
+	it("ignores a stored strength or opacity that is not a number", () => {
+		// `null` opacity must not hide a valid strength: 0 still means no shadow.
 		expect(
-			getEditorSettings({ ...baseDoc, legacyEditor: { webcamShadowIntensity: value } })
-				.webcamShadowIntensity,
-		).toBe(expected);
+			getEditorSettings({
+				...baseDoc,
+				legacyEditor: { webcamShadowIntensity: 0, webcamShadowOpacity: null },
+			}).webcamShadowOpacity,
+		).toBe(0);
+		// Neither readable: the project reads as the default Soft shadow.
+		expect(
+			getEditorSettings({ ...baseDoc, legacyEditor: { webcamShadowIntensity: "invalid" } }),
+		).toMatchObject({ webcamShadowPreset: "soft", webcamShadowOpacity: 0.35 });
+	});
+	it("keeps a preset cleared on purpose, even with no opacity stored", () => {
+		const saved = patchEditorSettings(baseDoc, { webcamShadowPreset: null, webcamShadowBlur: 70 });
+		expect(getEditorSettings(saved)).toMatchObject({
+			webcamShadowPreset: null,
+			webcamShadowBlur: 70,
+		});
+	});
+	it("round-trips a tuned camera shadow, opacity winning over an older strength", () => {
+		const tuned = {
+			webcamShadowPreset: "lifted" as const,
+			webcamShadowOffsetX: -6,
+			webcamShadowOffsetY: 30,
+			webcamShadowBlur: 70,
+			webcamShadowSpread: -8,
+			webcamShadowOpacity: 0.42,
+			webcamShadowColor: "#3b2414",
+		};
+		const saved = patchEditorSettings(
+			{ ...baseDoc, legacyEditor: { webcamShadowIntensity: 0.9 } },
+			tuned,
+		);
+		expect(getEditorSettings(JSON.parse(JSON.stringify(saved)))).toMatchObject(tuned);
+	});
+	it("bounds a hand-edited camera shadow", () => {
+		const snap = getEditorSettings({
+			...baseDoc,
+			legacyEditor: {
+				webcamShadowPreset: "neon",
+				webcamShadowOffsetX: 500,
+				webcamShadowOffsetY: -500,
+				webcamShadowBlur: -3,
+				webcamShadowSpread: 99,
+				webcamShadowOpacity: 4,
+				webcamShadowColor: "red",
+			},
+		});
+		expect(snap).toMatchObject({
+			webcamShadowPreset: null,
+			webcamShadowOffsetX: 80,
+			webcamShadowOffsetY: -80,
+			webcamShadowBlur: 0,
+			webcamShadowSpread: 40,
+			webcamShadowOpacity: 1,
+			webcamShadowColor: "#000000",
+		});
 	});
 	it("returns the defaults when the document has no legacyEditor", () => {
 		const snap = getEditorSettings(baseDoc);

@@ -210,7 +210,14 @@ export interface ProjectAppearanceDefaults {
 	webcamMirrored: boolean;
 	webcamReactiveZoom: boolean;
 	webcamSizePreset: number;
-	webcamShadowIntensity: number;
+	/** The camera shadow's preset and its tuned values. See `webcamShadowStyles.ts`. */
+	webcamShadowPreset: import("./webcamShadowStyles").WebcamShadowPresetId;
+	webcamShadowOffsetX: number;
+	webcamShadowOffsetY: number;
+	webcamShadowBlur: number;
+	webcamShadowSpread: number;
+	webcamShadowOpacity: number;
+	webcamShadowColor: string;
 	webcamAnchor: WebcamAnchor;
 	webcamBackgroundMode: "none" | "transparent" | "blur" | "custom";
 	webcamWallpaper: string;
@@ -257,7 +264,14 @@ export const DEFAULT_PROJECT_APPEARANCE: ProjectAppearanceDefaults = {
 	webcamMirrored: false,
 	webcamReactiveZoom: true,
 	webcamSizePreset: 40,
-	webcamShadowIntensity: 0.6,
+	// The "soft" preset: the camera shadow every project had before the presets.
+	webcamShadowPreset: "soft",
+	webcamShadowOffsetX: 0,
+	webcamShadowOffsetY: 12,
+	webcamShadowBlur: 32,
+	webcamShadowSpread: 0,
+	webcamShadowOpacity: 0.35,
+	webcamShadowColor: "#000000",
 	webcamAnchor: "bottom-right",
 	webcamBackgroundMode: "none",
 	webcamWallpaper: "/wallpapers/wallpaper11.jpg",
@@ -297,7 +311,14 @@ export const DEFAULT_PROJECT_APPEARANCE: ProjectAppearanceDefaults = {
  */
 export const SETTING_BOUNDS = {
 	shadowIntensity: [0, 1],
+	// Read from projects saved before the camera shadow presets; never written any more.
 	webcamShadowIntensity: [0, 1],
+	// Pixels at 1080, as `WEBCAM_SHADOW_BOUNDS` in webcamShadowStyles.ts (a test holds the two
+	// together); `WEBCAM_SHADOW_*_RANGE` in frame_geometry.rs holds the native side to them.
+	webcamShadowOffset: [-80, 80],
+	webcamShadowBlur: [0, 120],
+	webcamShadowSpread: [-40, 40],
+	webcamShadowOpacity: [0, 1],
 	backgroundBlur: [0, 1],
 	motionBlurAmount: [0, 1],
 	// `ROUNDNESS_SLIDER_MAX_PX` (src/native/paramUnits.ts); a test holds the two together.

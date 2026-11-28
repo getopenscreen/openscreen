@@ -449,14 +449,95 @@ pub fn background_blur_steps(amount: f32) -> Option<(usize, f32)> {
 pub(crate) const SHADOW_TUNING_REF_PX: f32 = 1080.0;
 pub(crate) const SCREEN_SHADOW_SPREAD_FRAC: f32 = 40.0 / SHADOW_TUNING_REF_PX;
 pub(crate) const SCREEN_SHADOW_OFFSET_FRAC: f32 = 16.0 / SHADOW_TUNING_REF_PX;
-pub(crate) const WEBCAM_SHADOW_SPREAD_FRAC: f32 = 32.0 / SHADOW_TUNING_REF_PX;
+/// The tuned camera shadow's blur width (the Soft preset's 32 px). It was named a spread like
+/// the screen's constant above, which is a blur too; the camera now has a real spread as well.
+pub(crate) const WEBCAM_SHADOW_BLUR_FRAC: f32 = 32.0 / SHADOW_TUNING_REF_PX;
 pub(crate) const WEBCAM_SHADOW_OFFSET_FRAC: f32 = 12.0 / SHADOW_TUNING_REF_PX;
-/// Opacité FIXE de l'ombre portée de la caméra (layout PiP uniquement). Contrairement à
-/// l'ombre de l'écran — dont l'opacité est pilotée par le slider Shadow (`shadow_scale`) —
-/// l'ombre de la caméra est une ombre légère NON paramétrable : même valeur quelle que soit
-/// la position du slider. Parité avec le preset PiP côté web (`compositeLayout.ts`,
-/// `rgba(0,0,0,0.35)`), dont l'ombre est elle aussi un forfait fixe et PiP-only.
+/// Opacity of the camera's tuned drop shadow (PiP layout only), the Soft preset's 35%. It is
+/// no longer the shadow's opacity: the scene's `webcamShadowStyle` carries its own, and the
+/// backends multiply this constant by `WebcamShadowPlan::strength`, which `webcam_shadow_plan`
+/// sets to that opacity over this one. The Shadow slider (`shadow_scale`) still only drives
+/// the screen's shadow.
 pub(crate) const WEBCAM_SHADOW_OPACITY: f32 = 0.35;
+/// Bounds of the camera shadow, as fractions of the 1080 px reference. They mirror
+/// `WEBCAM_SHADOW_BOUNDS` in src/lib/webcamShadowStyles.ts, so a hand-edited project cannot push
+/// the shadow off the frame or past what the pane offers.
+pub(crate) const WEBCAM_SHADOW_OFFSET_RANGE: (f32, f32) = (-80.0 / SHADOW_TUNING_REF_PX, 80.0 / SHADOW_TUNING_REF_PX);
+/// The blur floor is half a pixel AT THE 1080 REFERENCE, not in render pixels: the shader fades
+/// with `smoothstep(0, blur, d)`, undefined at a zero width, and a floor taken after scaling
+/// would collapse every blur under it in a small preview (1 px and 2 px both reaching the
+/// floor in a 270 px tall preview) while the export still told them apart.
+pub(crate) const WEBCAM_SHADOW_BLUR_RANGE: (f32, f32) = (0.5 / SHADOW_TUNING_REF_PX, 120.0 / SHADOW_TUNING_REF_PX);
+pub(crate) const WEBCAM_SHADOW_SPREAD_RANGE: (f32, f32) = (-40.0 / SHADOW_TUNING_REF_PX, 40.0 / SHADOW_TUNING_REF_PX);
+
+/// The camera shadow as `plan_frame` hands it to the backends: lengths as fractions of the
+/// frame's short side, and `strength` as the scene's opacity over `WEBCAM_SHADOW_OPACITY`, the
+/// factor the backends already multiply by.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct WebcamShadowPlan {
+    pub blur_frac: f32,
+    pub offset_frac: [f32; 2],
+    pub spread_frac: f32,
+    pub color: [f32; 3],
+    pub strength: f32,
+}
+
+impl WebcamShadowPlan {
+    /// The tuned 35% black shadow every scene had before the presets, at `strength`.
+    pub(crate) fn tuned(strength: f32) -> Self {
+        Self {
+            blur_frac: WEBCAM_SHADOW_BLUR_FRAC,
+            offset_frac: [0.0, WEBCAM_SHADOW_OFFSET_FRAC],
+            spread_frac: 0.0,
+            color: [0.0, 0.0, 0.0],
+            strength,
+        }
+    }
+}
+
+fn webcam_shadow_plan(effects: Option<&crate::scene::SceneEffects>) -> WebcamShadowPlan {
+    let finite = |v: f32, fallback: f32| if v.is_finite() { v } else { fallback };
+    let clamp = |v: f32, (lo, hi): (f32, f32)| finite(v, 0.0).clamp(lo, hi);
+    match effects.and_then(|e| e.webcam_shadow_style) {
+        Some(style) => WebcamShadowPlan {
+            blur_frac: clamp(style.blur_frac, WEBCAM_SHADOW_BLUR_RANGE),
+            offset_frac: [
+                clamp(style.offset_frac[0], WEBCAM_SHADOW_OFFSET_RANGE),
+                clamp(style.offset_frac[1], WEBCAM_SHADOW_OFFSET_RANGE),
+            ],
+            spread_frac: clamp(style.spread_frac, WEBCAM_SHADOW_SPREAD_RANGE),
+            color: style.color.map(|c| clamp(c, (0.0, 1.0))),
+            strength: clamp(style.opacity, (0.0, 1.0)) / WEBCAM_SHADOW_OPACITY,
+        },
+        // `webcam_shadow` was a strength where 0.6 drew the tuned shadow.
+        None => WebcamShadowPlan::tuned(
+            effects.and_then(|e| e.webcam_shadow).unwrap_or(0.6).clamp(0.0, 1.0) / 0.6,
+        ),
+    }
+}
+
+/// The rectangle a camera shadow is cast from: the camera's own, grown (or shrunk, with a
+/// negative `spread_px`) on every side, its corners following so a round camera stays round.
+/// `dst` is in the render target's normalised units, so its scale per pixel comes from `size_px`.
+pub(crate) fn spread_shadow_caster(
+    dst: [f32; 4],
+    size_px: [f32; 2],
+    radius_px: f32,
+    spread_px: f32,
+) -> ([f32; 4], [f32; 2], f32) {
+    if spread_px == 0.0 || size_px[0] <= 0.0 || size_px[1] <= 0.0 {
+        return (dst, size_px, radius_px);
+    }
+    // Never shrink past a pixel: a negative size would turn the rect inside out.
+    let spread = spread_px.max(0.5 - size_px[0].min(size_px[1]) / 2.0);
+    let (ux, uy) = (dst[2] / size_px[0], dst[3] / size_px[1]);
+    (
+        [dst[0] - spread * ux, dst[1] - spread * uy, dst[2] + 2.0 * spread * ux, dst[3] + 2.0 * spread * uy],
+        [size_px[0] + 2.0 * spread, size_px[1] + 2.0 * spread],
+        (radius_px + spread).max(0.0),
+    )
+}
+
 /// Taille de base du curseur, même convention (34 px réglés contre un cadre 1080).
 pub(crate) const CURSOR_BASE_SIZE_FRAC: f32 = 34.0 / SHADOW_TUNING_REF_PX;
 
@@ -1910,6 +1991,8 @@ pub struct FrameGeometry {
     pub show_screen: bool,
     /// Continuous PiP shadow weight through a layout change.
     pub webcam_shadow: f32,
+    /// The camera shadow's look; `webcam_shadow` above carries its strength through layouts.
+    pub webcam_shadow_style: WebcamShadowPlan,
     pub mb_taps: f32,
     pub mb_amount: f32,
     pub source_t: f32,
@@ -3711,11 +3794,13 @@ pub fn plan_frame(input: &FrameGeometryInput) -> FrameGeometry {
         Some(sample) => sample.preset != "camera-only" || sample.progress < 1.0,
         None => scene_preset.as_deref() != Some("camera-only"),
     });
+    let webcam_shadow_style = webcam_shadow_plan(input.scene.map(|scene| &scene.effects));
     FrameGeometry {
         show_screen,
         webcam_shadow: sampled_layout.as_ref().map(|s| s.webcam_shadow)
             .unwrap_or_else(|| if matches!(scene_preset.as_deref(), Some("dual-frame") | Some("vertical-stack") | Some("camera-only")) { 0.0 } else { 1.0 })
-            * input.scene.and_then(|scene| scene.effects.webcam_shadow).unwrap_or(0.6).clamp(0.0, 1.0) / 0.6,
+            * webcam_shadow_style.strength,
+        webcam_shadow_style,
         scene_preset,
         mb_taps,
         mb_amount,
@@ -5254,6 +5339,63 @@ mod tests {
             assert!((frame.webcam_shadow - baseline.webcam_shadow * scale).abs() < 1e-5);
             assert_eq!(frame.w_dst, baseline.w_dst);
         }
+    }
+
+    #[test]
+    fn webcam_shadow_style_reaches_the_plan_and_old_scenes_keep_the_tuned_shadow() {
+        let mut scene = golden_scene();
+        let cfg = crate::config::all().pop().expect("compositor config");
+        // A scene from before the presets: the tuned shadow, exactly.
+        let baseline = plan_frame(&golden_input(&scene, &cfg));
+        assert_eq!(baseline.webcam_shadow_style, WebcamShadowPlan::tuned(1.0));
+
+        scene.effects.webcam_shadow_style = Some(crate::scene::SceneWebcamShadow {
+            offset_frac: [-0.01, 0.03],
+            blur_frac: 0.08,
+            spread_frac: -0.01,
+            opacity: WEBCAM_SHADOW_OPACITY * 2.0,
+            color: [0.2, 0.4, 0.6],
+        });
+        let styled = plan_frame(&golden_input(&scene, &cfg));
+        let s = styled.webcam_shadow_style;
+        assert_eq!((s.offset_frac, s.blur_frac, s.spread_frac, s.color), ([-0.01, 0.03], 0.08, -0.01, [0.2, 0.4, 0.6]));
+        // Opacity is a strength over the tuned 35%, which every backend already multiplies by.
+        // Absolute weights, so a planner that suppressed the shadow (0 and 0) cannot pass.
+        assert!((baseline.webcam_shadow - 1.0).abs() < 1e-5, "{}", baseline.webcam_shadow);
+        assert!((styled.webcam_shadow - 2.0).abs() < 1e-5, "{}", styled.webcam_shadow);
+        // The shadow never moves the camera itself.
+        assert_eq!(styled.w_dst, baseline.w_dst);
+
+        // A hand-edited scene is held to the pane's ranges, and a NaN to nothing.
+        scene.effects.webcam_shadow_style = Some(crate::scene::SceneWebcamShadow {
+            offset_frac: [5.0, f32::NAN],
+            blur_frac: -1.0,
+            spread_frac: 9.0,
+            opacity: 7.0,
+            color: [2.0, -1.0, 0.5],
+        });
+        let s = plan_frame(&golden_input(&scene, &cfg)).webcam_shadow_style;
+        assert_eq!(s.offset_frac, [WEBCAM_SHADOW_OFFSET_RANGE.1, 0.0]);
+        assert_eq!(s.blur_frac, WEBCAM_SHADOW_BLUR_RANGE.0);
+        assert_eq!(s.spread_frac, WEBCAM_SHADOW_SPREAD_RANGE.1);
+        assert_eq!(s.color, [1.0, 0.0, 0.5]);
+        assert!((s.strength - 1.0 / WEBCAM_SHADOW_OPACITY).abs() < 1e-5);
+    }
+
+    #[test]
+    fn spread_grows_the_caster_on_every_side_and_never_inverts_it() {
+        // 200x100 px at 0.002 normalised units per pixel.
+        let dst = [0.5, 0.5, 0.4, 0.2];
+        let (d, px, r) = spread_shadow_caster(dst, [200.0, 100.0], 20.0, 10.0);
+        assert_eq!(px, [220.0, 120.0]);
+        assert_eq!(r, 30.0);
+        for (got, want) in d.iter().zip([0.48, 0.48, 0.44, 0.24]) {
+            assert!((got - want).abs() < 1e-6, "{d:?}");
+        }
+        let (_, px, r) = spread_shadow_caster(dst, [200.0, 100.0], 20.0, -500.0);
+        assert!(px[1] >= 1.0 - 1e-6 && px[0] > px[1], "{px:?}");
+        assert_eq!(r, 0.0);
+        assert_eq!(spread_shadow_caster(dst, [200.0, 100.0], 20.0, 0.0), (dst, [200.0, 100.0], 20.0));
     }
 
     /// Le JSON de la scène zoomée, brut : `tilted_golden_scene` n'en change QUE la
@@ -8674,6 +8816,7 @@ mod tests {
             show_screen: true,
             scene_preset: None,
             webcam_shadow: 1.0,
+            webcam_shadow_style: WebcamShadowPlan::tuned(1.0),
             mb_taps: 1.0,
             mb_amount: 0.0,
             source_t: 0.0,

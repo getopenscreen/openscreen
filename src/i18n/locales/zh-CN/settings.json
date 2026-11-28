@@ -335,7 +335,7 @@
 			"ambientTip": "四周均匀的光晕，如同阴天下",
 			"customize": "自定义",
 			"edited": "已编辑",
-			"custom": "自定义",
+			"custom": "已自定义",
 			"reset": "重置",
 			"resetTip": "恢复为“{{preset}}”",
 			"position": "位置",

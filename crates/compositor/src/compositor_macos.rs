@@ -3955,8 +3955,8 @@ mod tests {
     /// Scène PiP minimale. `effect` est le JSON de `webcamEffect` (`"null"` pour aucun).
     ///
     /// `effects.shadow` vaut 0 À DESSEIN : ce curseur ne pilote plus que l'ombre de l'écran,
-    /// alors que celle du PiP est fixe (`WEBCAM_SHADOW_OPACITY`) et ne dépend que de
-    /// `cfg.shadow`. Le mettre à zéro est donc ce qui isole les deux — sinon un test sur
+    /// alors que celle du PiP suit `webcamShadowStyle` (absent ici : ombre réglée,
+    /// `WEBCAM_SHADOW_OPACITY`) et ne s'allume qu'avec `cfg.shadow`. Le mettre à zéro est donc ce qui isole les deux — sinon un test sur
     /// `cfg.shadow` mesure les deux ombres à la fois et ne dit plus rien de la caméra.
     fn pip_scene_json(effect: &str) -> String {
         format!(

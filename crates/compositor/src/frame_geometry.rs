@@ -449,13 +449,15 @@ pub fn background_blur_steps(amount: f32) -> Option<(usize, f32)> {
 pub(crate) const SHADOW_TUNING_REF_PX: f32 = 1080.0;
 pub(crate) const SCREEN_SHADOW_SPREAD_FRAC: f32 = 40.0 / SHADOW_TUNING_REF_PX;
 pub(crate) const SCREEN_SHADOW_OFFSET_FRAC: f32 = 16.0 / SHADOW_TUNING_REF_PX;
-pub(crate) const WEBCAM_SHADOW_SPREAD_FRAC: f32 = 32.0 / SHADOW_TUNING_REF_PX;
+/// The tuned camera shadow's blur width (the Soft preset's 32 px). It was named a spread like
+/// the screen's constant above, which is a blur too; the camera now has a real spread as well.
+pub(crate) const WEBCAM_SHADOW_BLUR_FRAC: f32 = 32.0 / SHADOW_TUNING_REF_PX;
 pub(crate) const WEBCAM_SHADOW_OFFSET_FRAC: f32 = 12.0 / SHADOW_TUNING_REF_PX;
-/// Opacité FIXE de l'ombre portée de la caméra (layout PiP uniquement). Contrairement à
-/// l'ombre de l'écran — dont l'opacité est pilotée par le slider Shadow (`shadow_scale`) —
-/// l'ombre de la caméra est une ombre légère NON paramétrable : même valeur quelle que soit
-/// la position du slider. Parité avec le preset PiP côté web (`compositeLayout.ts`,
-/// `rgba(0,0,0,0.35)`), dont l'ombre est elle aussi un forfait fixe et PiP-only.
+/// Opacity of the camera's tuned drop shadow (PiP layout only), the Soft preset's 35%. It is
+/// no longer the shadow's opacity: the scene's `webcamShadowStyle` carries its own, and the
+/// backends multiply this constant by `WebcamShadowPlan::strength`, which `webcam_shadow_plan`
+/// sets to that opacity over this one. The Shadow slider (`shadow_scale`) still only drives
+/// the screen's shadow.
 pub(crate) const WEBCAM_SHADOW_OPACITY: f32 = 0.35;
 /// Bounds of the camera shadow, as fractions of the 1080 px reference. They mirror
 /// `WEBCAM_SHADOW_BOUNDS` in src/lib/webcamShadowStyles.ts, so a hand-edited project cannot push
@@ -484,7 +486,7 @@ impl WebcamShadowPlan {
     /// The tuned 35% black shadow every scene had before the presets, at `strength`.
     pub(crate) fn tuned(strength: f32) -> Self {
         Self {
-            blur_frac: WEBCAM_SHADOW_SPREAD_FRAC,
+            blur_frac: WEBCAM_SHADOW_BLUR_FRAC,
             offset_frac: [0.0, WEBCAM_SHADOW_OFFSET_FRAC],
             spread_frac: 0.0,
             color: [0.0, 0.0, 0.0],

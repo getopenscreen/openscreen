@@ -5329,8 +5329,8 @@ mod tests {
     /// aucun).
     ///
     /// `effects.shadow` vaut 0 A DESSEIN : ce curseur ne pilote plus que l'ombre
-    /// de l'ecran, alors que celle du PiP est fixe (`WEBCAM_SHADOW_OPACITY`) et ne
-    /// depend que de `cfg.shadow`. Le mettre a zero est donc ce qui isole les
+    /// de l'ecran, alors que celle du PiP suit `webcamShadowStyle` (absent ici : ombre
+    /// reglee, `WEBCAM_SHADOW_OPACITY`) et ne s'allume qu'avec `cfg.shadow`. Le mettre a zero est donc ce qui isole les
     /// deux — sinon un test sur `cfg.shadow` mesure les deux ombres a la fois et
     /// ne dit plus rien de la camera.
     fn pip_scene_json(effect: &str) -> String {

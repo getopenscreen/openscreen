@@ -5,6 +5,7 @@ import {
 	useCallback,
 	useEffect,
 	useId,
+	useLayoutEffect,
 	useRef,
 	useState,
 } from "react";
@@ -102,6 +103,13 @@ export function CameraShadowControls({
 	const { preset, edited } = describeWebcamShadow(values, settings.webcamShadowPreset);
 	const [open, setOpen] = useState(readOpen);
 	const bodyId = useId();
+	// Closed, the body's controls are out of the tab order and the accessibility tree. `inert`
+	// is set on the element rather than passed as a prop: React 18 doesn't know it and renders
+	// any string as the attribute, while React 19 reads it as a boolean and drops `""`.
+	const bodyRef = useRef<HTMLDivElement>(null);
+	useLayoutEffect(() => {
+		if (bodyRef.current) bodyRef.current.inert = !open;
+	}, [open]);
 
 	const toggle = () => {
 		setOpen((was) => {
@@ -197,14 +205,7 @@ export function CameraShadowControls({
 				) : null}
 			</div>
 
-			<div
-				id={bodyId}
-				className={css.collapse}
-				data-open={open}
-				// Closed, its controls are out of the tab order and the accessibility tree. React 18
-				// does not know `inert`, so it goes through as a plain attribute.
-				{...(open ? {} : { inert: "" })}
-			>
+			<div id={bodyId} ref={bodyRef} className={css.collapse} data-open={open}>
 				<div className={css.collapseInner}>
 					<PositionPad
 						values={values}

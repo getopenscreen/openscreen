@@ -390,6 +390,17 @@ describe("LayoutPane picture-in-picture camera", () => {
 		expect(stored().shadowIntensity).toBeUndefined();
 	});
 
+	it("keeps a closed Customize body inert, and an open one interactive", () => {
+		renderLayout(seedProject(true));
+		const customize = screen.getByRole("button", { name: "Customize" });
+		const body = document.getElementById(customize.getAttribute("aria-controls") ?? "");
+		expect(body?.inert).toBe(true);
+		fireEvent.click(customize);
+		expect(body?.inert).toBe(false);
+		fireEvent.click(customize);
+		expect(body?.inert).toBe(true);
+	});
+
 	it("opens Customize and tunes the picked preset, which stays pressed as edited", () => {
 		renderLayout(seedProject(true));
 		const customize = screen.getByRole("button", { name: "Customize" });

@@ -129,6 +129,12 @@ what `shaders.hlsl` actually implements:
    floating bubble, no shadow). The strength fades to zero as the camera
    enters Full Camera mode
    ([`compositor.rs:2118`](../../crates/compositor/src/compositor_windows.rs), `mode = 12`).
+   Its look comes from the scene's `effects.webcamShadowStyle` (offset, blur and spread as
+   fractions of the frame's short side, plus colour and opacity), which `webcam_shadow_plan`
+   clamps to the pane's bounds
+   ([`frame_geometry.rs`](../../crates/compositor/src/frame_geometry.rs)). A scene from
+   before the presets has no `webcamShadowStyle` and keeps the tuned 35% black shadow,
+   scaled by `webcamShadow`.
 6. **Webcam video.** UV rectangle derived from the destination aspect, with
    mirror, mask shape (rectangle / circle / square / rounded), and reactive
    scale applied

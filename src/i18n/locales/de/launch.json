@@ -99,6 +99,8 @@
 		"close": "Schließen",
 		"micLevel": "Eingangspegel",
 		"micHint": "Sprich, um dein Mikrofon zu prüfen",
+		"micGain": "Mikrofonlautstärke",
+		"systemGain": "Computerlautstärke",
 		"noMicrophones": "Kein Mikrofon gefunden",
 		"preview": "Vorschau",
 		"previewUnavailable": "Vorschau nicht verfügbar",

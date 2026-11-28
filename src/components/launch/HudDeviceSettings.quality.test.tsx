@@ -19,6 +19,9 @@ const labels: HudDeviceSettingsLabels = {
 	camera: "Camera",
 	micLevel: "Input level",
 	micHint: "Speak to check",
+	micGain: "Microphone volume",
+	systemAudio: "System audio",
+	systemGain: "Computer volume",
 	noMicrophones: "No microphone found",
 	searching: "Searching...",
 	noCameras: "No camera found",
@@ -55,6 +58,10 @@ function renderPanel(overrides: Partial<Parameters<typeof HudDeviceSettings>[0]>
 				checkingForUpdates={false}
 				cameraQuality="1440p"
 				onSelectCameraQuality={onSelectCameraQuality}
+				micGainDb={0}
+				systemGainDb={0}
+				onMicGainChange={vi.fn()}
+				onSystemGainChange={vi.fn()}
 				onSelectMic={vi.fn()}
 				onSelectCamera={vi.fn()}
 				onCheckForUpdates={vi.fn()}

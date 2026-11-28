@@ -99,6 +99,8 @@
 		"close": "关闭",
 		"micLevel": "输入音量",
 		"micHint": "说话试试，检查麦克风是否正常",
+		"micGain": "麦克风音量",
+		"systemGain": "电脑声音音量",
 		"noMicrophones": "未找到麦克风",
 		"preview": "预览",
 		"previewUnavailable": "预览不可用",

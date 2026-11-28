@@ -126,6 +126,7 @@ export function LaunchWindow() {
 		paused,
 		saving,
 		elapsedSeconds,
+		startingCountdown,
 		toggleRecording,
 		togglePaused,
 		canPauseRecording,
@@ -139,6 +140,10 @@ export function LaunchWindow() {
 		setMicrophoneDeviceName,
 		systemAudioEnabled,
 		setSystemAudioEnabled,
+		micGainDb,
+		setMicGainDb,
+		systemAudioGainDb,
+		setSystemAudioGainDb,
 		webcamEnabled,
 		setWebcamEnabled,
 		webcamDeviceId,
@@ -195,7 +200,11 @@ export function LaunchWindow() {
 
 	const isVertical = trayLayout === "vertical";
 	const isPopoverOpen = isLanguageMenuOpen || isDeviceSettingsOpen;
-	const controlsLocked = recording || saving;
+	// Lock from the record press through the countdown (including the Linux portal
+	// preparation window) until recording starts. The countdown captured an earlier
+	// `startRecording` closure, so a trim changed mid-countdown would show on the
+	// slider but be ignored by the take.
+	const controlsLocked = recording || saving || startingCountdown;
 
 	const settingsTriggerRef = useRef<HTMLButtonElement | null>(null);
 	const languageTriggerRef = useRef<HTMLButtonElement | null>(null);
@@ -974,6 +983,8 @@ export function LaunchWindow() {
 			micDeviceId?: string;
 			micDeviceName?: string;
 			systemAudioEnabled?: boolean;
+			micGainDb?: number;
+			systemAudioGainDb?: number;
 			cursorCaptureMode?: "editable-overlay" | "system";
 		}) => {
 			void window.electronAPI?.setRecordingPrefs?.(patch).catch((error) => {
@@ -989,6 +1000,27 @@ export function LaunchWindow() {
 		setSystemAudioEnabled(next);
 		persistRecordingPrefs({ systemAudioEnabled: next });
 	}, [controlsLocked, persistRecordingPrefs, setSystemAudioEnabled, systemAudioEnabled]);
+
+	// Same guard as the camera quality picker: the gear is disabled mid-take but
+	// an open panel stays mounted. The trim rides the NEXT take's request, so a
+	// change here never retunes the one in flight.
+	const handleMicGainChange = useCallback(
+		(db: number) => {
+			if (controlsLocked) return;
+			setMicGainDb(db);
+			persistRecordingPrefs({ micGainDb: db });
+		},
+		[controlsLocked, persistRecordingPrefs, setMicGainDb],
+	);
+
+	const handleSystemGainChange = useCallback(
+		(db: number) => {
+			if (controlsLocked) return;
+			setSystemAudioGainDb(db);
+			persistRecordingPrefs({ systemAudioGainDb: db });
+		},
+		[controlsLocked, persistRecordingPrefs, setSystemAudioGainDb],
+	);
 
 	const toggleCursorMode = useCallback(() => {
 		if (controlsLocked) return;
@@ -1206,6 +1238,9 @@ export function LaunchWindow() {
 			camera: t("webcam.cameraDevice"),
 			micLevel: t("deviceSettings.micLevel"),
 			micHint: t("deviceSettings.micHint"),
+			micGain: t("deviceSettings.micGain"),
+			systemAudio: t("audio.systemAudio"),
+			systemGain: t("deviceSettings.systemGain"),
 			noMicrophones: t("deviceSettings.noMicrophones"),
 			searching: t("webcam.searching"),
 			noCameras: t("webcam.noneFound"),
@@ -1467,6 +1502,10 @@ export function LaunchWindow() {
 								checkingForUpdates={isCheckingForUpdates}
 								cameraQuality={webcamQuality}
 								onSelectCameraQuality={handleSelectCameraQuality}
+								micGainDb={micGainDb}
+								systemGainDb={systemAudioGainDb}
+								onMicGainChange={handleMicGainChange}
+								onSystemGainChange={handleSystemGainChange}
 								onSelectMic={handleSelectMicDevice}
 								onSelectCamera={handleSelectCameraDevice}
 								onCheckForUpdates={handleCheckForUpdates}

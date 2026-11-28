@@ -99,6 +99,8 @@
 		"close": "Chiudi",
 		"micLevel": "Livello di ingresso",
 		"micHint": "Parla per testare il microfono",
+		"micGain": "Volume del microfono",
+		"systemGain": "Volume del computer",
 		"noMicrophones": "Nessun microfono trovato",
 		"preview": "Anteprima",
 		"previewUnavailable": "Anteprima non disponibile",

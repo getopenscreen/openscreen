@@ -99,6 +99,8 @@
 		"close": "Zavřít",
 		"micLevel": "Úroveň vstupu",
 		"micHint": "Mluvte pro kontrolu mikrofonu",
+		"micGain": "Hlasitost mikrofonu",
+		"systemGain": "Hlasitost zvuku počítače",
 		"noMicrophones": "Mikrofon nenalezen",
 		"preview": "Náhled",
 		"previewUnavailable": "Náhled nedostupný",

@@ -99,6 +99,8 @@
 		"close": "Close",
 		"micLevel": "Input level",
 		"micHint": "Speak to check your microphone",
+		"micGain": "Microphone volume",
+		"systemGain": "Computer volume",
 		"noMicrophones": "No microphone found",
 		"preview": "Preview",
 		"previewUnavailable": "Preview unavailable",

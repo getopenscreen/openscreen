@@ -99,6 +99,8 @@
 		"close": "閉じる",
 		"micLevel": "入力レベル",
 		"micHint": "マイクをテストするには話してください",
+		"micGain": "マイク音量",
+		"systemGain": "パソコンの音量",
 		"noMicrophones": "マイクが見つかりません",
 		"preview": "プレビュー",
 		"previewUnavailable": "プレビューを利用できません",

@@ -23,7 +23,7 @@ pub struct TextAnimationState {
     pub scale: f32,
     pub translate_x: f32,
     pub translate_y: f32,
-    /// Fraction du bloc révélée depuis la gauche (machine à écrire). 1 = tout visible.
+    /// Fraction horizontale du bloc révélée (machine à écrire, selon la direction du texte). 1 = tout visible.
     pub reveal: f32,
 }
 
@@ -199,7 +199,7 @@ mod tests {
     }
 
     #[test]
-    fn typewriter_reveals_linearly_and_only_from_the_left() {
+    fn typewriter_reveals_linearly_without_fading() {
         for (at, expected) in [(0.0, 0.0), (175.0, 0.25), (350.0, 0.5), (700.0, 1.0)] {
             let s = text_animation_state(Some("typewriter"), at, LONG);
             assert!((s.reveal - expected).abs() < 1e-3, "à {at}ms : {}", s.reveal);

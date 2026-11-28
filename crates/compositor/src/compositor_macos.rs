@@ -5584,4 +5584,116 @@ mod tests {
         assert_eq!(matrix_swizzle(AVCOL_SPC_BT709, false), None);
         assert_eq!(matrix_swizzle(AVCOL_SPC_BT2020_CL, true), None);
     }
+
+    #[test]
+    fn rtl_typewriter_reveals_from_the_right_edge_for_arabic_and_mixed_captions() {
+        let Ok(gpu) = crate::d3d::Gpu::create(false) else {
+            eprintln!("pas de device Metal — test sauté");
+            return;
+        };
+        let (w, h) = (640u32, 180u32);
+        let comp = super::Compositor::new_sized(&gpu, w, h).expect("compositeur");
+        let screen = FakeFrame::new(64, 64, |_, _| 32);
+        let cfg = fx_cfg();
+        let render = |annotations: serde_json::Value, t: f32| -> Vec<u8> {
+            let mut json = shader_fx_json(serde_json::json!([]), annotations);
+            json["background"] = serde_json::json!({"kind": "color", "color": "#000000"});
+            json["output"] = serde_json::json!({"width": w, "height": h, "fps": null});
+            let scene = Scene::from_json(&json.to_string()).expect("scène");
+            comp.set_live_params(live_params_from_scene(&scene));
+            comp.set_scene(Some(scene));
+            comp.set_timeline_time(Some(t));
+            comp.set_programme_time(Some(t));
+            unsafe { comp.compose_frame(screen.as_ptr(), screen.as_ptr(), 0.0, &cfg) }
+                .expect("compose");
+            unsafe { comp.readback_direct() }.expect("readback").2
+        };
+        let caption_json = |content: &str, align: &str| {
+            serde_json::json!([{
+                "id": "tw", "startSec": 0.0, "endSec": 10.0, "kind": "text", "space": "frame",
+                "x": 0.1, "y": 0.1, "w": 0.8, "h": 0.8, "zIndex": 0,
+                "text": {
+                    "content": content, "color": "#ffffff", "backgroundColor": "transparent",
+                    "fontSizeRel": 0.22, "fontFamily": "Inter", "fontWeight": "bold",
+                    "fontStyle": "normal", "textDecoration": "none", "textAlign": align,
+                    "animation": "typewriter",
+                },
+            }])
+        };
+        let ink_x_bounds = |rgba: &[u8], bare: &[u8]| -> Option<(u32, u32)> {
+            let mut bounds: Option<(u32, u32)> = None;
+            for y in 0..h {
+                for x in 0..w {
+                    let i = ((y * w + x) * 4) as usize;
+                    if (0..3).any(|c| rgba[i + c].abs_diff(bare[i + c]) > 16) {
+                        bounds = Some(match bounds {
+                            Some((lo, hi)) => (lo.min(x), hi.max(x)),
+                            None => (x, x),
+                        });
+                    }
+                }
+            }
+            bounds
+        };
+
+        let bare = render(serde_json::json!([]), 2.0);
+        let mid = w / 2;
+
+        // Légendes RTL centrées (arabe pur, ponctué et mêlé de latin) : à reveal = 0.5
+        // (350 ms sur 700 ms), toute l'encre est dans la moitié droite et partage son bord droit
+        // avec l'état entièrement révélé.
+        for caption in ["مرحبا بالعالم", "تسجيل الشاشة!", "مرحبا OpenScreen!"] {
+            let full = render(caption_json(caption, "center"), 2.0);
+            let half = render(caption_json(caption, "center"), 0.35);
+            let (x0_full, x1_full) = ink_x_bounds(&full, &bare).expect("encre à t=2s");
+            let (x0_half, x1_half) = ink_x_bounds(&half, &bare).expect("encre à reveal=0.5");
+            assert!(
+                x0_full + 15 < mid && x1_full > mid + 15,
+                "{caption} : le bloc centré devrait enjamber le milieu ({x0_full}..{x1_full})"
+            );
+            assert!(
+                x0_half >= mid - 1,
+                "{caption} : à reveal=0.5 de l'encre apparaît à gauche du milieu ({x0_half}..{x1_half})"
+            );
+            assert!(
+                x1_half.abs_diff(x1_full) <= 1,
+                "{caption} : bord droit déplacé entre reveal=0.5 ({x1_half}) et reveal=1 ({x1_full})"
+            );
+        }
+
+        // Légendes RTL alignées à gauche (lignes 1 et 2 de la table de revue) : le premier mot
+        // arabe est posé à droite de la suite (« OpenScreen! » ou « الشاشة! ») et se dévoile en
+        // premier quand le balayage atteint le texte, jamais `!` d'abord.
+        for (first_word, full_caption) in [
+            ("مرحبا", "مرحبا OpenScreen!"),
+            ("تسجيل", "تسجيل الشاشة!"),
+        ] {
+            let ar_full = render(caption_json(first_word, "left"), 2.0);
+            let mix_full = render(caption_json(full_caption, "left"), 2.0);
+            let (ar_x0, ar_x1) = ink_x_bounds(&ar_full, &bare).expect(first_word);
+            let (_, mix_x1) = ink_x_bounds(&mix_full, &bare).expect(full_caption);
+            let ar_w = ar_x1 - ar_x0;
+            assert!(
+                mix_x1 > ar_x1 + 25,
+                "{full_caption} : « {first_word} » devrait être poussé à droite ({ar_x1} -> {mix_x1})"
+            );
+            let (box_x1, box_w) = (0.9 * w as f32, 0.8 * w as f32);
+            let cut_x = (mix_x1 - ar_w / 2) as f32;
+            let r = ((box_x1 - cut_x) / box_w).clamp(0.05, 0.95);
+            let mix_early = render(caption_json(full_caption, "left"), r * 0.7);
+            let (early_x0, early_x1) =
+                ink_x_bounds(&mix_early, &bare).expect("début du balayage RTL");
+            assert!(
+                early_x1.abs_diff(mix_x1) <= 1 && early_x0 + 8 >= mix_x1 - ar_w,
+                "{full_caption} : « {first_word} » devrait se dévoiler à droite avant la fin : ({early_x0}..{early_x1}) vs fin {mix_x1}"
+            );
+        }
+
+        // Témoin LTR : à reveal = 0.5, l'encre reste dans la moitié gauche, bord gauche inchangé.
+        let ltr_full = render(caption_json("Hello OpenScreen!", "center"), 2.0);
+        let ltr_half = render(caption_json("Hello OpenScreen!", "center"), 0.35);
+        let (lx0_full, _) = ink_x_bounds(&ltr_full, &bare).expect("LTR plein");
+        let (lx0_half, lx1_half) = ink_x_bounds(&ltr_half, &bare).expect("LTR reveal=0.5");
+        assert!(lx1_half <= mid + 1 && lx0_half.abs_diff(lx0_full) <= 1);
+    }
 }

@@ -32,7 +32,7 @@ anyhow.workspace = true
 wgpu.workspace = true
 pollster.workspace = true
 cosmic-text.workspace = true
-unicode-bidi = "0.3.18"
+unicode-bidi.workspace = true
 ort = { workspace = true, optional = true }
 ndarray = { workspace = true, optional = true }
 serde.workspace = true

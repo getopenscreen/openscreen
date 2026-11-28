@@ -34,6 +34,7 @@ image = { version = "0.25", default-features = false, features = ["jpeg", "png"]
 wgpu = { version = "24", features = ["wgsl"] }
 pollster = "0.4"
 cosmic-text = "0.19"
+unicode-bidi = "0.3.18"
 # Inference for the webcam segmentation mask. CPU execution provider only: measured on the
 # target integrated GPU it costs +0.47 ms/frame against DirectML's +1.03, its cost does not
 # scale with input resolution, and choosing it deletes the whole D3D11<->D3D12 interop

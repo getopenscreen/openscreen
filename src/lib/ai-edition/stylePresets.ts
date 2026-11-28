@@ -342,6 +342,8 @@ export function parseStylePresetAppearance(value: unknown): StylePresetAppearanc
 			// Presets written before the option existed gave clicks no impact.
 			clickImpact:
 				cursor.clickImpact === undefined ? false : readBoolean(cursor, "clickImpact", "cursor."),
+			touchTrail:
+				cursor.touchTrail === undefined ? false : readBoolean(cursor, "touchTrail", "cursor."),
 			// Same for the sound: a preset written before it existed stays silent.
 			clickSound:
 				cursor.clickSound === undefined ? false : readBoolean(cursor, "clickSound", "cursor."),
@@ -445,6 +447,7 @@ export const LOOK_LEGACY_EDITOR_KEYS = [
 	// A project saved before the kinds could be picked holds its look here instead.
 	"cursorAlwaysArrow",
 	"cursorClickImpact",
+	"cursorTouchTrail",
 	"cursorClickSound",
 	"cursorClickSoundGainDb",
 	"cursorShow",
@@ -464,6 +467,7 @@ export function stylePresetLegacyEditor(appearance: StylePresetAppearance): Fiel
 		cursorModel3d: cursor.model3d,
 		cursorAsArrow: cursor.asArrow,
 		cursorClickImpact: cursor.clickImpact,
+		cursorTouchTrail: cursor.touchTrail,
 		cursorClickSound: cursor.clickSound,
 		cursorClickSoundGainDb: cursor.clickSoundGainDb,
 	};

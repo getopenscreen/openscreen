@@ -662,6 +662,9 @@ impl TextRasterizer {
             .ok_or_else(|| anyhow!("CGColorCreate a renvoyé NULL"))?;
 
         // --- alignement ---
+        // La direction de base reste au défaut CoreText (`kCTWritingDirectionNatural`), qui
+        // résout chaque paragraphe selon son premier caractère fort (UAX #9 P2/P3) sans forcer
+        // en RTL une légende anglaise contenant un mot arabe ou hébreu.
         let alignment: u8 = ct_alignment(&spec.align);
         let settings = [CTParagraphStyleSetting {
             spec: K_CT_PARAGRAPH_STYLE_SPECIFIER_ALIGNMENT,
@@ -1148,6 +1151,34 @@ mod tests {
         assert!(
             (c1_bottom - c3_bottom).abs() > 1.0 && (c1_top - c3_top).abs() > 1.0,
             "le centrage devrait déplacer les deux arêtes"
+        );
+    }
+
+    #[test]
+    fn mixed_ltr_caption_with_rtl_word_keeps_ltr_trailing_punctuation() {
+        let mut base = spec("Welcome to مرحبا");
+        base.align = "left".into();
+        base.box_px = [900, 120];
+        let mut punctuated = base.clone();
+        punctuated.content = "Welcome to مرحبا.......".into();
+
+        let (Some((px_base, w, h)), Some((px_punct, _, _))) =
+            (raster_bgra(&base), raster_bgra(&punctuated))
+        else {
+            return;
+        };
+        let (x0_base, _, x1_base, _) = ink_bounds(&px_base, w, h);
+        let (x0_punct, _, x1_punct, _) = ink_bounds(&px_punct, w, h);
+        let prefix_end = (x0_base + 80).min(w);
+        let prefix_unchanged = (0..h).all(|y| {
+            (x0_base..prefix_end).all(|x| {
+                let i = (y * w + x) * 4 + 3;
+                px_base[i].abs_diff(px_punct[i]) <= 2
+            })
+        });
+        assert!(
+            prefix_unchanged && x1_punct > x1_base + 10,
+            "la ponctuation finale d'une phrase LTR doit s'ajouter à droite sans décaler le préfixe : ({x0_base}..{x1_base}) vs ({x0_punct}..{x1_punct})"
         );
     }
 }

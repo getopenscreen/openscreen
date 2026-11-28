@@ -1001,6 +1001,7 @@ dependencies = [
  "pollster",
  "serde",
  "serde_json",
+ "unicode-bidi",
  "wgpu",
  "wgpu-hal",
  "windows",

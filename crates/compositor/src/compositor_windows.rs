@@ -3296,11 +3296,14 @@ impl Compositor {
                     if reveal <= 0.0 {
                         continue;
                     }
+                    let is_rtl = crate::text_anim::is_rtl_text(&text.content);
+                    let (reveal_dst, reveal_src) =
+                        crate::text_anim::reveal_quad(ax, ay, aw, ah, reveal, is_rtl);
                     self.ctx.PSSetShaderResources(2, Some(&[Some(srv)]));
                     self.draw_solid(&LayerCB {
-                        dst: [ax, ay, aw * reveal, ah],
-                        src: [0.0, 0.0, reveal, 1.0],
-                        quad_px: [aw * reveal * self.rw(), ah * self.rh()],
+                        dst: reveal_dst,
+                        src: reveal_src,
+                        quad_px: [reveal_dst[2] * self.rw(), ah * self.rh()],
                         // mode 11 : sprite en alpha DÉJÀ prémultiplié (ce que produit D2D).
                         mode: 11.0,
                         color: [1.0, 1.0, 1.0, anim.opacity],

@@ -215,15 +215,15 @@ impl TextRasterizer {
         }
         buffer.set_text(&spec.content, &attrs, Shaping::Advanced, None);
         // L'alignement se pose PAR LIGNE, apres set_text (qui reconstruit les
-        // lignes) et avant le shaping. Sans ca tout le texte sort ferre a
-        // gauche alors que le defaut de l'editeur est « center ».
+        // lignes) et avant le shaping. `Align::Left` explicite — et non `None`,
+        // que cosmic-text traduit en `Align::Right` sur une ligne RTL — pour que
+        // les glyphes restent dans la plaque `plate_x` et suivent l'alignement
+        // physique de CoreText et DirectWrite.
         let align = match spec.align.as_str() {
-            "center" => Some(cosmic_text::Align::Center),
+            "left" | "start" => Some(cosmic_text::Align::Left),
             "right" | "end" => Some(cosmic_text::Align::Right),
             "justify" => Some(cosmic_text::Align::Justified),
-            // `None` laisse cosmic-text suivre la direction du script, ce qui
-            // est le bon defaut pour "left"/"start" et pour une valeur inconnue.
-            _ => None,
+            _ => Some(cosmic_text::Align::Center),
         };
         for line in &mut buffer.lines {
             line.set_align(align);
@@ -834,5 +834,24 @@ mod tests {
         let h = atlas.len() / w;
         let right_edge_ink = (0..h).filter(|y| atlas[y * w + (w - 1)] > 16).count();
         assert_eq!(right_edge_ink, 0, "de l'encre a enroule jusqu'au bord droit");
+    }
+
+    #[test]
+    fn left_aligned_rtl_text_stays_inside_its_left_plate() {
+        let raster = TextRasterizer::new().expect("rasterizer");
+        let mut s = spec("مرحبا OpenScreen!", "left");
+        s.font_size_px = 32.0;
+        s.background = [0.0, 0.0, 0.0, 0.8];
+        let atlas = raster.build_atlas(&s).expect("atlas");
+        let (pad_x, _) = crate::text_plate::padding(32.0);
+        let cols = ink_cols(&atlas.pixels, 400);
+        assert!(!cols.is_empty(), "aucune encre pour le texte RTL");
+        assert!(atlas.plate[0] < pad_x + 0.01, "plaque attendue a gauche : {:?}", atlas.plate);
+        let (ink_l, ink_r) = (*cols.first().unwrap() as f32, *cols.last().unwrap() as f32);
+        assert!(
+            ink_l >= atlas.plate[0] - 1.0 && ink_r <= atlas.plate[0] + atlas.plate[2] + 1.0,
+            "les glyphes RTL ({ink_l}..{ink_r}) sortent de la plaque gauche ({:?})",
+            atlas.plate,
+        );
     }
 }

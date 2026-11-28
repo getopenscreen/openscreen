@@ -23,7 +23,7 @@ pub struct TextAnimationState {
     pub scale: f32,
     pub translate_x: f32,
     pub translate_y: f32,
-    /// Fraction du bloc révélée depuis la gauche (machine à écrire). 1 = tout visible.
+    /// Fraction horizontale du bloc révélée (machine à écrire, selon la direction du texte). 1 = tout visible.
     pub reveal: f32,
 }
 
@@ -106,6 +106,31 @@ pub fn text_animation_state(
     }
 }
 
+/// Resolve the reveal direction from the first non-neutral paragraph (UAX #9 P2/P3).
+/// Isolated text does not determine the direction; captions without a strong character reveal LTR.
+pub fn is_rtl_text(s: &str) -> bool {
+    unicode_bidi::get_base_direction_full(s) == unicode_bidi::Direction::Rtl
+}
+
+/// Computes `(dst, src)` rectangles for horizontal reveal (`typewriter`), where `dst` is
+/// `[x, y, w, h]` and `src` is UV endpoints `[u0, v0, u1, v1]`, revealing from left to right for
+/// LTR paragraphs and right to left (`1.0 - reveal .. 1.0`) for RTL paragraphs.
+pub fn reveal_quad(ax: f32, ay: f32, aw: f32, ah: f32, reveal: f32, is_rtl: bool) -> ([f32; 4], [f32; 4]) {
+    let r = clamp01(reveal);
+    if is_rtl && r < 1.0 {
+        let offset = 1.0 - r;
+        (
+            [ax + aw * offset, ay, aw * r, ah],
+            [offset, 0.0, 1.0, 1.0],
+        )
+    } else {
+        (
+            [ax, ay, aw * r, ah],
+            [0.0, 0.0, r, 1.0],
+        )
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -174,7 +199,7 @@ mod tests {
     }
 
     #[test]
-    fn typewriter_reveals_linearly_and_only_from_the_left() {
+    fn typewriter_reveals_linearly_without_fading() {
         for (at, expected) in [(0.0, 0.0), (175.0, 0.25), (350.0, 0.5), (700.0, 1.0)] {
             let s = text_animation_state(Some("typewriter"), at, LONG);
             assert!((s.reveal - expected).abs() < 1e-3, "à {at}ms : {}", s.reveal);
@@ -244,5 +269,36 @@ mod tests {
     #[test]
     fn an_empty_region_does_not_divide_by_zero() {
         assert!(text_animation_state(Some("fade"), 0.0, 0.0).opacity.is_finite());
+    }
+
+    #[test]
+    fn reveal_direction_uses_unicode_bidi_classes() {
+        assert!(!is_rtl_text("१. مرحبا"), "U+0967 is strong L");
+        assert!(is_rtl_text("\u{0345}مرحبا"), "U+0345 is a nonspacing mark");
+        assert!(is_rtl_text("\u{2066}English\u{2069} مرحبا"), "skip isolated text");
+    }
+
+    #[test]
+    fn arabic_rtl_text_is_detected_and_reveals_from_the_right() {
+        assert!(is_rtl_text("تسجيل الشاشة: الإصدار 2.2"));
+        assert!(is_rtl_text("1. تسجيل الشاشة"));
+        assert!(is_rtl_text("\u{feff}مرحبا"));
+        assert!(!is_rtl_text("OpenScreen 2.2 — Release"));
+        assert!(!is_rtl_text("\u{feff}OpenScreen 2.2 — Release"));
+        // First strong character wins (UAX #9 P2): an English sentence quoting one Arabic word stays LTR.
+        assert!(!is_rtl_text("Welcome to مرحبا world!"));
+        assert!(is_rtl_text("مرحبا OpenScreen!"));
+
+        let (dst_ltr, src_ltr) = reveal_quad(100.0, 50.0, 400.0, 80.0, 0.25, false);
+        assert!((dst_ltr[0] - 100.0).abs() < 1e-4 && (dst_ltr[2] - 100.0).abs() < 1e-4);
+        assert!((src_ltr[0] - 0.0).abs() < 1e-4 && (src_ltr[2] - 0.25).abs() < 1e-4);
+
+        let (dst_rtl, src_rtl) = reveal_quad(100.0, 50.0, 400.0, 80.0, 0.25, true);
+        assert!((dst_rtl[0] - 400.0).abs() < 1e-4 && (dst_rtl[2] - 100.0).abs() < 1e-4);
+        assert!((src_rtl[0] - 0.75).abs() < 1e-4 && (src_rtl[2] - 1.0).abs() < 1e-4);
+
+        let (dst_half, src_half) = reveal_quad(100.0, 50.0, 400.0, 80.0, 0.5, true);
+        assert!((dst_half[0] - 300.0).abs() < 1e-4 && (dst_half[2] - 200.0).abs() < 1e-4);
+        assert!((src_half[0] - 0.5).abs() < 1e-4 && (src_half[2] - 1.0).abs() < 1e-4);
     }
 }

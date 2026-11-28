@@ -33,10 +33,11 @@ use windows::Win32::Graphics::Direct3D11::{
 };
 use windows::Win32::Graphics::DirectWrite::{
     DWriteCreateFactory, IDWriteFactory, IDWriteFactory5, IDWriteFontCollection1,
-    DWRITE_FACTORY_TYPE_SHARED, DWRITE_FONT_STRETCH_NORMAL, DWRITE_FONT_STYLE_ITALIC,
-    DWRITE_FONT_STYLE_NORMAL,
-    DWRITE_FONT_WEIGHT_BOLD, DWRITE_FONT_WEIGHT_NORMAL, DWRITE_PARAGRAPH_ALIGNMENT_CENTER,
-    DWRITE_PARAGRAPH_ALIGNMENT_FAR, DWRITE_PARAGRAPH_ALIGNMENT_NEAR, DWRITE_TEXT_ALIGNMENT_CENTER,
+    IDWriteTextFormat, DWRITE_FACTORY_TYPE_SHARED, DWRITE_FONT_STRETCH_NORMAL,
+    DWRITE_FONT_STYLE_ITALIC, DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_WEIGHT_BOLD,
+    DWRITE_FONT_WEIGHT_NORMAL, DWRITE_PARAGRAPH_ALIGNMENT_CENTER, DWRITE_PARAGRAPH_ALIGNMENT_FAR,
+    DWRITE_PARAGRAPH_ALIGNMENT_NEAR, DWRITE_READING_DIRECTION_LEFT_TO_RIGHT,
+    DWRITE_READING_DIRECTION_RIGHT_TO_LEFT, DWRITE_TEXT_ALIGNMENT_CENTER,
     DWRITE_TEXT_ALIGNMENT_LEADING, DWRITE_TEXT_ALIGNMENT_TRAILING, DWRITE_TEXT_METRICS,
     DWRITE_TEXT_RANGE,
 };
@@ -134,6 +135,30 @@ fn plate_rect(metrics: [f32; 4], box_px: [f32; 2], pad_x: f32, pad_y: f32) -> [f
         (m_left + m_width + pad_x * 2.0).min(box_w),
         (m_top + m_height + pad_y * 2.0).min(box_h),
     ]
+}
+
+/// DirectWrite laisse `LEFT_TO_RIGHT` tant qu'on ne le change pas (contrairement à CoreText
+/// `kCTWritingDirectionNatural` et `cosmic-text`) : une légende arabe mêlée de latin ou de
+/// ponctuation finale (`"مرحبا OpenScreen!"`, `"تسجيل الشاشة!"`) gardait l'ordre de phrase LTR,
+/// plaçant `!` et le latin à droite où le balayage RTL les dévoilait en premier. En réglant
+/// `SetReadingDirection` selon `is_rtl_text`, `LEADING` devient le bord droit et `TRAILING` le
+/// bord gauche : inverser `"left"`/`"right"` conserve l'alignement physique des autres backends.
+unsafe fn configure_horizontal_layout(
+    format: &IDWriteTextFormat,
+    content: &str,
+    align: &str,
+) -> windows::core::Result<()> {
+    let is_rtl = crate::text_anim::is_rtl_text(content);
+    format.SetReadingDirection(if is_rtl {
+        DWRITE_READING_DIRECTION_RIGHT_TO_LEFT
+    } else {
+        DWRITE_READING_DIRECTION_LEFT_TO_RIGHT
+    })?;
+    format.SetTextAlignment(match (align, is_rtl) {
+        ("left", false) | ("right", true) => DWRITE_TEXT_ALIGNMENT_LEADING,
+        ("right", false) | ("left", true) => DWRITE_TEXT_ALIGNMENT_TRAILING,
+        _ => DWRITE_TEXT_ALIGNMENT_CENTER,
+    })
 }
 
 /// Une collection DirectWrite faite des seuls `files` (`crate::text_fonts`), sans rien installer
@@ -250,11 +275,7 @@ impl TextRasterizer {
             spec.font_size_px.max(1.0),
             windows::core::PCWSTR(locale.as_ptr()),
         )?;
-        format.SetTextAlignment(match spec.align.as_str() {
-            "left" => DWRITE_TEXT_ALIGNMENT_LEADING,
-            "right" => DWRITE_TEXT_ALIGNMENT_TRAILING,
-            _ => DWRITE_TEXT_ALIGNMENT_CENTER,
-        })?;
+        configure_horizontal_layout(&format, &spec.content, &spec.align)?;
         // ANCRAGE vertical. `center` reproduit `alignItems: center` de l'overlay web et
         // reste le comportement des annotations ; les sous-titres épinglent une arête,
         // parce qu'un bloc centré voit ses DEUX arêtes bouger quand il gagne une ligne.
@@ -550,5 +571,74 @@ mod tests {
             assert_eq!(spec(text).cache_key(), spec(text).cache_key());
         }
         assert_ne!(spec("مرحبا").cache_key(), spec("こんにちは").cache_key());
+    }
+
+    #[test]
+    fn rtl_reading_direction_orders_mixed_and_punctuated_captions_and_keeps_physical_alignment() {
+        use windows::Win32::Foundation::BOOL;
+        use windows::Win32::Graphics::DirectWrite::DWRITE_HIT_TEST_METRICS;
+        unsafe {
+            let dwrite: IDWriteFactory = DWriteCreateFactory(DWRITE_FACTORY_TYPE_SHARED).unwrap();
+            let fonts: Option<IDWriteFontCollection1> = None;
+            let (family, locale) = (wide("Segoe UI"), wide(""));
+            let make_layout = |content: &str, align: &str| {
+                let format = dwrite
+                    .CreateTextFormat(
+                        windows::core::PCWSTR(family.as_ptr()),
+                        fonts.as_deref(),
+                        DWRITE_FONT_WEIGHT_NORMAL,
+                        DWRITE_FONT_STYLE_NORMAL,
+                        DWRITE_FONT_STRETCH_NORMAL,
+                        48.0,
+                        windows::core::PCWSTR(locale.as_ptr()),
+                    )
+                    .unwrap();
+                configure_horizontal_layout(&format, content, align).unwrap();
+                let utf16: Vec<u16> = content.encode_utf16().collect();
+                let layout = dwrite.CreateTextLayout(&utf16, &format, 800.0, 120.0).unwrap();
+                let mut m = DWRITE_TEXT_METRICS::default();
+                layout.GetMetrics(&mut m).unwrap();
+                (layout, utf16.len() as u32, m)
+            };
+
+            let (_, _, m_left) = make_layout("مرحبا بالعالم", "left");
+            let (_, _, m_center) = make_layout("مرحبا بالعالم", "center");
+            let (_, _, m_right) = make_layout("مرحبا بالعالم", "right");
+            assert!(m_left.left < 8.0, "left RTL déplacé : {}", m_left.left);
+            assert!(
+                m_center.left > m_left.left + 40.0 && m_right.left > m_center.left + 40.0,
+                "les trois alignements RTL ne restent pas gauche/centre/droite : {} / {} / {}",
+                m_left.left,
+                m_center.left,
+                m_right.left,
+            );
+
+            for caption in ["مرحبا OpenScreen!", "تسجيل الشاشة!"] {
+                let (layout, len, _) = make_layout(caption, "left");
+                let (mut x_first, mut y_first, mut hit_first) =
+                    (0.0f32, 0.0f32, DWRITE_HIT_TEST_METRICS::default());
+                let (mut x_bang, mut y_bang, mut hit_bang) =
+                    (0.0f32, 0.0f32, DWRITE_HIT_TEST_METRICS::default());
+                layout
+                    .HitTestTextPosition(0, BOOL(0), &mut x_first, &mut y_first, &mut hit_first)
+                    .unwrap();
+                layout
+                    .HitTestTextPosition(len - 1, BOOL(0), &mut x_bang, &mut y_bang, &mut hit_bang)
+                    .unwrap();
+                assert!(
+                    hit_first.left > hit_bang.left + 20.0,
+                    "{caption} : le premier mot arabe ({}) doit précéder `!` ({}) depuis la droite",
+                    hit_first.left,
+                    hit_bang.left,
+                );
+            }
+
+            let (ltr, len, m_ltr) = make_layout("Hello OpenScreen!", "left");
+            let (mut x0, mut y0, mut h0) = (0.0f32, 0.0f32, DWRITE_HIT_TEST_METRICS::default());
+            let (mut x1, mut y1, mut h1) = (0.0f32, 0.0f32, DWRITE_HIT_TEST_METRICS::default());
+            ltr.HitTestTextPosition(0, BOOL(0), &mut x0, &mut y0, &mut h0).unwrap();
+            ltr.HitTestTextPosition(len - 1, BOOL(0), &mut x1, &mut y1, &mut h1).unwrap();
+            assert!(m_ltr.left < 8.0 && h0.left + 20.0 < h1.left);
+        }
     }
 }
